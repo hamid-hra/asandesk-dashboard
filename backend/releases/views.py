@@ -79,8 +79,12 @@ class ReleaseStatsView(APIView):
         })
 
 
-def download(request, version, platform):
-    """دانلود عمومی فایل نصب + شمارش. پشت nginx فایل با X-Accel-Redirect فرستاده می‌شود."""
+def download(request, version, platform, filename=None):
+    """دانلود عمومی فایل نصب + شمارش. پشت nginx فایل با X-Accel-Redirect فرستاده می‌شود.
+
+    `filename` فقط برای این است که آدرس به نام فایل ختم شود (آپدیت خودکار کلاینت)؛
+    فایل واقعی از روی version+platform پیدا می‌شود.
+    """
     asset = (
         ReleaseAsset.objects.select_related("release")
         .filter(release__version=version, platform__iexact=platform)
