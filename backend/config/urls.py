@@ -11,4 +11,5 @@ urlpatterns = [
     path("api/agent/ingest", IngestView.as_view()),
     path("api/releases", ReleaseListView.as_view()),
     path("api/releases/", include("releases.urls")),
+    path("api/", include("clients.urls")),
 ]

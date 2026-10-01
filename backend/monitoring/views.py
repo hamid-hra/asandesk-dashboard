@@ -8,6 +8,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from clients.views import open_ticket_count
+
 from . import alerts, stats
 from .models import Alert, AlertLevel, MetricSample, Server, hash_token
 from .serializers import AlertSerializer, IngestSerializer
@@ -100,6 +102,7 @@ class StatusView(APIView):
             "open_crit": Alert.objects.filter(resolved_at__isnull=True, level=AlertLevel.CRIT).count(),
             "unacked": pending.count(),
             "uptime_30d": stats.uptime_30d(),
+            "open_tickets": open_ticket_count(),
         })
 
 

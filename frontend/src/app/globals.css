@@ -28,8 +28,9 @@
   --box-off: #b5c1c1;
   --older: #9aa5a5;
   --bar-off: #d5dede;
-  --brand: #1d7f5e;
-  --brand-hover: #176b4f;
+  --bar-mid: #a8d8c4;
+  --brand: #26a379;
+  --brand-hover: #1f8a66;
   --accent: #1d7f5e;
   --accent-strong: #14533f;
   --accent-soft: #e3f2ec;
@@ -90,6 +91,7 @@
   --box-off: #5a5a5a;
   --older: #5a5a5a;
   --bar-off: #333333;
+  --bar-mid: #1f5a45;
   --accent: #3ccf98;
   --accent-strong: #5fd6a9;
   --accent-soft: #173328;

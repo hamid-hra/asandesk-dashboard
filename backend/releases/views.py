@@ -11,6 +11,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from clients.stats import version_distribution
+
 from .models import Channel, DownloadEvent, Release, ReleaseAsset
 from .serializers import ReleaseCreateSerializer, ReleaseSerializer
 from .services import file_sha256, latest_release, remember_base_url, write_manifests
@@ -66,13 +68,14 @@ class ReleaseStatsView(APIView):
         stable = latest_release([Channel.STABLE])
         beta = latest_release([Channel.BETA])
         since = timezone.now() - timedelta(days=30)
+        on_current, distribution = version_distribution()
         return Response({
             "latest_stable": stable.version if stable else None,
             "latest_beta": beta.version if beta else None,
             "downloads_30d": DownloadEvent.objects.filter(ts__gte=since).count(),
-            # تا اتصال کلاینت‌ها به API داده‌ای از نسخه نصب‌شده نداریم
-            "users_on_current": None,
-            "distribution": None,
+            # از نسخه‌ای که کلاینت‌های فعال ۳۰ روز اخیر در sysinfo گزارش داده‌اند
+            "users_on_current": on_current,
+            "distribution": distribution,
         })
 
 

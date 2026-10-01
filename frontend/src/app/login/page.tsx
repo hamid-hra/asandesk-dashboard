@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import useSWR, { mutate } from "swr";
 
+import { Logo } from "@/components/Logo";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { User } from "@/lib/types";
 
@@ -12,7 +13,7 @@ import s from "./login.module.css";
 function Brand() {
   return (
     <div className={s.brand}>
-      <div className={s.logo}>آ</div>
+      <Logo size={40} />
       <div>
         <div className={s.brandName}>آسان‌دسک</div>
         <div className={s.brandSub}>پنل مالک</div>

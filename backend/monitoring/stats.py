@@ -9,6 +9,8 @@ from django.db import connection
 from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
+from clients.models import ConnSession
+
 from .models import MetricSample, Server
 
 
@@ -182,8 +184,11 @@ def overview(range_id: str):
         "step_seconds": int(rng.step.total_seconds()),
         "points": bucket_series(rng),
         "servers": servers_table(),
-        # تفکیک پلتفرم/منطقه و آمار نشست‌ها پس از اتصال سرور آسان‌دسک فعال می‌شود
+        # تفکیک پلتفرم/منطقه پس از اتصال سرور آسان‌دسک فعال می‌شود
         "breakdown": None,
-        "sessions_total": None,
+        # نشست‌های موفقی که کلاینت‌ها در بازه گزارش داده‌اند (audit/conn)
+        "sessions_total": ConnSession.objects.filter(
+            authorized_at__gte=timezone.now() - rng.points * rng.step
+        ).count(),
         "fail_rate": None,
     }

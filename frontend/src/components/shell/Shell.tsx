@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { Icon } from "@/components/Icon";
+import { Logo } from "@/components/Logo";
 import { fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dfToday, pctText, toFa } from "@/lib/fa";
@@ -17,12 +18,13 @@ import s from "./Shell.module.css";
 
 const ROLE_EN = { owner: "Owner", admin: "Admin", viewer: "Viewer" } as const;
 
-function NavItem({ tab, active, onClick }: { tab: (typeof TABS)[number]; active: boolean; onClick: () => void }) {
+function NavItem({ tab, active, onClick, badge }: { tab: (typeof TABS)[number]; active: boolean; onClick: () => void; badge?: number }) {
   return (
     <Link href={tab.href} className={s.navItem} aria-current={active ? "page" : undefined} onClick={onClick}>
       <Icon d={tab.icon} />
       <span style={{ flex: 1 }}>{tab.label}</span>
       {tab.soon && <span className={s.soonBadge}>به‌زودی</span>}
+      {!!badge && <span className={s.countBadge}>{toFa(badge)}</span>}
     </Link>
   );
 }
@@ -106,7 +108,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className={s.root}>
       <aside className={s.aside} data-open={navOpen}>
         <div className={s.brand}>
-          <div className={s.logo}>آ</div>
+          <Logo size={36} />
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div className={s.brandName}>آسان‌دسک</div>
             <div className={s.brandSub}>پنل مالک</div>
@@ -115,7 +117,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className={s.section}>مدیریت</div>
         <nav className={s.nav}>
           {TABS.filter((t) => !t.soon).map((t) => (
-            <NavItem key={t.href} tab={t} active={t === tab} onClick={close} />
+            <NavItem key={t.href} tab={t} active={t === tab} onClick={close} badge={t.href === "/tickets" ? status?.open_tickets : 0} />
           ))}
         </nav>
         <div className={s.section} style={{ padding: "18px 10px 6px", display: "flex", alignItems: "center", gap: 6 }}>
