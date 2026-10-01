@@ -3,6 +3,15 @@ name: asandesk-dashboard
 # تنها مقادیر لازم در .env: POSTGRES_USER و POSTGRES_PASSWORD
 # بقیه تنظیمات پیش‌فرض دارند و در صورت نیاز می‌توان آن‌ها را هم در .env بازنویسی کرد (README).
 
+# پروکسی اختیاری برای دانلود پکیج‌ها هنگام بیلد (npm/pip). مثال: BUILD_PROXY=http://127.0.0.1:10809
+x-build-proxy: &build-proxy
+  HTTP_PROXY: ${BUILD_PROXY:-}
+  HTTPS_PROXY: ${BUILD_PROXY:-}
+  http_proxy: ${BUILD_PROXY:-}
+  https_proxy: ${BUILD_PROXY:-}
+  NO_PROXY: localhost,127.0.0.1
+  no_proxy: localhost,127.0.0.1
+
 x-db-env: &db-env
   POSTGRES_DB: ${POSTGRES_DB:-asandesk}
   POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
@@ -24,7 +33,11 @@ services:
       retries: 20
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      # شبکه میزبان فقط هنگام بیلد، تا پروکسی روی 127.0.0.1 سرور در دسترس باشد
+      network: host
+      args: *build-proxy
     restart: unless-stopped
     environment:
       <<: *db-env
@@ -53,7 +66,11 @@ services:
       retries: 12
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      # شبکه میزبان فقط هنگام بیلد، تا پروکسی روی 127.0.0.1 سرور در دسترس باشد
+      network: host
+      args: *build-proxy
     restart: unless-stopped
     environment:
       TZ: ${TZ:-Asia/Tehran}
@@ -75,7 +92,11 @@ services:
 
   # منابع همین سرور (میزبان داکر) را به داشبورد گزارش می‌دهد
   agent:
-    build: ./agent
+    build:
+      context: ./agent
+      # شبکه میزبان فقط هنگام بیلد، تا پروکسی روی 127.0.0.1 سرور در دسترس باشد
+      network: host
+      args: *build-proxy
     restart: unless-stopped
     pid: host
     environment:

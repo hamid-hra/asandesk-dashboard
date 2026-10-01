@@ -2,7 +2,6 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     STATIC_ROOT=/data/static \
     RELEASES_ROOT=/data/releases \
     SECRETS_DIR=/data/secrets \
@@ -12,7 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY requirements.txt requirements-dev.txt ./
 ARG DEV=0
-RUN if [ "$DEV" = "1" ]; then pip install -r requirements-dev.txt; else pip install -r requirements.txt; fi
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --retries 10 --timeout 60 -r "$( [ "$DEV" = "1" ] && echo requirements-dev.txt || echo requirements.txt )"
 
 COPY . .
 RUN useradd --uid 1000 --create-home app \

@@ -34,6 +34,28 @@ docker compose up -d --build
 
 حدود ۳۰ ثانیه بعد از بالا آمدن، اولین داده‌های منابع سرور نمایش داده می‌شود.
 
+### بیلد از پشت پروکسی
+
+اگر سرور مستقیم به npm و PyPI دسترسی ندارد (خطای `ETIMEDOUT` در `npm ci` یا `pip install`)، آدرس پروکسی HTTP سرور را به بیلد بدهید:
+
+```bash
+BUILD_PROXY=http://127.0.0.1:10809 docker compose up -d --build
+```
+
+یا همین مقدار را به‌صورت یک خط `BUILD_PROXY=...` در `.env` بگذارید.
+
+- **پروکسی باید HTTP باشد.** npm از SOCKS پشتیبانی نمی‌کند. در v2ray/xray پورت HTTP inbound را بدهید (معمولاً `10809`)، نه SOCKS (`10808`).
+- **پروکسی روی همان سرور:** بیلد با شبکهٔ میزبان اجرا می‌شود، پس پروکسی روی `127.0.0.1` سرور در دسترس است.
+- **قطعی وسط دانلود:** پکیج‌های دانلودشده در cache داکر می‌مانند و با اجرای دوبارهٔ همان دستور، بیلد ادامه پیدا می‌کند.
+- **pull کند ایمیج‌ها:** اگر دانلود ایمیج‌های پایه از Docker Hub (python، node، postgres، nginx) هم کند بود، پروکسی خود daemon داکر را تنظیم کنید:
+  ```bash
+  sudo mkdir -p /etc/systemd/system/docker.service.d
+  printf '[Service]\nEnvironment="HTTPS_PROXY=http://127.0.0.1:10809"\nEnvironment="NO_PROXY=localhost,127.0.0.1"\n' \
+    | sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf
+  sudo systemctl daemon-reload && sudo systemctl restart docker
+  ```
+- **زمان اجرا:** کانتینرها بعد از بیلد به اینترنت نیاز ندارند.
+
 ### تنظیمات اختیاری
 
 این مقادیر پیش‌فرض دارند. فقط در صورت نیاز آن‌ها را به `.env` اضافه کنید:
@@ -41,6 +63,7 @@ docker compose up -d --build
 | متغیر | پیش‌فرض | توضیح |
 |---|---|---|
 | `HTTP_PORT` | `8080` | پورت پنل روی سرور (مثلاً `80`) |
+| `BUILD_PROXY` | خالی | پروکسی HTTP برای دانلود پکیج‌ها هنگام بیلد (بخش بالا) |
 | `PUBLIC_BASE_URL` | آدرسی که پنل با آن باز شده | دامنهٔ لینک‌های دانلود در `latest.json`، مثلاً `https://panel.asandesk.ir` |
 | `SECURE_COOKIES` | `0` | وقتی پنل پشت HTTPS است، `1` بگذارید |
 | `AGENT_PORTS` | خالی (همه اتصال‌ها) | فقط اتصال‌های این پورت‌ها شمرده شود، مثلاً `21116,21117` |

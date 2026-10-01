@@ -1,7 +1,9 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# cache بین بیلدها حفظ می‌شود؛ اگر دانلود وسط کار قطع شد، اجرای دوباره از همان‌جا ادامه می‌دهد
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
 FROM deps AS dev
 COPY . .
