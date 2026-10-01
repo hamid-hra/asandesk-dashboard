@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "accounts",
     "monitoring",
     "releases",
+    "clients",
 ]
 
 MIDDLEWARE = [
@@ -129,6 +130,10 @@ X_ACCEL_PREFIX = "/_protected/releases/"
 # مانیتورینگ
 METRICS_RETENTION_DAYS = int(env("METRICS_RETENTION_DAYS", "90"))
 SERVER_OFFLINE_AFTER_SECONDS = int(env("SERVER_OFFLINE_AFTER_SECONDS", "120"))
+
+# موقعیت تقریبی کلاینت‌ها (اختیاری): مسیر پایگاه دادهٔ MaxMind GeoLite2-City.mmdb.
+# خالی = بدون موقعیت (شهر نمایش داده نمی‌شود). هیچ درخواست بیرونی‌ای زده نمی‌شود.
+GEOIP_PATH = env("GEOIP_PATH", "")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

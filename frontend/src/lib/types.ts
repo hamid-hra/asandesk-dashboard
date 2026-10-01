@@ -116,3 +116,43 @@ export interface ReleaseStats {
   users_on_current: number | null;
   distribution: { version: string; share: number }[] | null;
 }
+
+export interface ClientRow {
+  id: number;
+  rid: string;
+  display_name: string;
+  name: string;
+  hostname: string;
+  os: string;
+  version: string;
+  ip: string;
+  location: string;
+  online: boolean;
+  blocked: boolean;
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
+export interface ClientSession {
+  id: number;
+  conn_id: number;
+  peer_id: string;
+  peer_name: string;
+  conn_type: string;
+  ip: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number;
+  bytes_in: number | null;
+  bytes_out: number | null;
+}
+
+export interface ClientDetail extends ClientRow {
+  cpu: string;
+  memory: string;
+  country: string;
+  city: string;
+  created_at: string;
+  sessions: ClientSession[];
+  sessions_total: number;
+}

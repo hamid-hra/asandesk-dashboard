@@ -3,3 +3,5 @@ djangorestframework>=3.16,<3.17
 psycopg[binary]>=3.2,<3.3
 gunicorn>=23,<24
 jdatetime>=5.2,<6
+# موقعیت تقریبی کلاینت‌ها از روی IP (اختیاری؛ فقط وقتی GEOIP_PATH تنظیم شده کار می‌کند)
+geoip2>=4.8,<5

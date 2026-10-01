@@ -23,7 +23,6 @@ export const TABS: Tab[] = [
     href: "/clients",
     label: "کلاینت‌ها",
     icon: ICONS.clients,
-    soon: "مدیریت دستگاه‌ها و کاربران متصل، نسخه نصب‌شده روی هر کلاینت و مسدودسازی دستگاه‌ها.",
   },
   {
     href: "/ads",

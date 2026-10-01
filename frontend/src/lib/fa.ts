@@ -47,6 +47,27 @@ export function usedOfTotal(used: number, total: number): string {
 
 export const mbText = (bytes: number) => toFa((bytes / 1048576).toFixed(1)) + " مگابایت";
 
+/** مدت به فارسی: ثانیه → «۲ ساعت و ۵ دقیقه» یا «۲۶ دقیقه» یا «۴۰ ثانیه» */
+export function durationText(seconds: number): string {
+  if (seconds < 60) return `${toFa(seconds)} ثانیه`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  if (h === 0) return `${toFa(m)} دقیقه`;
+  if (m === 0) return `${toFa(h)} ساعت`;
+  return `${toFa(h)} ساعت و ${toFa(m)} دقیقه`;
+}
+
+/** مدت کوتاه برای ردیف نشست: «۳۳ دقیقه» / «۱ ساعت» */
+export function durationShort(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  if (h === 0) return `${toFa(Math.max(1, m))} دقیقه`;
+  return m === 0 ? `${toFa(h)} ساعت` : `${toFa(h)}:${toFa(String(m).padStart(2, "0"))}`;
+}
+
+/** جمع ساعت برای KPI: «۴۷٫۷ ساعت» */
+export const hoursText = (seconds: number) => `${toFa((seconds / 3600).toFixed(1))} ساعت`;
+
 /** نرخ بیت با واحد لاتین (مثل طرح: «۴٫۲ Gbps») */
 export function bpsText(bps: number): string {
   const units = ["bps", "Kbps", "Mbps", "Gbps", "Tbps"];
