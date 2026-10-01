@@ -194,7 +194,7 @@ def form(**over):
 def test_publish_release_writes_manifest(releases_root):
     c = client_for(Role.ADMIN)
     exe = SimpleUploadedFile("asandesk-2.5.0.exe", b"MZ-binary", content_type="application/octet-stream")
-    r = c.post("/api/releases/", {**form(), "files": [exe]}, format="multipart")
+    r = c.post("/api/releases", {**form(), "files": [exe]}, format="multipart")
     assert r.status_code == 201, r.content
     body = r.json()
     assert body["notes"] == ["مورد اول", "مورد دوم"]
@@ -216,8 +216,8 @@ def test_publish_release_writes_manifest(releases_root):
 @pytest.mark.django_db
 def test_beta_manifest_and_latest_selection(releases_root):
     c = client_for(Role.OWNER)
-    assert c.post("/api/releases/", form(version="2.4.1"), format="multipart").status_code == 201
-    assert c.post("/api/releases/", form(version="2.5.0-beta.2", channel="beta"), format="multipart").status_code == 201
+    assert c.post("/api/releases", form(version="2.4.1"), format="multipart").status_code == 201
+    assert c.post("/api/releases", form(version="2.5.0-beta.2", channel="beta"), format="multipart").status_code == 201
     assert json.loads((releases_root / "latest.json").read_text())["version"] == "2.4.1"
     assert json.loads((releases_root / "latest-beta.json").read_text())["version"] == "2.5.0-beta.2"
     stats_ = c.get("/api/releases/stats").json()
@@ -233,7 +233,7 @@ def test_beta_manifest_and_latest_selection(releases_root):
 @pytest.mark.django_db
 def test_publish_validation(over, msg):
     c = client_for(Role.ADMIN)
-    r = c.post("/api/releases/", form(**over), format="multipart")
+    r = c.post("/api/releases", form(**over), format="multipart")
     assert r.status_code == 400
     assert msg in json.dumps(r.json(), ensure_ascii=False)
 
@@ -241,22 +241,22 @@ def test_publish_validation(over, msg):
 @pytest.mark.django_db
 def test_duplicate_version_and_file_platform_checks():
     c = client_for(Role.ADMIN)
-    assert c.post("/api/releases/", form(), format="multipart").status_code == 201
-    dup = c.post("/api/releases/", form(), format="multipart")
+    assert c.post("/api/releases", form(), format="multipart").status_code == 201
+    dup = c.post("/api/releases", form(), format="multipart")
     assert "قبلاً منتشر شده" in json.dumps(dup.json(), ensure_ascii=False)
     apk = SimpleUploadedFile("a.apk", b"x")
-    r = c.post("/api/releases/", {**form(version="2.6.0"), "files": [apk]}, format="multipart")
+    r = c.post("/api/releases", {**form(version="2.6.0"), "files": [apk]}, format="multipart")
     assert r.status_code == 400 and "Android" in json.dumps(r.json(), ensure_ascii=False)
     txt = SimpleUploadedFile("a.txt", b"x")
-    r = c.post("/api/releases/", {**form(version="2.6.0"), "files": [txt]}, format="multipart")
+    r = c.post("/api/releases", {**form(version="2.6.0"), "files": [txt]}, format="multipart")
     assert r.status_code == 400
 
 
 @pytest.mark.django_db
 def test_viewer_cannot_publish():
     viewer = client_for(Role.VIEWER)
-    assert viewer.post("/api/releases/", form(), format="multipart").status_code == 403
-    assert viewer.get("/api/releases/").status_code == 200
+    assert viewer.post("/api/releases", form(), format="multipart").status_code == 403
+    assert viewer.get("/api/releases").status_code == 200
 
 
 def test_version_ordering():
