@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 from datetime import date
+from urllib.parse import quote
 
 import jdatetime
 from django.conf import settings
@@ -67,6 +68,17 @@ def release_manifest(release: Release | None) -> dict:
     if release is None:
         return {}
     base = public_base_url()
+    # آدرس دانلود باید به نام کامل فایل نصب ختم شود تا کلاینت بتواند آن را ذخیره و
+    # اجرا کند (آپدیت خودکار). نام فایل آخرِ مسیر است؛ نصب‌کننده هم با آن نام ذخیره می‌شود.
+    assets = {}
+    for a in release.assets.all():
+        platform = a.platform.lower()
+        fname = quote(os.path.basename(a.file.name))
+        assets[platform] = {
+            "url": f"{base}/api/releases/{release.version}/download/{platform}/{fname}",
+            "size": a.size,
+            "sha256": a.sha256,
+        }
     return {
         "version": release.version,
         "channel": release.channel,
@@ -74,14 +86,7 @@ def release_manifest(release: Release | None) -> dict:
         "mandatory": release.mandatory,
         "rollout": release.rollout,
         "notes": release.notes_list,
-        "assets": {
-            a.platform.lower(): {
-                "url": f"{base}/api/releases/{release.version}/download/{a.platform.lower()}",
-                "size": a.size,
-                "sha256": a.sha256,
-            }
-            for a in release.assets.all()
-        },
+        "assets": assets,
     }
 
 
@@ -97,7 +102,7 @@ def _atomic_write_json(path, data):
 def write_manifests():
     """latest.json (کانال پایدار) و latest-beta.json (جدیدترین نسخه بتا یا پایدار) را بازنویسی می‌کند.
 
-    کلاینت از ORG_UPDATE_URL = https://asandesk.ir/releases/latest.json استفاده خواهد کرد.
+    کلاینت از ORG_UPDATE_URL = https://api.asandesk.ir/releases/latest.json استفاده می‌کند.
     """
     root = settings.RELEASES_ROOT
     _atomic_write_json(root / "latest.json", release_manifest(latest_release([Channel.STABLE])))
