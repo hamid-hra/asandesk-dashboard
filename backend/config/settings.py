@@ -18,13 +18,30 @@ def env_list(name, default=""):
     return [x.strip() for x in env(name, default).split(",") if x.strip()]
 
 
-DEBUG = env_bool("DJANGO_DEBUG", False)
-SECRET_KEY = env("DJANGO_SECRET_KEY") or ("dev-insecure-key" if DEBUG else None)
-if not SECRET_KEY:
-    raise RuntimeError("DJANGO_SECRET_KEY is required when DJANGO_DEBUG is off")
+# رازهای تولیدشده خودکار (کلید Django، کد راه‌اندازی) — در داکر روی volume اختصاصی backend
+SECRETS_DIR = Path(env("SECRETS_DIR", BASE_DIR / "data" / "secrets"))
+# توکن agent محلی — volume مشترک بین backend و agent
+AGENT_TOKEN_FILE = Path(env("AGENT_TOKEN_FILE", BASE_DIR / "data" / "agent" / "token"))
 
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,backend")
-CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080")
+
+def read_secret(path: Path):
+    try:
+        return path.read_text().strip() or None
+    except OSError:
+        return None
+
+
+DEBUG = env_bool("DJANGO_DEBUG", False)
+SECRET_KEY = env("DJANGO_SECRET_KEY") or read_secret(SECRETS_DIR / "django_secret_key")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise RuntimeError("Django secret key not found (entrypoint.sh generates it in SECRETS_DIR)")
+    SECRET_KEY = "dev-insecure-key"
+
+# پنل پشت nginx است؛ Host هر دامنه/IP که به سرور اشاره کند پذیرفته می‌شود
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "*")
+# درخواست‌های هم‌مبدأ نیازی به این فهرست ندارند؛ فقط برای مبدأهای دیگر
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -103,8 +120,8 @@ MEDIA_ROOT = RELEASES_ROOT
 MEDIA_URL = "/releases/"
 FILE_UPLOAD_TEMP_DIR = env("FILE_UPLOAD_TEMP_DIR") or None
 RELEASE_MAX_FILE_SIZE = int(env("RELEASE_MAX_FILE_MB", "500")) * 1024 * 1024
-# آدرس عمومی که در latest.json برای لینک دانلود استفاده می‌شود
-PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "http://localhost:8080").rstrip("/")
+# آدرس عمومی لینک‌های دانلود در latest.json. خالی = از آدرسی که پنل با آن باز شده گرفته می‌شود
+PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "").rstrip("/")
 # پشت nginx: ارسال فایل با X-Accel-Redirect به‌جای خواندن در Django
 USE_X_ACCEL_REDIRECT = env_bool("USE_X_ACCEL_REDIRECT", False)
 X_ACCEL_PREFIX = "/_protected/releases/"
@@ -128,7 +145,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["accounts.permissions.ReadOnlyForViewer"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min"},
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "setup": "10/min"},
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
 }
 

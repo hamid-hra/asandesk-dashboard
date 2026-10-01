@@ -2,10 +2,93 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import useSWR, { mutate } from "swr";
 
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, fetcher } from "@/lib/api";
+import type { User } from "@/lib/types";
 
 import s from "./login.module.css";
+
+function Brand() {
+  return (
+    <div className={s.brand}>
+      <div className={s.logo}>آ</div>
+      <div>
+        <div className={s.brandName}>آسان‌دسک</div>
+        <div className={s.brandSub}>پنل مالک</div>
+      </div>
+    </div>
+  );
+}
+
+/** اولین ورود: ساخت حساب مالک با کد راه‌اندازی که در لاگ backend چاپ شده */
+function SetupForm({ onDone }: { onDone: () => void }) {
+  const [code, setCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code.trim()) return setError("کد راه‌اندازی را وارد کنید.");
+    if (!username.trim()) return setError("نام کاربری را وارد کنید.");
+    if (password.length < 8) return setError("رمز عبور باید حداقل ۸ کاراکتر باشد.");
+    if (password !== password2) return setError("تکرار رمز عبور با رمز عبور یکسان نیست.");
+    setBusy(true);
+    setError("");
+    try {
+      const user = await api<User>("/api/auth/setup", { method: "POST", body: { code, username, password } });
+      // خطای ۴۰۳ قبلی /me در کش SWR نماند
+      await mutate("/api/auth/me", user, { revalidate: false });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 429
+          ? "تعداد تلاش‌ها زیاد است؛ یک دقیقه دیگر دوباره امتحان کنید."
+          : err instanceof Error
+            ? err.message
+            : "ساخت حساب ناموفق بود.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className={s.card} onSubmit={submit}>
+      <Brand />
+      <div>
+        <div className={s.title}>راه‌اندازی اولیه</div>
+        <div className={s.sub}>نام کاربری و رمز عبور حساب مالک را تعیین کنید. این صفحه فقط یک بار نمایش داده می‌شود.</div>
+      </div>
+      <label className={s.field}>
+        <span>کد راه‌اندازی</span>
+        <input dir="ltr" className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX" autoFocus autoComplete="off" />
+        <small className={s.hint}>
+          روی سرور اجرا کنید: <code dir="ltr">{"docker compose logs backend | grep \"SETUP CODE\""}</code>
+        </small>
+      </label>
+      <label className={s.field}>
+        <span>نام کاربری مالک</span>
+        <input dir="ltr" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
+      </label>
+      <label className={s.field}>
+        <span>رمز عبور</span>
+        <input dir="ltr" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </label>
+      <label className={s.field}>
+        <span>تکرار رمز عبور</span>
+        <input dir="ltr" type="password" autoComplete="new-password" value={password2} onChange={(e) => setPassword2(e.target.value)} />
+      </label>
+      {error && <div className={s.error}>{error}</div>}
+      <button className={s.submit} disabled={busy}>
+        {busy ? "در حال ساخت حساب…" : "ساخت حساب مالک و ورود"}
+      </button>
+    </form>
+  );
+}
 
 function LoginForm() {
   const router = useRouter();
@@ -21,7 +104,8 @@ function LoginForm() {
     setBusy(true);
     setError("");
     try {
-      await api("/api/auth/login", { method: "POST", body: { username, password } });
+      const user = await api<User>("/api/auth/login", { method: "POST", body: { username, password } });
+      await mutate("/api/auth/me", user, { revalidate: false });
       const next = params.get("next");
       router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/server");
     } catch (err) {
@@ -39,13 +123,7 @@ function LoginForm() {
 
   return (
     <form className={s.card} onSubmit={submit}>
-      <div className={s.brand}>
-        <div className={s.logo}>آ</div>
-        <div>
-          <div className={s.brandName}>آسان‌دسک</div>
-          <div className={s.brandSub}>پنل مالک</div>
-        </div>
-      </div>
+      <Brand />
       <div>
         <div className={s.title}>ورود به پنل</div>
         <div className={s.sub}>برای مدیریت سرورها و نسخه‌ها وارد شوید.</div>
@@ -66,11 +144,18 @@ function LoginForm() {
   );
 }
 
+function Gate() {
+  const router = useRouter();
+  const { data } = useSWR<{ needed: boolean }>("/api/auth/setup", fetcher, { revalidateOnFocus: false });
+  if (!data) return null;
+  return data.needed ? <SetupForm onDone={() => router.replace("/server")} /> : <LoginForm />;
+}
+
 export default function LoginPage() {
   return (
     <div className={s.page}>
       <Suspense>
-        <LoginForm />
+        <Gate />
       </Suspense>
     </div>
   );

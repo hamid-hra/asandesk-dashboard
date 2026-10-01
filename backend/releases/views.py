@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from .models import Channel, DownloadEvent, Release, ReleaseAsset
 from .serializers import ReleaseCreateSerializer, ReleaseSerializer
-from .services import file_sha256, latest_release, write_manifests
+from .services import file_sha256, latest_release, remember_base_url, write_manifests
 
 
 class ReleaseListView(APIView):
@@ -55,6 +55,7 @@ class ReleaseListView(APIView):
                 ReleaseAsset.objects.create(
                     release=release, platform=platform, file=f, size=f.size, sha256=file_sha256(f)
                 )
+        remember_base_url(request)
         write_manifests()
         release = Release.objects.prefetch_related("assets").get(pk=release.pk)
         return Response(ReleaseSerializer(release).data, status=status.HTTP_201_CREATED)

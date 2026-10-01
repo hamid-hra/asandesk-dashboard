@@ -1,32 +1,19 @@
 name: asandesk-dashboard
 
-x-backend-env: &backend-env
-  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
-  DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
-  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
-  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080}
-  TZ: ${TZ:-Asia/Tehran}
-  POSTGRES_HOST: db
+# تنها مقادیر لازم در .env: POSTGRES_USER و POSTGRES_PASSWORD
+# بقیه تنظیمات پیش‌فرض دارند و در صورت نیاز می‌توان آن‌ها را هم در .env بازنویسی کرد (README).
+
+x-db-env: &db-env
   POSTGRES_DB: ${POSTGRES_DB:-asandesk}
-  POSTGRES_USER: ${POSTGRES_USER:-asandesk}
+  POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-  OWNER_USERNAME: ${OWNER_USERNAME:-}
-  OWNER_PASSWORD: ${OWNER_PASSWORD:-}
-  AGENT_TOKEN: ${AGENT_TOKEN:-}
-  LOCAL_SERVER_NAME: ${LOCAL_SERVER_NAME:-dashboard-local}
-  LOCAL_SERVER_REGION: ${LOCAL_SERVER_REGION:-محلی}
-  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
-  RELEASE_MAX_FILE_MB: ${RELEASE_MAX_FILE_MB:-500}
-  USE_X_ACCEL_REDIRECT: "1"
 
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-asandesk}
-      POSTGRES_USER: ${POSTGRES_USER:-asandesk}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      <<: *db-env
       TZ: ${TZ:-Asia/Tehran}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -39,10 +26,23 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    environment: *backend-env
+    environment:
+      <<: *db-env
+      POSTGRES_HOST: db
+      TZ: ${TZ:-Asia/Tehran}
+      DJANGO_DEBUG: "0"
+      USE_X_ACCEL_REDIRECT: "1"
+      # اختیاری: آدرس عمومی برای لینک‌های latest.json (خالی = همان آدرسی که پنل با آن باز می‌شود)
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      SECURE_COOKIES: ${SECURE_COOKIES:-0}
+      RELEASE_MAX_FILE_MB: ${RELEASE_MAX_FILE_MB:-500}
+      LOCAL_SERVER_NAME: ${LOCAL_SERVER_NAME:-dashboard-local}
+      LOCAL_SERVER_REGION: ${LOCAL_SERVER_REGION:-محلی}
     volumes:
       - releases:/data/releases
       - static:/data/static
+      - secrets:/data/secrets
+      - agent-token:/data/agent
     depends_on:
       db:
         condition: service_healthy
@@ -80,13 +80,14 @@ services:
     pid: host
     environment:
       AGENT_URL: http://backend:8000/api/agent/ingest
-      AGENT_TOKEN: ${AGENT_TOKEN:?set AGENT_TOKEN in .env}
+      AGENT_TOKEN_FILE: /run/agent/token
       AGENT_DISK_PATH: /hostfs
       AGENT_SYS: /hostsys
       AGENT_PORTS: ${AGENT_PORTS:-}
       AGENT_NET_CAPACITY_MBPS: ${AGENT_NET_CAPACITY_MBPS:-}
       AGENT_IP: ${AGENT_IP:-}
     volumes:
+      - agent-token:/run/agent:ro
       - /:/hostfs:ro
       - /sys:/hostsys:ro
     depends_on:
@@ -97,3 +98,5 @@ volumes:
   pgdata:
   releases:
   static:
+  secrets:
+  agent-token:

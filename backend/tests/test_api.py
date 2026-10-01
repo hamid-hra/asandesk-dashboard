@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Role, User
 from monitoring import stats
-from monitoring.models import Alert, MetricSample, Server
+from monitoring.models import Alert, MetricSample, Server, hash_token
 from releases.models import Release, version_key
 
 
@@ -16,6 +16,8 @@ from releases.models import Release, version_key
 def releases_root(tmp_path, settings):
     settings.RELEASES_ROOT = tmp_path
     settings.MEDIA_ROOT = tmp_path
+    settings.SECRETS_DIR = tmp_path / "secrets"
+    settings.AGENT_TOKEN_FILE = tmp_path / "agent" / "token"
     return tmp_path
 
 
@@ -68,6 +70,64 @@ def test_login_and_me():
 @pytest.mark.django_db
 def test_anonymous_cannot_read_monitoring():
     assert APIClient().get("/api/monitoring/overview").status_code == 403
+
+
+# ---------- first-run setup ----------
+
+def setup_post(c, **over):
+    data = {"code": code_now(), "username": "boss", "password": "Str0ng-pass-word"}
+    data.update(over)
+    return c.post("/api/auth/setup", data, format="json")
+
+
+def code_now():
+    from accounts.setup import ensure_setup_code
+
+    return ensure_setup_code()
+
+
+@pytest.mark.django_db
+def test_first_run_setup_creates_owner_and_logs_in():
+    c = APIClient()
+    assert c.get("/api/auth/setup").json() == {"needed": True}
+    code = code_now()
+    assert len(code) == 14
+    r = setup_post(c, code=code.lower().replace("-", ""))  # حروف کوچک و بدون خط تیره هم پذیرفته می‌شود
+    assert r.status_code == 201, r.content
+    assert r.json()["role"] == "owner"
+    assert c.get("/api/auth/me").status_code == 200
+    assert c.get("/api/auth/setup").json() == {"needed": False}
+    # کد پس از استفاده حذف می‌شود و راه‌اندازی دوباره ممکن نیست
+    from accounts.setup import code_path
+
+    assert not code_path().exists()
+    assert APIClient().post("/api/auth/setup", {"code": code, "username": "x", "password": "Str0ng-pass-word"},
+                            format="json").status_code == 409
+
+
+@pytest.mark.django_db
+def test_setup_rejects_wrong_code_and_weak_password():
+    c = APIClient()
+    code_now()
+    assert setup_post(c, code="AAAA-BBBB-CCCC").status_code == 400
+    weak = setup_post(c, password="123")
+    assert weak.status_code == 400 and "password" in weak.json()
+    bad_user = setup_post(c, username="کاربر فارسی")
+    assert bad_user.status_code == 400 and "username" in bad_user.json()
+    assert not User.objects.exists()
+
+
+@pytest.mark.django_db
+def test_bootstrap_generates_agent_token_and_setup_code(settings, capsys):
+    from django.core.management import call_command
+
+    call_command("bootstrap")
+    token = settings.AGENT_TOKEN_FILE.read_text().strip()
+    assert Server.objects.filter(token_hash=hash_token(token)).exists()
+    assert "SETUP CODE" in capsys.readouterr().out
+    call_command("bootstrap")  # idempotent
+    assert Server.objects.count() == 1
+    assert settings.AGENT_TOKEN_FILE.read_text().strip() == token
 
 
 # ---------- monitoring ----------
@@ -204,7 +264,8 @@ def test_publish_release_writes_manifest(releases_root):
 
     manifest = json.loads((releases_root / "latest.json").read_text())
     assert manifest["version"] == "2.5.0" and manifest["mandatory"] is True and manifest["rollout"] == 50
-    assert manifest["assets"]["windows"]["url"].endswith("/api/releases/2.5.0/download/windows")
+    # آدرس عمومی از درخواست انتشار گرفته می‌شود
+    assert manifest["assets"]["windows"]["url"] == "http://testserver/api/releases/2.5.0/download/windows"
 
     dl = APIClient().get("/api/releases/2.5.0/download/windows")
     assert dl.status_code == 200

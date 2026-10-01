@@ -8,15 +8,47 @@
 | نسخه‌ها | ✅ انتشار نسخه با فایل نصب، تاریخچه، `latest.json` برای به‌روزرسانی خودکار، شمارش دانلود |
 | کلاینت‌ها، تبلیغات، اطلاعیه‌ها، تنظیمات | 🕓 «به‌زودی» (فاز ۳) |
 
-## راه‌اندازی سریع
+## راه‌اندازی روی سرور
 
 ```bash
-cp .env.example .env      # مقادیر change-me را عوض کنید
+git clone -b main https://github.com/hamid-hra/asandesk-dashboard.git
+cd asandesk-dashboard
+cp .env.example .env      # فقط POSTGRES_USER و POSTGRES_PASSWORD
+nano .env                 # رمز دیتابیس را عوض کنید
 docker compose up -d --build
 ```
 
-سپس <http://localhost:8080> را باز کنید و با `OWNER_USERNAME` / `OWNER_PASSWORD` از فایل `.env` وارد شوید.
+**اولین ورود (ساخت حساب مالک):**
+
+1. پنل را باز کنید: `http://<IP-سرور>:8080`. چون هنوز کاربری وجود ندارد، صفحهٔ «راه‌اندازی اولیه» نمایش داده می‌شود.
+2. کد راه‌اندازی یک‌بارمصرف را از لاگ backend بردارید:
+   ```bash
+   docker compose logs backend | grep "SETUP CODE"
+   # یا: docker compose exec backend python manage.py setup_code
+   ```
+3. کد را وارد کنید و نام کاربری و رمز عبور مالک را خودتان تعیین کنید.
+
+بعد از ساخت حساب مالک، کد باطل می‌شود و این صفحه دیگر نمایش داده نمی‌شود. کد برای این است که اگر کسی زودتر از شما پنل را باز کرد، نتواند مالک شود.
+
+**رازهای خودکار:** کلید Django و توکن agent در اولین اجرا به‌صورت تصادفی ساخته می‌شوند و در volumeهای `secrets` و `agent-token` می‌مانند. هیچ رازی جز رمز دیتابیس در `.env` نیست.
+
 حدود ۳۰ ثانیه بعد از بالا آمدن، اولین داده‌های منابع سرور نمایش داده می‌شود.
+
+### تنظیمات اختیاری
+
+این مقادیر پیش‌فرض دارند. فقط در صورت نیاز آن‌ها را به `.env` اضافه کنید:
+
+| متغیر | پیش‌فرض | توضیح |
+|---|---|---|
+| `HTTP_PORT` | `8080` | پورت پنل روی سرور (مثلاً `80`) |
+| `PUBLIC_BASE_URL` | آدرسی که پنل با آن باز شده | دامنهٔ لینک‌های دانلود در `latest.json`، مثلاً `https://panel.asandesk.ir` |
+| `SECURE_COOKIES` | `0` | وقتی پنل پشت HTTPS است، `1` بگذارید |
+| `AGENT_PORTS` | خالی (همه اتصال‌ها) | فقط اتصال‌های این پورت‌ها شمرده شود، مثلاً `21116,21117` |
+| `AGENT_NET_CAPACITY_MBPS` | تشخیص خودکار یا ۱۰۰۰ | ظرفیت لینک شبکه |
+| `AGENT_IP` | خالی | IP نمایش‌داده‌شده برای این سرور |
+| `RELEASE_MAX_FILE_MB` | `500` | حداکثر حجم هر فایل نصب |
+
+> برای ریست کامل (حذف دیتابیس، فایل‌ها و حساب مالک): `docker compose down -v`
 
 ### حالت توسعه (hot-reload)
 
@@ -56,7 +88,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 | مدیر (admin) | انتشار نسخه، بررسی هشدارها |
 | ناظر (viewer) | فقط مشاهده |
 
-کاربر جدید را مالک از `/admin/accounts/user/` می‌سازد. فقط نقش مالک به پنل `/admin` دسترسی دارد.
+حساب مالک در اولین ورود ساخته می‌شود (بخش بالا). کاربران بعدی را مالک از `/admin/accounts/user/` می‌سازد. فقط نقش مالک به پنل `/admin` دسترسی دارد.
+
+اگر رمز مالک را فراموش کردید: `docker compose exec backend python manage.py changepassword <username>`
 
 ## به‌روزرسانی خودکار کلاینت
 
@@ -73,7 +107,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 }
 ```
 
-در کلاینت، `ORG_UPDATE_URL` در `src/asandesk.rs` به همین فایل اشاره می‌کند (`https://asandesk.ir/releases/latest.json`). البته کلاینت هنوز از آن استفاده نمی‌کند، چون `do_check_software_update` هنوز API رسمی RustDesk را صدا می‌زند. `PUBLIC_BASE_URL` را برابر دامنهٔ واقعی بگذارید تا لینک‌های دانلود درست ساخته شوند.
+در کلاینت، `ORG_UPDATE_URL` در `src/asandesk.rs` به همین فایل اشاره می‌کند (`https://asandesk.ir/releases/latest.json`). البته کلاینت هنوز از آن استفاده نمی‌کند، چون `do_check_software_update` هنوز API رسمی RustDesk را صدا می‌زند.
+
+لینک‌های دانلود از آدرسی ساخته می‌شوند که پنل هنگام انتشار نسخه با آن باز شده بود. اگر پنل را با IP باز می‌کنید ولی کلاینت‌ها باید از دامنه دانلود کنند، `PUBLIC_BASE_URL` را تنظیم کنید.
 
 ## مانیتورینگ و هشدارها
 

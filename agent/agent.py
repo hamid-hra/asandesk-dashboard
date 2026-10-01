@@ -19,6 +19,8 @@ VERSION = "1.0.0"
 
 URL = os.environ.get("AGENT_URL", "http://localhost:8000/api/agent/ingest")
 TOKEN = os.environ.get("AGENT_TOKEN", "")
+# در docker compose، backend توکن را می‌سازد و از طریق volume مشترک در این فایل قرار می‌دهد
+TOKEN_FILE = os.environ.get("AGENT_TOKEN_FILE", "")
 INTERVAL = float(os.environ.get("AGENT_INTERVAL", "15"))
 PROC = os.environ.get("AGENT_PROC", "/proc")
 SYS = os.environ.get("AGENT_SYS", "/sys")
@@ -169,15 +171,31 @@ class Collector:
         }
 
 
+def load_token() -> str:
+    if TOKEN:
+        return TOKEN
+    if not TOKEN_FILE:
+        raise SystemExit("AGENT_TOKEN or AGENT_TOKEN_FILE is required")
+    while True:  # backend هنگام اولین اجرا فایل را می‌سازد
+        try:
+            with open(TOKEN_FILE) as f:
+                token = f.read().strip()
+            if token:
+                return token
+        except OSError:
+            pass
+        log.info("waiting for token file %s", TOKEN_FILE)
+        time.sleep(5)
+
+
 def main():
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
-    if not TOKEN:
-        raise SystemExit("AGENT_TOKEN is required")
+    token = load_token()
     log.info("asandesk agent %s → %s every %ss (disk=%s, net=%s)", VERSION, URL, INTERVAL, DISK_PATH,
              net_namespace_root())
     collector = Collector()
     session = requests.Session()
-    session.headers["Authorization"] = f"Bearer {TOKEN}"
+    session.headers["Authorization"] = f"Bearer {token}"
     backoff = INTERVAL
     time.sleep(1)
     while True:

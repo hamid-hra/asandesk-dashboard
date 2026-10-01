@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import Release, ReleaseAsset
-from .services import write_manifests
+from .services import remember_base_url, write_manifests
 
 
 class AssetInline(admin.TabularInline):
@@ -18,4 +18,5 @@ class ReleaseAdmin(admin.ModelAdmin):
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
+        remember_base_url(request)
         write_manifests()

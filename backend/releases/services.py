@@ -39,10 +39,34 @@ def latest_release(channels) -> Release | None:
     return max(releases, key=lambda r: version_key(r.version), default=None)
 
 
+BASE_URL_FILE = ".public_base_url"
+
+
+def remember_base_url(request) -> str:
+    """آدرس عمومی پنل را از درخواست (یا PUBLIC_BASE_URL) می‌گیرد و برای بازنویسی‌های بعدی ذخیره می‌کند."""
+    base = settings.PUBLIC_BASE_URL or request.build_absolute_uri("/").rstrip("/")
+    path = settings.RELEASES_ROOT / BASE_URL_FILE
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(base)
+    except OSError:
+        pass
+    return base
+
+
+def public_base_url() -> str:
+    if settings.PUBLIC_BASE_URL:
+        return settings.PUBLIC_BASE_URL
+    try:
+        return (settings.RELEASES_ROOT / BASE_URL_FILE).read_text().strip()
+    except OSError:
+        return ""
+
+
 def release_manifest(release: Release | None) -> dict:
     if release is None:
         return {}
-    base = settings.PUBLIC_BASE_URL
+    base = public_base_url()
     return {
         "version": release.version,
         "channel": release.channel,

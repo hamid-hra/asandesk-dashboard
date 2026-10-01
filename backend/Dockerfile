@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     STATIC_ROOT=/data/static \
     RELEASES_ROOT=/data/releases \
+    SECRETS_DIR=/data/secrets \
+    AGENT_TOKEN_FILE=/data/agent/token \
     FILE_UPLOAD_TEMP_DIR=/data/releases/.uploads
 
 WORKDIR /app
@@ -14,7 +16,7 @@ RUN if [ "$DEV" = "1" ]; then pip install -r requirements-dev.txt; else pip inst
 
 COPY . .
 RUN useradd --uid 1000 --create-home app \
-    && mkdir -p /data/static /data/releases/.uploads \
+    && mkdir -p /data/static /data/releases/.uploads /data/secrets /data/agent \
     && chown -R app:app /data
 USER app
 
