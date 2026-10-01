@@ -1,0 +1,25 @@
+# حالت توسعه با hot-reload:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+services:
+  backend:
+    build:
+      context: ./backend
+      args:
+        DEV: "1"
+    environment:
+      DJANGO_DEBUG: "1"
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    command: ["npm", "run", "dev"]
+    environment:
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
