@@ -1,0 +1,529 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.h1 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.h1sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ranges {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+
+.ranges > button {
+  white-space: nowrap;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.ranges > button[aria-pressed="true"] {
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+/* ---------- KPI ---------- */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.kpi {
+  padding: 18px 20px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  border-left: 1px solid var(--divider);
+}
+
+.kpi:last-child {
+  border-left: 0;
+}
+
+.kpiLabel {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kpiValue {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.kpiUnit {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.kpiDelta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 18px;
+  white-space: nowrap;
+}
+
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 26px;
+}
+
+.spark > span {
+  width: 5px;
+  border-radius: 2px;
+}
+
+/* ---------- نمودارها ---------- */
+.chartCard {
+  padding: 20px 22px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+
+.plot {
+  position: relative;
+  cursor: crosshair;
+}
+
+.plot > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ticks {
+  position: relative;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.ticks > span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.xLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--faint);
+  margin-right: 52px;
+}
+
+.xLabels > span {
+  white-space: nowrap;
+}
+
+.cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--cursor);
+  pointer-events: none;
+}
+
+.marker {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--surface);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.tip {
+  position: absolute;
+  top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--tip-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tipTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.tipRow > span:nth-child(2) {
+  flex: 1;
+  color: var(--muted);
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.legend > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend > div > span {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.noData {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+.warnLabel {
+  position: absolute;
+  right: 4px;
+  font-size: 11px;
+  color: var(--danger-text);
+  background: var(--surface);
+  padding: 0 4px;
+  white-space: nowrap;
+  transform: translateY(-120%);
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chips > button {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--subtle);
+  color: var(--faint);
+}
+
+.chips > button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* ---------- منابع لحظه‌ای ---------- */
+.live {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 320px;
+  max-width: 100%;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 20px;
+  padding: 3px 10px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.pill > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: pulse 2s infinite;
+}
+
+.pill[aria-pressed="false"] {
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.pill[aria-pressed="false"] > span {
+  background: var(--faint);
+  animation: none;
+}
+
+.liveRow {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.liveLabel {
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.liveValue {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.liveSub {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.mini {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.mini > div {
+  background: var(--subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mini > div > span:first-child {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.mini > div > span:last-child {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* ---------- هشدارها ---------- */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 22px;
+}
+
+.alert + .alert {
+  border-top: 1px solid var(--divider);
+}
+
+.alertTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.lvl {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.alertSub,
+.alertTime {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.alertTime {
+  white-space: nowrap;
+}
+
+.ack {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.ack:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger-strong);
+  background: var(--danger-soft);
+  border-radius: 20px;
+  padding: 1px 9px;
+}
+
+.linkBtn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.linkBtn:hover {
+  color: var(--text);
+}
+
+/* ---------- توزیع ---------- */
+.bdRow {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 0;
+}
+
+/* ---------- جدول سرورها ---------- */
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  min-width: 820px;
+}
+
+.tr {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1.2fr 1.2fr 0.9fr 0.8fr;
+  gap: 12px;
+  padding: 13px 22px;
+  align-items: center;
+  border-top: 1px solid var(--divider);
+  font-size: 13.5px;
+}
+
+.th {
+  padding: 10px 22px;
+  font-size: 12px;
+  color: var(--faint);
+  background: var(--thead);
+  border-top: 0;
+}
+
+.status {
+  justify-self: start;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meter > div {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.meter > div > div {
+  height: 100%;
+}
+
+.meter > span {
+  font-size: 12.5px;
+  width: 34px;
+}
+
+@media (max-width: 560px) {
+  .xLabels > span:nth-child(even) {
+    display: none;
+  }
+}

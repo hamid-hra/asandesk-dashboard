@@ -9,3 +9,5 @@ frontend/.next/
 frontend/out/
 *.log
 .DS_Store
+*.tsbuildinfo
+frontend/next-env.d.ts
