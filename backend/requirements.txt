@@ -1,0 +1,5 @@
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.17
+psycopg[binary]>=3.2,<3.3
+gunicorn>=23,<24
+jdatetime>=5.2,<6
