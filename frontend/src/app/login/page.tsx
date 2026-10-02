@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import useSWR, { mutate } from "swr";
 
+import { AsanLoader } from "@/components/AsanLoader";
 import { Logo } from "@/components/Logo";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { User } from "@/lib/types";
@@ -98,6 +99,8 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // بعد از ورود موفق تا باز شدن پنل، صفحهٔ لودینگ دیده می‌شود
+  const [entering, setEntering] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +110,7 @@ function LoginForm() {
     try {
       const user = await api<User>("/api/auth/login", { method: "POST", body: { username, password } });
       await mutate("/api/auth/me", user, { revalidate: false });
+      setEntering(true);
       const next = params.get("next");
       router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/server");
     } catch (err) {
@@ -124,6 +128,7 @@ function LoginForm() {
 
   return (
     <form className={s.card} onSubmit={submit}>
+      {entering && <AsanLoader full label="در حال ورود" />}
       <Brand />
       <div>
         <div className={s.title}>ورود به پنل</div>

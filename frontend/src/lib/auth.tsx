@@ -4,6 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect } from "react";
 import useSWR from "swr";
 
+import { AsanLoader } from "@/components/AsanLoader";
+
 import { api, fetcher } from "./api";
 import type { User } from "./types";
 
@@ -42,12 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mutate, router]);
 
-  if (!user) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--faint)", fontSize: 14 }}>
-        در حال بارگذاری…
-      </div>
-    );
-  }
+  if (!user) return <AsanLoader full label="در حال اتصال" />;
   return <AuthContext.Provider value={{ user, logout }}>{children}</AuthContext.Provider>;
 }

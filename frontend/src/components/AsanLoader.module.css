@@ -1,0 +1,66 @@
+/* لودینگ آسان‌دسک — از فایل طرح «AsanDesk loading» (HTML/CSS خالص) */
+.loader {
+  --ad-size: 160px;
+  --ad-dur: 2.4s;
+  --ad-ease: cubic-bezier(0.65, 0, 0.35, 1);
+  --ad-bg: #f6f8f8;
+  --ad-fg: #29a37a;
+  --ad-ink: #0f1f1e;
+  --ad-track: #e2e7e8;
+  --ad-ring: #29a37a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  background: var(--ad-bg);
+  font-family: Vazirmatn, system-ui, sans-serif;
+}
+.loader[data-theme="dark"] {
+  --ad-bg: #0d1514;
+  --ad-fg: #2fbf8e;
+  --ad-ink: #e7efee;
+  --ad-track: #25302f;
+  --ad-ring: #2fbf8e;
+}
+:global(:root[data-theme="dark"]) .loader[data-theme="auto"] {
+  --ad-bg: #0d1514;
+  --ad-fg: #2fbf8e;
+  --ad-ink: #e7efee;
+  --ad-track: #25302f;
+  --ad-ring: #2fbf8e;
+}
+.loader[data-theme="green"] {
+  --ad-bg: #29a37a;
+  --ad-fg: #ffffff;
+  --ad-ink: #ffffff;
+  --ad-track: rgba(255, 255, 255, 0.25);
+  --ad-ring: #ffffff;
+}
+.full { position: fixed; inset: 0; z-index: 100; }
+.fill { min-height: 320px; flex: 1; border-radius: 14px; }
+.small { --ad-size: 96px; gap: 24px; }
+
+.mark { position: relative; width: var(--ad-size); height: var(--ad-size); }
+.ring { position: absolute; inset: 8%; border-radius: 50%; border: 3px solid var(--ad-ring); animation: adPulse var(--ad-dur) ease-out infinite; }
+.svg { position: relative; width: 100%; height: 100%; overflow: visible; animation: adBreath var(--ad-dur) ease-in-out infinite; }
+.spin, .top, .bot { transform-box: view-box; transform-origin: 50% 50%; animation: var(--ad-dur) var(--ad-ease) infinite; }
+.spin { animation-name: adSpin; }
+.top { animation-name: adTop; fill: var(--ad-fg); }
+.bot { animation-name: adBot; fill: var(--ad-fg); }
+.meta { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.label { font-size: 20px; font-weight: 500; color: var(--ad-ink); }
+.label span { animation: adDot 1.2s infinite; }
+.label span:nth-child(2) { animation-delay: 0.2s; }
+.label span:nth-child(3) { animation-delay: 0.4s; }
+.track { width: 140px; height: 3px; border-radius: 3px; background: var(--ad-track); overflow: hidden; }
+.bar { width: 50%; height: 100%; border-radius: 3px; background: var(--ad-ring); animation: adBar 1.6s var(--ad-ease) infinite; }
+
+@keyframes adSpin { 0%, 14% { transform: rotate(0deg); } 74%, 100% { transform: rotate(180deg); } }
+@keyframes adTop { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(-70px, -70px); } 78% { transform: translate(10px, 10px); } 86%, 100% { transform: translate(0, 0); } }
+@keyframes adBot { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(70px, 70px); } 78% { transform: translate(-10px, -10px); } 86%, 100% { transform: translate(0, 0); } }
+@keyframes adPulse { 0%, 76% { transform: scale(0.6); opacity: 0; } 80% { opacity: 0.55; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes adBreath { 0%, 100% { transform: scale(1); } 78% { transform: scale(0.94); } 86% { transform: scale(1.04); } }
+@keyframes adBar { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+@keyframes adDot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .spin, .top, .bot, .ring, .svg { animation: none; } .ring { opacity: 0; } }
