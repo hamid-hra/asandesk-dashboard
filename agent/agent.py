@@ -5,6 +5,7 @@
 و دیسک میزبان از مسیر mount‌شده (AGENT_DISK_PATH، پیش‌فرض /hostfs) اندازه گرفته می‌شود.
 """
 
+import hashlib
 import logging
 import os
 import socket
@@ -15,7 +16,7 @@ from urllib.parse import urlparse
 import psutil
 import requests
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 URL = os.environ.get("AGENT_URL", "http://localhost:8000/api/agent/ingest")
 TOKEN = os.environ.get("AGENT_TOKEN", "")
@@ -29,6 +30,8 @@ PORTS = {int(p) for p in os.environ.get("AGENT_PORTS", "").split(",") if p.strip
 CAPACITY_MBPS = float(os.environ.get("AGENT_NET_CAPACITY_MBPS") or "0")
 DEFAULT_CAPACITY_BPS = 1_000_000_000
 AGENT_IP = os.environ.get("AGENT_IP", "")
+# مسیر id_ed25519.pub سرور شناسه (اختیاری): sha256 آن گزارش می‌شود تا پنل بتواند یکسان بودن کلید سرورهای HA را بسنجد
+KEY_FILE = os.environ.get("AGENT_KEY_FILE", "")
 # اندازه‌گیری تأخیر: زمان اتصال TCP به این مقصد (پیش‌فرض: خود داشبورد)
 PING_TARGET = os.environ.get("AGENT_PING_TARGET", "")
 
@@ -168,7 +171,18 @@ class Collector:
             "hostname": host_hostname(),
             "ip": AGENT_IP,
             "agent_version": VERSION,
+            "pubkey_fp": key_fingerprint(),
         }
+
+
+def key_fingerprint() -> str:
+    if not KEY_FILE:
+        return ""
+    try:
+        with open(KEY_FILE, "rb") as f:
+            return hashlib.sha256(f.read().strip()).hexdigest()
+    except OSError:
+        return ""
 
 
 def load_token() -> str:

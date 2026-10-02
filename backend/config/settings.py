@@ -55,6 +55,8 @@ INSTALLED_APPS = [
     "monitoring",
     "releases",
     "clients",
+    "backups",
+    "ha",
 ]
 
 MIDDLEWARE = [
@@ -126,6 +128,10 @@ PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "").rstrip("/")
 # پشت nginx: ارسال فایل با X-Accel-Redirect به‌جای خواندن در Django
 USE_X_ACCEL_REDIRECT = env_bool("USE_X_ACCEL_REDIRECT", False)
 X_ACCEL_PREFIX = "/_protected/releases/"
+
+# پشتیبان‌گیری: فایل‌های .adbk اینجا نگه‌داری می‌شوند (volume مشترک backend و scheduler)
+BACKUPS_ROOT = Path(env("BACKUPS_ROOT", BASE_DIR / "data" / "backups"))
+BACKUP_MAX_UPLOAD = 4 * 1024 ** 3
 
 # مانیتورینگ
 METRICS_RETENTION_DAYS = int(env("METRICS_RETENTION_DAYS", "90"))

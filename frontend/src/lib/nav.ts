@@ -16,31 +16,37 @@ export interface Tab {
   label: string;
   icon: string;
   soon?: string;
+  /** بخش(های) دسترسی لازم برای دیدن تب (هرکدام «مشاهده» یا بیشتر کافی است) */
+  sections: string[];
 }
 
 export const TABS: Tab[] = [
-  { href: "/server", label: "سرور و منابع", icon: ICONS.server },
-  { href: "/releases", label: "نسخه‌ها", icon: ICONS.release },
-  { href: "/clients", label: "کلاینت‌ها", icon: ICONS.clients },
-  { href: "/tickets", label: "تیکت‌ها", icon: ICONS.ticket },
+  { href: "/server", label: "سرور و منابع", icon: ICONS.server, sections: ["server"] },
+  { href: "/releases", label: "نسخه‌ها", icon: ICONS.release, sections: ["release"] },
+  { href: "/clients", label: "کلاینت‌ها", icon: ICONS.clients, sections: ["clients"] },
+  { href: "/tickets", label: "تیکت‌ها", icon: ICONS.ticket, sections: ["tickets"] },
   {
     href: "/ads",
     label: "تبلیغات",
     icon: ICONS.ads,
+    sections: ["ads"],
     soon: "تعریف کمپین و بنر برای نمایش در صفحه اصلی اپلیکیشن، زمان‌بندی و گزارش کلیک.",
   },
   {
     href: "/announcements",
     label: "اطلاعیه‌ها",
     icon: ICONS.announce,
+    sections: ["announce"],
     soon: "ارسال پیام و اطلاعیه به همه کاربران یا گروه‌های مشخص، درون اپ و از طریق اعلان.",
   },
-  {
-    href: "/settings",
-    label: "تنظیمات",
-    icon: ICONS.settings,
-    soon: "پیکربندی سرورها، محدودیت‌ها، کلیدهای API و دسترسی اعضای تیم مدیریت.",
-  },
+  { href: "/settings", label: "تنظیمات", icon: ICONS.settings, sections: ["users", "backup", "ha"] },
 ];
 
 export const tabFor = (pathname: string) => TABS.find((t) => pathname.startsWith(t.href));
+
+/** سطح دسترسی کاربر به یک بخش */
+export const levelOf = (perms: Record<string, string> | undefined, section: string) => perms?.[section] ?? "none";
+
+/** آیا کاربر به این تب دسترسی دارد؟ */
+export const canSee = (tab: Tab, perms: Record<string, string> | undefined) =>
+  tab.sections.some((sec) => levelOf(perms, sec) !== "none");

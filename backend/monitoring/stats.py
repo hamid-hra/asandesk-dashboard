@@ -107,7 +107,7 @@ def server_status(server: Server, sample: MetricSample | None) -> str:
 def servers_table():
     latest = latest_samples()
     out = []
-    for server in Server.objects.all():
+    for server in reporting_servers():
         s = latest.get(server.pk)
         out.append({
             "id": server.pk,
@@ -125,9 +125,14 @@ def servers_table():
     return out
 
 
+def reporting_servers():
+    """سرورهای HA که هنوز agent نصب نکرده‌اند (هیچ گزارشی نداده‌اند) در آمار منابع و قطعی حساب نمی‌شوند."""
+    return Server.objects.exclude(ha__isnull=False, first_seen__isnull=True)
+
+
 def live_snapshot():
     latest = latest_samples()
-    servers = list(Server.objects.all())
+    servers = list(reporting_servers())
     online = [srv for srv in servers if srv.online and srv.pk in latest]
     samples = [latest[srv.pk] for srv in online]
     agg = None

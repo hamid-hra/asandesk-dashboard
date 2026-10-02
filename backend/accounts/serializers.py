@@ -7,7 +7,11 @@ class UserSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(read_only=True)
     can_manage = serializers.BooleanField(read_only=True)
     role_label = serializers.CharField(source="get_role_display", read_only=True)
+    perms = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ("id", "username", "display_name", "role", "role_label", "can_manage")
+        fields = ("id", "username", "display_name", "role", "role_label", "can_manage", "perms")
+
+    def get_perms(self, user):
+        return user.resolved_perms()

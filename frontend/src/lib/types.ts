@@ -1,4 +1,6 @@
-export type Role = "owner" | "admin" | "viewer";
+export type Role = "owner" | "admin" | "viewer" | "custom";
+export type Level = "none" | "view" | "edit";
+export type Perms = Record<string, Level>;
 
 export interface User {
   id: number;
@@ -7,6 +9,7 @@ export interface User {
   role: Role;
   role_label: string;
   can_manage: boolean;
+  perms: Perms;
 }
 
 export type RangeId = "24h" | "7d" | "30d" | "90d";

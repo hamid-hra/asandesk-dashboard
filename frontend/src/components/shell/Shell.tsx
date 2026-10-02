@@ -10,13 +10,13 @@ import { Logo } from "@/components/Logo";
 import { fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dfToday, pctText, toFa } from "@/lib/fa";
-import { TABS, tabFor } from "@/lib/nav";
+import { canSee, TABS, tabFor } from "@/lib/nav";
 import type { Status } from "@/lib/types";
 
 import { ThemeToggle } from "./ThemeToggle";
 import s from "./Shell.module.css";
 
-const ROLE_EN = { owner: "Owner", admin: "Admin", viewer: "Viewer" } as const;
+const ROLE_EN = { owner: "Owner", admin: "Admin", viewer: "Viewer", custom: "Custom" } as const;
 
 function NavItem({ tab, active, onClick, badge }: { tab: (typeof TABS)[number]; active: boolean; onClick: () => void; badge?: number }) {
   return (
@@ -97,7 +97,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const tab = tabFor(pathname);
   const [navOpen, setNavOpen] = useState(false);
+  const { user } = useAuth();
   const { data: status } = useSWR<Status>("/api/monitoring/status", fetcher, { refreshInterval: 30000 });
+  const visible = TABS.filter((t) => canSee(t, user.perms));
+  const allowed = !tab || canSee(tab, user.perms);
   // Shell فقط سمت کلاینت (بعد از احراز هویت) رندر می‌شود
   const today = dfToday.format(new Date());
 
@@ -116,19 +119,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <div className={s.section}>مدیریت</div>
         <nav className={s.nav}>
-          {TABS.filter((t) => !t.soon).map((t) => (
+          {visible.filter((t) => !t.soon).map((t) => (
             <NavItem key={t.href} tab={t} active={t === tab} onClick={close} badge={t.href === "/tickets" ? status?.open_tickets : 0} />
           ))}
         </nav>
-        <div className={s.section} style={{ padding: "18px 10px 6px", display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ whiteSpace: "nowrap" }}>فاز ۳</span>
-          <span className={s.rule} />
-        </div>
-        <nav className={s.nav}>
-          {TABS.filter((t) => t.soon).map((t) => (
-            <NavItem key={t.href} tab={t} active={t === tab} onClick={close} />
-          ))}
-        </nav>
+        {visible.some((t) => t.soon) && (
+          <>
+            <div className={s.section} style={{ padding: "18px 10px 6px", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ whiteSpace: "nowrap" }}>فاز ۳</span>
+              <span className={s.rule} />
+            </div>
+            <nav className={s.nav}>
+              {visible.filter((t) => t.soon).map((t) => (
+                <NavItem key={t.href} tab={t} active={t === tab} onClick={close} />
+              ))}
+            </nav>
+          </>
+        )}
         <StatusBox />
       </aside>
       {navOpen && <div className={s.backdrop} onClick={close} />}
@@ -155,7 +162,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </Link>
           <UserMenu />
         </header>
-        <div className={s.content}>{children}</div>
+        <div className={s.content}>
+          {allowed ? (
+            children
+          ) : (
+            <div className="card empty">دسترسی شما به این بخش بسته است. برای دریافت دسترسی با مالک پنل تماس بگیرید.</div>
+          )}
+        </div>
       </main>
     </div>
   );

@@ -14,7 +14,7 @@ from . import alerts, stats
 from .models import Alert, AlertLevel, MetricSample, Server, hash_token
 from .serializers import AlertSerializer, IngestSerializer
 
-HW_FIELDS = ("hostname", "cores", "ram_total", "disk_total", "net_capacity_bps", "agent_version")
+HW_FIELDS = ("hostname", "cores", "ram_total", "disk_total", "net_capacity_bps", "agent_version", "pubkey_fp")
 _last_prune = 0.0
 
 

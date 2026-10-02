@@ -6,6 +6,31 @@ class Role(models.TextChoices):
     OWNER = "owner", "مالک"
     ADMIN = "admin", "مدیر"
     VIEWER = "viewer", "ناظر"
+    CUSTOM = "custom", "سفارشی"
+
+
+# بخش‌های پنل که دسترسی هر کدام جدا تعیین می‌شود
+SECTIONS = ("server", "release", "clients", "tickets", "ads", "announce", "users", "backup", "ha")
+LEVELS = ("none", "view", "edit")
+
+# دسترسی پیش‌فرض نقش‌ها؛ برای نقش «سفارشی» از فیلد perms خوانده می‌شود
+PRESETS = {
+    Role.OWNER: dict.fromkeys(SECTIONS, "edit"),
+    Role.ADMIN: {
+        "server": "edit", "release": "edit", "clients": "edit", "tickets": "edit", "ads": "edit",
+        "announce": "edit", "users": "none", "backup": "view", "ha": "view",
+    },
+    Role.VIEWER: {
+        "server": "view", "release": "view", "clients": "view", "tickets": "view", "ads": "view",
+        "announce": "view", "users": "none", "backup": "view", "ha": "view",
+    },
+}
+
+
+def clean_perms(perms) -> dict:
+    """فقط بخش‌ها و سطح‌های شناخته‌شده؛ بقیه «بدون دسترسی»."""
+    perms = perms if isinstance(perms, dict) else {}
+    return {k: (perms.get(k) if perms.get(k) in LEVELS else "none") for k in SECTIONS}
 
 
 class UserManager(BaseUserManager):
@@ -23,6 +48,8 @@ class User(AbstractUser):
     """
 
     role = models.CharField("نقش", max_length=16, choices=Role.choices, default=Role.VIEWER)
+    # فقط برای نقش «سفارشی»: {بخش: none|view|edit}
+    perms = models.JSONField("دسترسی بخش‌ها", default=dict, blank=True)
 
     objects = UserManager()
 
@@ -37,9 +64,21 @@ class User(AbstractUser):
         self.is_superuser = is_owner
         super().save(*args, **kwargs)
 
+    def resolved_perms(self) -> dict:
+        """دسترسی نهایی هر بخش (غیرفعال = هیچ‌چیز)."""
+        if not self.is_active:
+            return dict.fromkeys(SECTIONS, "none")
+        if self.role == Role.CUSTOM:
+            return clean_perms(self.perms)
+        return dict(PRESETS.get(self.role, PRESETS[Role.VIEWER]))
+
+    def level(self, section: str) -> str:
+        return self.resolved_perms().get(section, "none")
+
     @property
     def can_manage(self):
-        return self.is_active and self.role in (Role.OWNER, Role.ADMIN)
+        """ویرایش حداقل یکی از بخش‌های عملیاتی (برای سازگاری با رابط قدیمی)."""
+        return self.is_active and any(self.level(k) == "edit" for k in ("release", "clients", "tickets", "server"))
 
     @property
     def display_name(self):

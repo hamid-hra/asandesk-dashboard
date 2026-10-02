@@ -30,6 +30,7 @@ class IngestSerializer(serializers.Serializer):
     disk_total = serializers.IntegerField(min_value=0, required=False)
     net_capacity_bps = serializers.IntegerField(min_value=0, required=False)
     agent_version = serializers.CharField(max_length=32, required=False, allow_blank=True)
+    pubkey_fp = serializers.CharField(max_length=64, required=False, allow_blank=True)
 
     def validate_net_pct(self, v):
         return _clamp_pct(v)
