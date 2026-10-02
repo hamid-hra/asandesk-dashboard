@@ -264,14 +264,18 @@ def test_publish_release_writes_manifest(releases_root):
 
     manifest = json.loads((releases_root / "latest.json").read_text())
     assert manifest["version"] == "2.5.0" and manifest["mandatory"] is True and manifest["rollout"] == 50
-    # آدرس عمومی از درخواست انتشار گرفته می‌شود
-    assert manifest["assets"]["windows"]["url"] == "http://testserver/api/releases/2.5.0/download/windows"
+    # آدرس عمومی از درخواست انتشار گرفته می‌شود و به نام فایل نصب ختم می‌شود (آپدیت خودکار کلاینت)
+    url = manifest["assets"]["windows"]["url"]
+    assert url.startswith("http://testserver/api/releases/2.5.0/download/windows/")
+    assert url.endswith(".exe")
 
-    dl = APIClient().get("/api/releases/2.5.0/download/windows")
+    dl = APIClient().get(url.removeprefix("http://testserver"))
     assert dl.status_code == 200
     assert b"".join(dl.streaming_content) == b"MZ-binary"
-    assert Release.objects.get(version="2.5.0").downloads == 1
-    assert c.get("/api/releases/stats").json()["downloads_30d"] == 1
+    # مسیر کوتاه بدون نام فایل هم کار می‌کند
+    assert APIClient().get("/api/releases/2.5.0/download/windows").status_code == 200
+    assert Release.objects.get(version="2.5.0").downloads == 2
+    assert c.get("/api/releases/stats").json()["downloads_30d"] == 2
 
 
 @pytest.mark.django_db

@@ -78,6 +78,9 @@ class Client(models.Model):
     memory = models.CharField("حافظه", max_length=32, blank=True)
     version = models.CharField("نسخه برنامه", max_length=32, blank=True)
     ip = models.CharField("IP", max_length=64, blank=True)
+    # کلید «ارسال موقعیت تقریبی» در تنظیمات کلاینت (پرچم loc در sysinfo).
+    # فقط وقتی روشن است IP ذخیره می‌شود؛ خاموش‌کردنش IP ذخیره‌شده را هم پاک می‌کند.
+    share_location = models.BooleanField("اجازهٔ ثبت IP", default=False)
     account = models.ForeignKey(
         Account, verbose_name="حساب واردشده", null=True, blank=True, on_delete=models.SET_NULL, related_name="clients"
     )

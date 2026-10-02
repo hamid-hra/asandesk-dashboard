@@ -64,7 +64,7 @@ def device(data: dict, request, create: bool) -> tuple[Client | None, bool]:
         try:
             with transaction.atomic():
                 client = Client.objects.create(
-                    rd_id=rd_id, uuid_hash=sha256(uuid), ip=client_ip(request), last_seen=timezone.now()
+                    rd_id=rd_id, uuid_hash=sha256(uuid), last_seen=timezone.now()
                 )
             return client, True
         except IntegrityError:  # درخواست همزمان همین دستگاه
@@ -86,7 +86,8 @@ def touch(client: Client, request, now=None):
     if not client.last_seen or (now - client.last_seen).total_seconds() >= 10:
         client.last_seen = now
         fields.append("last_seen")
-    ip = client_ip(request)
+    # IP فقط با اجازهٔ کاربر (کلید موقعیت در کلاینت؛ SysinfoView)
+    ip = client_ip(request) if client.share_location else ""
     if ip and ip != client.ip:
         client.ip = ip
         fields.append("ip")
@@ -141,7 +142,13 @@ class SysinfoView(ClientView):
         client.memory = s(data, "memory", 32)
         client.version = s(data, "version", 32)
         client.sysinfo_at = timezone.now()
-        client.save(update_fields=["hostname", "os_user", "os", "cpu", "memory", "version", "sysinfo_at"])
+        # کلاینت‌هایی که پرچم loc نمی‌فرستند (قدیمی) موقعیت را خاموش نکرده‌اند
+        client.share_location = bool(data.get("loc", True))
+        fields = ["hostname", "os_user", "os", "cpu", "memory", "version", "sysinfo_at", "share_location"]
+        if not client.share_location and client.ip:
+            client.ip = ""
+            fields.append("ip")
+        client.save(update_fields=fields)
         touch(client, request)
         return text("SYSINFO_UPDATED")
 

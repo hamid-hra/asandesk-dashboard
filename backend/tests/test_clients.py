@@ -54,6 +54,32 @@ def test_heartbeat_registers_device_and_requests_sysinfo():
 
 
 @pytest.mark.django_db
+def test_ip_stored_only_with_location_permission():
+    ip = {"HTTP_X_REAL_IP": "5.6.7.8"}
+
+    def post(path, body):
+        return APIClient().post(path, body, format="json", **ip)
+
+    # دستگاه تازه: تا sysinfo اجازه ندهد IP ثبت نمی‌شود
+    post("/api/heartbeat", DEV)
+    c = Client.objects.get(rd_id=DEV["id"])
+    assert c.ip == ""
+    post("/api/sysinfo", {**DEV, "hostname": "h", "loc": False})
+    post("/api/heartbeat", DEV)
+    c.refresh_from_db()
+    assert c.ip == "" and not c.share_location
+    # روشن: ثبت می‌شود
+    post("/api/sysinfo", {**DEV, "hostname": "h", "loc": True})
+    c.refresh_from_db()
+    assert c.ip == "5.6.7.8"
+    # دوباره خاموش: پاک می‌شود و heartbeat هم دوباره ثبتش نمی‌کند
+    post("/api/sysinfo", {**DEV, "hostname": "h", "loc": False})
+    post("/api/heartbeat", DEV)
+    c.refresh_from_db()
+    assert c.ip == ""
+
+
+@pytest.mark.django_db
 def test_uuid_mismatch_is_rejected_until_reset():
     register()
     assert app_post("/api/heartbeat", {"id": DEV["id"], "uuid": "other"}).status_code == 401
