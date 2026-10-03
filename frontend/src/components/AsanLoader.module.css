@@ -15,6 +15,7 @@
   gap: 40px;
   background: var(--ad-bg);
   font-family: Vazirmatn, system-ui, sans-serif;
+  animation: adFade 0.3s ease-out;
 }
 .loader[data-theme="dark"] {
   --ad-bg: #0d1514;
@@ -56,6 +57,7 @@
 .track { width: 140px; height: 3px; border-radius: 3px; background: var(--ad-track); overflow: hidden; }
 .bar { width: 50%; height: 100%; border-radius: 3px; background: var(--ad-ring); animation: adBar 1.6s var(--ad-ease) infinite; }
 
+@keyframes adFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes adSpin { 0%, 14% { transform: rotate(0deg); } 74%, 100% { transform: rotate(180deg); } }
 @keyframes adTop { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(-70px, -70px); } 78% { transform: translate(10px, 10px); } 86%, 100% { transform: translate(0, 0); } }
 @keyframes adBot { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(70px, 70px); } 78% { transform: translate(-10px, -10px); } 86%, 100% { transform: translate(0, 0); } }

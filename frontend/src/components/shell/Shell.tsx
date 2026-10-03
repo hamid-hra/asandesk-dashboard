@@ -162,7 +162,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </Link>
           <UserMenu />
         </header>
-        <div className={s.content}>
+        <div className={s.content} key={pathname}>
           {allowed ? (
             children
           ) : (

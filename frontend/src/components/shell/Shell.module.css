@@ -350,7 +350,14 @@
   color: var(--text);
 }
 
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .content { animation: none !important; } }
+
 .content {
+  animation: pageIn 0.32s ease-out;
   padding: 24px 28px 40px;
   display: flex;
   flex-direction: column;

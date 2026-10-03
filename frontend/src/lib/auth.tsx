@@ -1,13 +1,17 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import useSWR from "swr";
 
 import { AsanLoader } from "@/components/AsanLoader";
 
 import { api, fetcher } from "./api";
 import type { User } from "./types";
+
+/** کلید sessionStorage و مدت نمایش لوگوی ورود (یک چرخهٔ کامل انیمیشن) */
+export const INTRO_KEY = "ad_intro";
+export const INTRO_MS = 2400;
 
 interface AuthValue {
   user: User;
@@ -30,6 +34,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     shouldRetryOnError: false,
     revalidateOnFocus: true,
   });
+  // اولین بازشدن پنل در هر نشست مرورگر: لوگوی متحرک حداقل یک چرخه دیده شود (بعد از ورود دوباره تکرار نمی‌شود)
+  const [introDone, setIntroDone] = useState(false);
+  useEffect(() => {
+    const seen = sessionStorage.getItem(INTRO_KEY) === "1";
+    const t = setTimeout(() => {
+      sessionStorage.setItem(INTRO_KEY, "1");
+      setIntroDone(true);
+    }, seen ? 0 : INTRO_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (error) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
@@ -44,6 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mutate, router]);
 
-  if (!user) return <AsanLoader full label="در حال اتصال" />;
+  if (!user || !introDone) return <AsanLoader full label="در حال اتصال" />;
   return <AuthContext.Provider value={{ user, logout }}>{children}</AuthContext.Provider>;
 }

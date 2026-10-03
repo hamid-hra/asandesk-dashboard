@@ -7,6 +7,7 @@ import useSWR, { mutate } from "swr";
 import { AsanLoader } from "@/components/AsanLoader";
 import { Logo } from "@/components/Logo";
 import { api, ApiError, fetcher } from "@/lib/api";
+import { INTRO_KEY, INTRO_MS } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
 import s from "./login.module.css";
@@ -111,6 +112,9 @@ function LoginForm() {
       const user = await api<User>("/api/auth/login", { method: "POST", body: { username, password } });
       await mutate("/api/auth/me", user, { revalidate: false });
       setEntering(true);
+      // لوگو یک چرخهٔ کامل دیده می‌شود و بعد پنل باز می‌شود (مثل انتقال بین صفحات)
+      sessionStorage.setItem(INTRO_KEY, "1");
+      await new Promise((r) => setTimeout(r, INTRO_MS));
       const next = params.get("next");
       router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/server");
     } catch (err) {
