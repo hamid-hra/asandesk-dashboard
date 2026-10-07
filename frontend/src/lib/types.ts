@@ -238,3 +238,20 @@ export interface TicketStats {
   resolved_fast_share: number | null;
   satisfaction: number | null;
 }
+
+export interface ChangelogItem {
+  type: "new" | "change" | "fix";
+  text: string;
+}
+
+export interface ChangelogEntry {
+  version: string;
+  date: string;
+  title: string;
+  items: ChangelogItem[];
+}
+
+export interface VersionInfo {
+  version: string;
+  changelog: ChangelogEntry[];
+}

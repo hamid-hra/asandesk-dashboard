@@ -14,6 +14,7 @@ import { canSee, TABS, tabFor } from "@/lib/nav";
 import type { Status } from "@/lib/types";
 
 import { ThemeToggle } from "./ThemeToggle";
+import { VersionBadge } from "./VersionBadge";
 import s from "./Shell.module.css";
 
 const ROLE_EN = { owner: "Owner", admin: "Admin", viewer: "Viewer", custom: "Custom" } as const;
@@ -137,6 +138,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </>
         )}
         <StatusBox />
+        <VersionBadge />
       </aside>
       {navOpen && <div className={s.backdrop} onClick={close} />}
 

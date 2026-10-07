@@ -4,8 +4,11 @@ from django.urls import include, path
 from monitoring.views import IngestView
 from releases.views import ReleaseListView
 
+from .views import VersionView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/version", VersionView.as_view()),
     path("api/auth/", include("accounts.urls")),
     path("api/settings/", include("accounts.settings_urls")),
     path("api/settings/backups/", include("backups.urls")),
