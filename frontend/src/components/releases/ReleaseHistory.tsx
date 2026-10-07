@@ -61,6 +61,16 @@ export function ReleaseHistory({ releases, current }: { releases: Release[] | un
                     اجباری
                   </span>
                 )}
+                {r.maintenance && (
+                  <span className={s.badge} style={{ background: "var(--warn-soft)", color: "var(--warn-text)" }}>
+                    تعمیر
+                  </span>
+                )}
+                {!r.enabled && (
+                  <span className={s.badge} style={{ background: "var(--subtle)", color: "var(--muted)" }}>
+                    غیرفعال
+                  </span>
+                )}
               </div>
               <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{faDate(r.date)}</span>
             </div>
@@ -83,6 +93,9 @@ export function ReleaseHistory({ releases, current }: { releases: Release[] | un
                     </span>
                   );
                 })}
+                <a className={s.plat} href={`/api/releases/${r.version}/update.json`} download="update.json" title="فایل update.json همین نسخه برای بارگذاری روی CDN">
+                  ↓ update.json
+                </a>
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>

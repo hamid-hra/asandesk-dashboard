@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { ReleaseForm } from "@/components/releases/ReleaseForm";
 import { ReleaseHistory } from "@/components/releases/ReleaseHistory";
 import s from "@/components/releases/releases.module.css";
+import { UpdateJsonCard } from "@/components/releases/UpdateJsonCard";
 import { fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmt, pctText, toFa } from "@/lib/fa";
@@ -78,6 +79,8 @@ export default function ReleasesPage() {
         )}
         <ReleaseHistory releases={releases} current={stats?.latest_stable ?? null} />
       </div>
+
+      <UpdateJsonCard releases={releases} onSaved={() => mutate()} />
     </div>
   );
 }

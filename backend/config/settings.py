@@ -125,6 +125,11 @@ FILE_UPLOAD_TEMP_DIR = env("FILE_UPLOAD_TEMP_DIR") or None
 RELEASE_MAX_FILE_SIZE = int(env("RELEASE_MAX_FILE_MB", "500")) * 1024 * 1024
 # آدرس عمومی لینک‌های دانلود در latest.json. خالی = از آدرسی که پنل با آن باز شده گرفته می‌شود
 PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "").rstrip("/")
+# دانلود فایل نصب از لینکی که مالک می‌دهد (releases/links.py). دامنه همان است که اپلیکیشن می‌پذیرد
+RELEASE_LINK_DOMAIN = env("RELEASE_LINK_DOMAIN", "asandesk.ir")
+RELEASE_LINK_ALLOW_PRIVATE = env_bool("RELEASE_LINK_ALLOW_PRIVATE", False)
+RELEASE_LINK_CONNECT_TIMEOUT = 30
+RELEASE_LINK_TOTAL_TIMEOUT = int(env("RELEASE_LINK_TOTAL_TIMEOUT", "540"))
 # پشت nginx: ارسال فایل با X-Accel-Redirect به‌جای خواندن در Django
 USE_X_ACCEL_REDIRECT = env_bool("USE_X_ACCEL_REDIRECT", False)
 X_ACCEL_PREFIX = "/_protected/releases/"

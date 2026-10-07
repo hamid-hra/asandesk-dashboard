@@ -109,7 +109,14 @@ export interface Release {
   mandatory: boolean;
   rollout: number;
   downloads: number;
-  assets: { platform: Platform; filename: string; size: number; sha256: string }[];
+  /** فیلدهای فایل update.json که اپلیکیشن می‌خواند */
+  build: number;
+  message: string;
+  maintenance: boolean;
+  enabled: boolean;
+  /** چیزهایی که باعث می‌شود اپلیکیشن پیشنهاد دانلود را نشان ندهد */
+  update_warnings: string[];
+  assets: { platform: Platform; filename: string; size: number; sha256: string; source_url: string }[];
   created_at: string;
 }
 

@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import timedelta
 
@@ -5,17 +6,35 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from clients.stats import version_distribution
 
+from .links import LinkError, fetch_installer, platform_of_name
 from .models import Channel, DownloadEvent, Release, ReleaseAsset
-from .serializers import ReleaseCreateSerializer, ReleaseSerializer
-from .services import file_sha256, latest_release, remember_base_url, write_manifests
+from .serializers import ReleaseCreateSerializer, ReleaseSerializer, ReleaseUpdateSerializer
+from .services import file_sha256, latest_release, remember_base_url, update_json_bytes, write_manifests
+
+
+def parse_links(raw) -> dict:
+    """فیلد links فرم (رشتهٔ JSON) یا دیکشنری JSON."""
+    if isinstance(raw, dict):
+        return raw
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        raise ValidationError({"links": "لینک‌ها معتبر نیستند."})
+    if not isinstance(data, dict):
+        raise ValidationError({"links": "لینک‌ها معتبر نیستند."})
+    return {str(k): str(v) for k, v in data.items()}
 
 
 class ReleaseListView(APIView):
@@ -38,29 +57,88 @@ class ReleaseListView(APIView):
             "mandatory": request.data.get("mandatory", False),
             "rollout": request.data.get("rollout", 100),
             "files": request.FILES.getlist("files"),
+            "build": request.data.get("build") or 0,
+            "message": request.data.get("message", ""),
+            "maintenance": request.data.get("maintenance", False),
+            "enabled": request.data.get("enabled", True),
+            "links": parse_links(request.data.get("links")),
         }
         ser = ReleaseCreateSerializer(data=data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
-        with transaction.atomic():
-            release = Release.objects.create(
-                version=d["version"],
-                channel=d["channel"],
-                published_on=d["date"],
-                platforms=d["platforms"],
-                notes=d["notes"],
-                mandatory=d["mandatory"],
-                rollout=int(d["rollout"]),
-                created_by=request.user,
-            )
-            for platform, f in d["files_by_platform"].items():
-                ReleaseAsset.objects.create(
-                    release=release, platform=platform, file=f, size=f.size, sha256=file_sha256(f)
+        # فایل‌ها را از لینک‌ها بگیر (پیش از ساخت رکورد؛ هر خطایی چیزی ذخیره نمی‌کند)
+        downloaded = {}
+        try:
+            for platform, url in d["links"].items():
+                try:
+                    downloaded[platform] = fetch_installer(url)
+                except LinkError as e:
+                    raise ValidationError({"links": f"{platform}: {e}"})
+                if platform_of_name(downloaded[platform].name) != platform:
+                    raise ValidationError({"links": f"فایل لینک {platform} برای {platform} نیست ({downloaded[platform].name})."})
+            with transaction.atomic():
+                release = Release.objects.create(
+                    version=d["version"],
+                    channel=d["channel"],
+                    published_on=d["date"],
+                    platforms=d["platforms"],
+                    notes=d["notes"],
+                    mandatory=d["mandatory"],
+                    rollout=int(d["rollout"]),
+                    build=d["build"],
+                    message=d["message"],
+                    maintenance=d["maintenance"],
+                    enabled=d["enabled"],
+                    created_by=request.user,
                 )
+                for platform, f in d["files_by_platform"].items():
+                    ReleaseAsset.objects.create(
+                        release=release, platform=platform, file=f, size=f.size, sha256=file_sha256(f)
+                    )
+                for platform, f in downloaded.items():
+                    ReleaseAsset.objects.create(
+                        release=release, platform=platform, file=f, size=f.size, sha256=f.sha256,
+                        source_url=d["links"][platform],
+                    )
+        finally:
+            for f in downloaded.values():
+                f.close()
         remember_base_url(request)
         write_manifests()
         release = Release.objects.prefetch_related("assets").get(pk=release.pk)
         return Response(ReleaseSerializer(release).data, status=status.HTTP_201_CREATED)
+
+
+class ReleaseDetailView(APIView):
+    """ویرایش فیلدهای update.json یک نسخهٔ منتشرشده (پیام، حالت تعمیر، فعال بودن، …)."""
+
+    parser_classes = [JSONParser]
+
+    def get(self, request, version):
+        release = get_object_or_404(Release.objects.prefetch_related("assets"), version=version)
+        return Response(ReleaseSerializer(release).data)
+
+    def patch(self, request, version):
+        release = get_object_or_404(Release.objects.prefetch_related("assets"), version=version)
+        ser = ReleaseUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        for field, value in ser.validated_data.items():
+            setattr(release, field, value)
+        release.save(update_fields=list(ser.validated_data) or None)
+        write_manifests()
+        return Response(ReleaseSerializer(release).data)
+
+
+class UpdateJsonView(APIView):
+    """update.json همین نسخه برای دانلود (به CDN بالا بگذارید؛ اپلیکیشن آن را می‌خواند)."""
+
+    def get(self, request, version):
+        release = get_object_or_404(Release.objects.prefetch_related("assets"), version=version)
+        remember_base_url(request)
+        resp = HttpResponse(update_json_bytes(release), content_type="application/json; charset=utf-8")
+        resp["Content-Disposition"] = 'attachment; filename="update.json"'
+        resp["Cache-Control"] = "private, no-store"
+        return resp
 
 
 class ReleaseStatsView(APIView):

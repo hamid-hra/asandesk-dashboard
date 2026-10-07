@@ -3,7 +3,8 @@ import re
 from django.conf import settings
 from django.db import models
 
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(-[a-z]+\.?\d*)?$", re.IGNORECASE)
+# سه یا چهار بخش عددی (آسان‌دسک 1.4.9.4 چهاربخشی است) و پسوند پیش‌انتشار اختیاری
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(\.\d+)?(-[a-z]+\.?\d*)?$", re.IGNORECASE)
 
 
 class Channel(models.TextChoices):
@@ -50,6 +51,11 @@ class Release(models.Model):
     mandatory = models.BooleanField("اجباری", default=False)
     rollout = models.PositiveSmallIntegerField("انتشار تدریجی (٪)", default=100)
     downloads = models.PositiveIntegerField("دانلود", default=0)
+    # فیلدهای فایل update.json که اپلیکیشن می‌خواند (mandatory همان force_update است)
+    build = models.PositiveIntegerField("شمارهٔ بیلد", default=0)
+    message = models.CharField("پیام به کاربران", max_length=500, blank=True)
+    maintenance = models.BooleanField("حالت تعمیر", default=False)
+    enabled = models.BooleanField("فعال", default=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -76,6 +82,8 @@ class ReleaseAsset(models.Model):
     file = models.FileField(upload_to=asset_upload_to, max_length=255)
     size = models.BigIntegerField(default=0)
     sha256 = models.CharField(max_length=64, blank=True)
+    # لینکی که مالک داده و داشبورد فایل را از آن گرفته؛ در update.json همین لینک می‌آید
+    source_url = models.URLField(max_length=500, blank=True)
 
     class Meta:
         unique_together = [("release", "platform")]

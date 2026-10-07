@@ -107,3 +107,69 @@ def write_manifests():
     root = settings.RELEASES_ROOT
     _atomic_write_json(root / "latest.json", release_manifest(latest_release([Channel.STABLE])))
     _atomic_write_json(root / "latest-beta.json", release_manifest(latest_release([Channel.STABLE, Channel.BETA])))
+
+
+# ---------------------------------------------------------------------------
+# فایل update.json اپلیکیشن (src/asandesk.rs ← parse_update_manifest)
+# ---------------------------------------------------------------------------
+
+# اپلیکیشن فقط این سیستم‌عامل‌ها را در downloads.<os> می‌خواند
+UPDATE_OS_KEYS = {"Windows": "windows", "macOS": "macos", "Linux": "linux"}
+CLIENT_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(\.\d+)?$")
+
+
+def asset_download_url(release: Release, asset) -> str:
+    """لینکی که در update.json می‌آید: همان لینکی که مالک داده، وگرنه لینک دانلود خود داشبورد."""
+    if asset.source_url:
+        return asset.source_url
+    base = public_base_url()
+    fname = quote(os.path.basename(asset.file.name))
+    return f"{base}/api/releases/{release.version}/download/{asset.platform.lower()}/{fname}"
+
+
+def update_manifest(release: Release) -> dict:
+    """update.json همین نسخه، با همان قالبی که README اپلیکیشن شرح می‌دهد."""
+    downloads = {}
+    for a in release.assets.all():
+        key = UPDATE_OS_KEYS.get(a.platform)
+        if key:
+            downloads[key] = asset_download_url(release, a)
+    data = {
+        "app": "AsanDesk",
+        "version": release.version,
+        "build": release.build,
+        "force_update": release.mandatory,
+    }
+    # نسخه‌های 1.4.9.1 و 1.4.9.2 فقط download_url را می‌شناسند و آن همیشه exe ویندوز است
+    if "windows" in downloads:
+        data["download_url"] = downloads["windows"]
+    data.update(
+        {
+            "downloads": downloads,
+            "release_notes": "\n".join(release.notes_list),
+            "message": release.message,
+            "maintenance": release.maintenance,
+            "enabled": release.enabled,
+        }
+    )
+    return data
+
+
+def update_warnings(release: Release) -> list[str]:
+    """چیزهایی که باعث می‌شود اپلیکیشن پیشنهاد دانلود را نشان ندهد."""
+    from .links import is_trusted_url
+
+    out = []
+    if not CLIENT_VERSION_RE.match(release.version):
+        out.append("اپلیکیشن فقط نسخه‌های سه یا چهاربخشی عددی (مثل 1.4.9.4) را می‌شناسد.")
+    downloads = update_manifest(release)["downloads"]
+    if not downloads:
+        out.append("برای ویندوز یا لینوکس لینک دانلود ندارد؛ اپلیکیشن فقط پیام را نشان می‌دهد.")
+    for key, url in downloads.items():
+        if not is_trusted_url(url):
+            out.append(f"لینک {key} روی دامنهٔ آسان‌دسک با https نیست؛ اپلیکیشن آن را نمی‌پذیرد.")
+    return out
+
+
+def update_json_bytes(release: Release) -> bytes:
+    return (json.dumps(update_manifest(release), ensure_ascii=False, indent=2) + "\n").encode("utf-8")

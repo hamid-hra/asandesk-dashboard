@@ -9,7 +9,9 @@ import type { Channel, Platform, Release } from "@/lib/types";
 import s from "./releases.module.css";
 
 const PLATFORMS: Platform[] = ["Windows", "macOS", "Linux", "Android"];
-const VERSION_RE = /^\d+\.\d+\.\d+(-[a-z]+\.?\d*)?$/i;
+const VERSION_RE = /^\d+\.\d+\.\d+(\.\d+)?(-[a-z]+\.?\d*)?$/i;
+// اپلیکیشن فقط این لینک‌ها را می‌پذیرد: https روی asandesk.ir یا زیردامنه‌هایش
+const LINK_RE = /^https:\/\/([a-z0-9-]+\.)*asandesk\.ir(\/\S*)?$/i;
 const EXT: [RegExp, Platform][] = [
   [/\.(exe|msi)$/i, "Windows"],
   [/\.(dmg|pkg)$/i, "macOS"],
@@ -27,6 +29,12 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [mandatory, setMandatory] = useState(false);
+  // فیلدهای update.json
+  const [build, setBuild] = useState("");
+  const [message, setMessage] = useState("");
+  const [maintenance, setMaintenance] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const [links, setLinks] = useState<Partial<Record<Platform, string>>>({});
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -36,10 +44,19 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
     setNotes("");
     setFiles([]);
     setMandatory(false);
+    setBuild("");
+    setMessage("");
+    setMaintenance(false);
+    setEnabled(true);
+    setLinks({});
     setError("");
     setRollout(100);
     if (fileInput.current) fileInput.current.value = "";
   };
+
+  // فقط لینک‌های پلتفرم‌های انتخاب‌شده که پر شده‌اند
+  const activeLinks = () =>
+    Object.fromEntries(platforms.map((p) => [p, (links[p] ?? "").trim()] as const).filter(([, url]) => url)) as Partial<Record<Platform, string>>;
 
   const pickFiles = (list: FileList | null) => {
     const picked = Array.from(list ?? []);
@@ -63,6 +80,11 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
     }
     const ps = files.map((f) => platformOf(f.name));
     if (new Set(ps).size !== ps.length) return "برای هر پلتفرم فقط یک فایل می‌توانید بارگذاری کنید.";
+    if (build.trim() && !/^\d{1,9}$/.test(build.trim())) return "شماره بیلد باید عدد باشد.";
+    for (const [p, url] of Object.entries(activeLinks())) {
+      if (!LINK_RE.test(url)) return `لینک ${p} باید با https شروع شود و روی asandesk.ir یا زیردامنه‌هایش باشد.`;
+      if (ps.includes(p as Platform)) return `برای ${p} هم فایل انتخاب کرده‌اید و هم لینک داده‌اید؛ یکی را بردارید.`;
+    }
     return "";
   };
 
@@ -77,6 +99,11 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
     form.append("notes", notes);
     form.append("mandatory", String(mandatory));
     form.append("rollout", String(rollout));
+    form.append("build", build.trim() || "0");
+    form.append("message", message.trim());
+    form.append("maintenance", String(maintenance));
+    form.append("enabled", String(enabled));
+    form.append("links", JSON.stringify(activeLinks()));
     files.forEach((f) => form.append("files", f));
     setProgress(0);
     try {
@@ -92,6 +119,7 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
 
   const totalSize = files.reduce((a, f) => a + f.size, 0);
   const busy = progress != null;
+  const hasLinks = Object.keys(activeLinks()).length > 0;
 
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column" }}>
@@ -162,6 +190,29 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
           </div>
         </div>
 
+        {platforms.length > 0 && (
+          <div className={s.field}>
+            <span className={s.label}>لینک دانلود</span>
+            {platforms.map((p) => (
+              <input
+                key={p}
+                dir="ltr"
+                className={`${s.input} mono`}
+                style={{ fontSize: 12.5 }}
+                value={links[p] ?? ""}
+                placeholder={`${p}: https://update.asandesk.ir/releases/…`}
+                onChange={(e) => {
+                  setLinks((cur) => ({ ...cur, [p]: e.target.value }));
+                  setError("");
+                }}
+              />
+            ))}
+            <span className={s.hint}>
+              لینک را بدهید تا داشبورد فایل را خودش دانلود کند و نگه دارد؛ همین لینک در update.json می‌آید. اگر لینک ندارید، فایل را پایین‌تر بارگذاری کنید.
+            </span>
+          </div>
+        )}
+
         <div className={s.field}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className={s.label} style={{ flex: 1 }}>
@@ -190,8 +241,29 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
               setError("");
             }}
           />
-          <span className={s.hint}>هر خط به‌صورت یک مورد در تاریخچه نمایش داده می‌شود.</span>
+          <span className={s.hint}>هر خط به‌صورت یک مورد در تاریخچه نمایش داده می‌شود و در release_notes فایل update.json می‌آید.</span>
         </label>
+
+        <div className={s.two}>
+          <label className={s.field}>
+            <span className={s.label}>شماره بیلد</span>
+            <input
+              dir="ltr"
+              inputMode="numeric"
+              className={`${s.input} mono`}
+              value={build}
+              placeholder="1494"
+              onChange={(e) => {
+                setBuild(e.target.value);
+                setError("");
+              }}
+            />
+          </label>
+          <label className={s.field}>
+            <span className={s.label}>پیام به کاربران</span>
+            <input className={s.input} value={message} maxLength={500} placeholder="اختیاری" onChange={(e) => setMessage(e.target.value)} />
+          </label>
+        </div>
 
         <label className={s.file} data-has={files.length > 0}>
           <input
@@ -212,7 +284,7 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
               {files.length ? `${files.map((f) => f.name).join("، ")} · ${mbText(totalSize)}` : "بارگذاری فایل نصب"}
             </span>
             <span className={s.hint}>
-              {files.length ? "برای تغییر کلیک کنید" : "exe، dmg، deb یا apk · حداکثر ۵۰۰ مگابایت · یک فایل برای هر پلتفرم"}
+              {files.length ? "برای تغییر کلیک کنید" : "اختیاری اگر لینک داده‌اید · exe، dmg، deb یا apk · حداکثر ۵۰۰ مگابایت · یک فایل برای هر پلتفرم"}
             </span>
           </div>
         </label>
@@ -227,13 +299,39 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
           </span>
         </button>
 
+        <button type="button" className={s.switch} role="switch" aria-checked={maintenance} onClick={() => setMaintenance((v) => !v)}>
+          <span className={s.track}>
+            <span />
+          </span>
+          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>حالت تعمیر</span>
+            <span className={s.hint}>در اپلیکیشن چیپ نارنجی سرویس در حال تعمیر است نشان داده می‌شود</span>
+          </span>
+        </button>
+
+        <button type="button" className={s.switch} role="switch" aria-checked={enabled} onClick={() => setEnabled((v) => !v)}>
+          <span className={s.track}>
+            <span />
+          </span>
+          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>فعال</span>
+            <span className={s.hint}>اگر خاموش باشد اپلیکیشن هیچ اعلانی از این فایل نشان نمی‌دهد</span>
+          </span>
+        </button>
+
         {error && <div className={s.error}>{error}</div>}
 
         <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
           <button type="button" className={s.primary} onClick={publish} disabled={busy}>
             {busy && <span className={s.progress} style={{ width: `${progress}%` }} />}
             <span style={{ position: "relative" }}>
-              {busy ? (progress! < 100 ? `در حال بارگذاری… ${toFa(progress!)}٪` : "در حال ثبت…") : "انتشار نسخه"}
+              {busy
+                ? progress! < 100
+                  ? `در حال بارگذاری… ${toFa(progress!)}٪`
+                  : hasLinks
+                    ? "در حال دانلود فایل از لینک و ثبت…"
+                    : "در حال ثبت…"
+                : "انتشار نسخه"}
             </span>
           </button>
           <button type="button" className={s.secondary} onClick={reset} disabled={busy}>
