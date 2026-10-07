@@ -209,11 +209,15 @@ export interface TicketRow {
   status: TicketStatus;
   created_at: string;
   updated_at: string;
+  /** لاگ برنامه همراه این بازخورد فرستاده شده */
+  has_log: boolean;
   client: ClientBrief;
 }
 
 export interface TicketDetail extends TicketRow {
   diag: string;
+  contact: string;
+  log: { size: number; files: string[] } | null;
   messages: { id: number; from_client: boolean; author: string; text: string; created_at: string }[];
 }
 

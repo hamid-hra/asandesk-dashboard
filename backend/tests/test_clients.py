@@ -209,3 +209,95 @@ def test_release_stats_use_client_versions():
     assert {d["version"] for d in s["distribution"]} == {"1.4.9", "1.4.8"}
     rows = {r["id"]: r for r in panel().get("/api/clients").json()["results"]}
     assert rows["2"]["version_old"] and not rows[DEV["id"]]["version_old"]
+
+
+# ---------- ارسال بازخورد از اپلیکیشن ----------
+
+def gz_b64(text: str | bytes) -> str:
+    import base64
+    import gzip
+
+    raw = text.encode() if isinstance(text, str) else text
+    return base64.b64encode(gzip.compress(raw)).decode()
+
+
+def feedback(log="INFO boot\nINFO connect ok\n", blob=None, **over):
+    body = {**DEV, "category": "bug", "message": "هنگام تمام‌صفحه شدن صفحه تیره می‌شود\nجزئیات بیشتر", "contact": "@ali",
+            "version": "1.4.9.5", "os": "windows", "os_version": "10.0.19045", "screen": "1920x1080 @1.25",
+            "lang": "fa", "theme": "dark", "log_attached": log is not None, "log_files": ["asandesk_rCURRENT.log"]}
+    if log is not None:
+        body["log"] = gz_b64(log)
+    if blob is not None:  # محتوای خام فیلد log (برای حالت‌های نامعتبر)
+        body["log"], body["log_attached"] = blob, True
+    body.update(over)
+    return app_post("/api/client/feedback", body)
+
+
+@pytest.mark.django_db
+def test_feedback_with_log_is_listed_and_downloadable():
+    r = feedback()
+    assert r.status_code == 201
+    t = Ticket.objects.get()
+    assert r.json()["id"] == t.code
+    assert t.category == "bug" and t.contact == "@ali" and t.subject == "هنگام تمام‌صفحه شدن صفحه تیره می‌شود"
+    assert t.diag == "v1.4.9.5 · windows 10.0.19045 · 1920x1080 @1.25 · fa/dark"
+    assert t.messages.get().text.endswith("جزئیات بیشتر") and t.messages.get().from_client
+    # دستگاهی که قبلاً heartbeat نفرستاده بود همین‌جا ثبت شده
+    assert Client.objects.get(rd_id=DEV["id"]).check_uuid(DEV["uuid"])
+
+    admin = panel()
+    row = admin.get("/api/tickets").json()[0]
+    assert row["has_log"] is True and row["category"] == "bug"
+    d = admin.get(f"/api/tickets/{t.pk}").json()
+    assert d["contact"] == "@ali" and d["log"] == {"size": len(b"INFO boot\nINFO connect ok\n"), "files": ["asandesk_rCURRENT.log"]}
+    dl = admin.get(f"/api/tickets/{t.pk}/log")
+    assert dl.status_code == 200 and b"".join(dl.streaming_content) == b"INFO boot\nINFO connect ok\n"
+    assert dl["Content-Disposition"].startswith("attachment") and t.code in dl["Content-Disposition"]
+    assert APIClient().get(f"/api/tickets/{t.pk}/log").status_code == 403
+
+
+@pytest.mark.django_db
+def test_feedback_without_log_and_unknown_category():
+    assert feedback(log=None, category="weird").status_code == 201
+    t = Ticket.objects.get()
+    assert t.category == "other" and not t.log_file
+    assert panel().get(f"/api/tickets/{t.pk}").json()["log"] is None
+    assert panel().get(f"/api/tickets/{t.pk}/log").status_code == 404
+
+
+@pytest.mark.django_db
+def test_feedback_rejects_bad_requests(settings):
+    assert feedback(message="کم").status_code == 400
+    assert feedback(uuid="").status_code == 401
+    assert feedback(log="x" * 10).status_code == 201  # لاگ معتبر است
+    assert feedback(blob="!!not base64!!").status_code == 400
+    # gzip نیست
+    import base64
+    assert feedback(blob=base64.b64encode(b"plain text").decode()).status_code == 400
+    # فایل فشردهٔ بسیار بزرگ (zip bomb) رد می‌شود
+    settings.FEEDBACK_MAX_LOG_BYTES = 1000
+    assert feedback(log="a" * 5000).status_code == 413
+    # فقط همان یک بازخورد معتبر ثبت شده است
+    assert Ticket.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_feedback_rate_limit_and_block(settings):
+    settings.CLIENT_FEEDBACK_PER_HOUR = 2
+    assert feedback(log=None).status_code == 201
+    assert feedback(log=None).status_code == 201
+    assert feedback(log=None).status_code == 429
+    settings.CLIENT_FEEDBACK_PER_HOUR = 99
+    panel().post(f"/api/clients/{DEV['id']}/block", {"blocked": True}, format="json")
+    assert feedback(log=None).status_code == 403
+
+
+@pytest.mark.django_db
+def test_feedback_log_file_is_removed_with_ticket(tmp_path):
+    feedback()
+    t = Ticket.objects.get()
+    path = t.log_file.path
+    import os
+    assert os.path.exists(path)
+    t.delete()
+    assert not os.path.exists(path)

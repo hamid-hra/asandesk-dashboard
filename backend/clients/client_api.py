@@ -9,11 +9,14 @@
 احراز هویت دستگاه: جفت (id, uuid). uuid در اولین تماس ثبت می‌شود (TOFU).
 """
 
+import base64
 import json
 import logging
+import zlib
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
@@ -23,7 +26,7 @@ from django.utils.decorators import method_decorator
 from rest_framework.throttling import SimpleRateThrottle
 
 from .models import (
-    AccessToken, Account, Client, ConnSession, Priority, Ticket, TicketMessage, TicketStatus, sha256,
+    AccessToken, Account, Client, ConnSession, FeedbackCategory, Priority, Ticket, TicketMessage, TicketStatus, sha256,
 )
 
 log = logging.getLogger(__name__)
@@ -339,6 +342,118 @@ class ClientTicketCreateView(ClientView):
             )
             TicketMessage.objects.create(ticket=t, from_client=True, text=body)
         return JsonResponse(ticket_json(t), status=201)
+
+
+FEEDBACK_PRIORITY = {
+    FeedbackCategory.BUG: Priority.NORMAL,
+    FeedbackCategory.IDEA: Priority.LOW,
+    FeedbackCategory.OTHER: Priority.NORMAL,
+}
+
+
+def feedback_subject(message: str) -> str:
+    """موضوع = اولین خط غیرخالی متن کاربر (حداکثر ۸۰ نویسه)."""
+    for line in message.splitlines():
+        line = " ".join(line.split())
+        if line:
+            return line[:80]
+    return "بازخورد"
+
+
+def feedback_diag(data: dict) -> str:
+    """خلاصهٔ فنی برای ستون «اطلاعات پیوست»: نسخه · سیستم‌عامل · صفحه · زبان/تم."""
+    os_text = " ".join(x for x in (s(data, "os", 32), s(data, "os_version", 120)) if x)
+    parts = [
+        f"v{s(data, 'version', 32)}" if s(data, "version", 32) else "",
+        os_text,
+        s(data, "screen", 40),
+        "/".join(x for x in (s(data, "lang", 8), s(data, "theme", 8)) if x),
+    ]
+    return " · ".join(p for p in parts if p)[:300]
+
+
+def decode_feedback_log(data: dict) -> bytes | None:
+    """لاگ پیوستی (gzip+base64) را باز می‌کند. بدون لاگ None؛ نامعتبر/بزرگ ValueError."""
+    blob = data.get("log")
+    if not data.get("log_attached", True) or not blob or not isinstance(blob, str):
+        return None
+    limit = settings.FEEDBACK_MAX_LOG_BYTES
+    try:
+        gz = base64.b64decode(blob, validate=True)
+        d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        raw = d.decompress(gz, limit + 1)
+    except (ValueError, zlib.error):
+        raise ValueError("invalid")
+    if len(raw) > limit:
+        raise ValueError("too-big")
+    return raw
+
+
+class ClientFeedbackView(ClientView):
+    """«ارسال بازخورد» از داخل اپلیکیشن: متن کاربر + لاگ برنامه از لحظهٔ باز شدن.
+
+    بدنهٔ JSON (جزئیات: docs/ASANDESK-FEEDBACK-API.md در ریپوی اپلیکیشن):
+      id، uuid، category (bug|idea|other)، message، contact، version، os، os_version،
+      screen، lang، theme، log_attached، log (gzip+base64)، log_files.
+    بازخورد به‌صورت یک «تیکت» ثبت می‌شود و لاگ بازشده کنارش نگه‌داری می‌شود.
+    """
+
+    def post(self, request):
+        if len(request.body) > settings.FEEDBACK_MAX_BODY:
+            return JsonResponse({"error": "حجم درخواست زیاد است."}, status=413)
+        try:
+            data = json.loads(request.body or b"{}")
+        except (ValueError, UnicodeDecodeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        # نسخه‌های اول اپ شناسه را device_id می‌فرستادند
+        if not data.get("id") and data.get("device_id"):
+            data["id"] = data["device_id"]
+        # دستگاهی که تا حالا heartbeat نفرستاده (مثلاً گزارش پشتیبانی را خاموش کرده) همین‌جا ثبت می‌شود
+        client, _ = device(data, request, create=True)
+        if client is None:
+            return JsonResponse({"error": "invalid id/uuid"}, status=401)
+        touch(client, request)
+        if client.blocked:
+            return JsonResponse({"error": "این دستگاه مسدود شده است."}, status=403)
+
+        message = s(data, "message", 4000)
+        if len(message) < 5:
+            return JsonResponse({"error": "متن بازخورد را بنویسید."}, status=400)
+        recent = client.tickets.filter(created_at__gte=timezone.now() - timedelta(hours=1)).count()
+        if recent >= settings.CLIENT_FEEDBACK_PER_HOUR:
+            return JsonResponse({"error": "تعداد بازخوردها بیش از حد مجاز است."}, status=429)
+        try:
+            raw = decode_feedback_log(data)
+        except ValueError as e:
+            too_big = str(e) == "too-big"
+            return JsonResponse(
+                {"error": "حجم لاگ زیاد است." if too_big else "لاگ پیوست‌شده معتبر نیست."},
+                status=413 if too_big else 400,
+            )
+
+        category = s(data, "category", 16)
+        if category not in FeedbackCategory.values:
+            category = FeedbackCategory.OTHER
+        files = data.get("log_files")
+        files = [str(x)[:120] for x in files[:30]] if isinstance(files, list) else []
+        with transaction.atomic():
+            t = Ticket.objects.create(
+                client=client,
+                subject=feedback_subject(message),
+                category=category,
+                priority=FEEDBACK_PRIORITY[FeedbackCategory(category)],
+                diag=feedback_diag(data),
+                contact=s(data, "contact", 120),
+            )
+            TicketMessage.objects.create(ticket=t, from_client=True, text=message)
+            if raw is not None:
+                t.log_file.save(f"{t.code}.log", ContentFile(raw), save=False)
+                t.log_size = len(raw)
+                t.log_files = files
+                t.save(update_fields=["log_file", "log_size", "log_files"])
+        return JsonResponse({"ok": True, "id": t.code, "code": t.code}, status=201)
 
 
 class ClientTicketReplyView(ClientView):

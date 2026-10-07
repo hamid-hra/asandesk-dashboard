@@ -180,6 +180,14 @@ class Priority(models.TextChoices):
     LOW = "low", "کم"
 
 
+class FeedbackCategory(models.TextChoices):
+    """دستهٔ بازخوردی که اپلیکیشن می‌فرستد (فیلد category تیکت)."""
+
+    BUG = "bug", "مشکل"
+    IDEA = "idea", "پیشنهاد"
+    OTHER = "other", "سایر"
+
+
 TICKET_NUMBER_BASE = 1000
 
 
@@ -195,11 +203,16 @@ class Ticket(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     first_response_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
+    # «ارسال بازخورد» از داخل اپلیکیشن: راه تماس اختیاری و لاگ برنامه از لحظهٔ باز شدن
+    contact = models.CharField("راه تماس", max_length=120, blank=True)
+    log_file = models.FileField("لاگ برنامه", upload_to="feedback-logs/%Y/%m", max_length=255, blank=True)
+    log_size = models.PositiveIntegerField("حجم لاگ (بایت)", default=0)
+    log_files = models.JSONField("فایل‌های داخل لاگ", default=list, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name = "تیکت"
-        verbose_name_plural = "تیکت‌ها"
+        verbose_name = "بازخورد"
+        verbose_name_plural = "بازخوردها"
 
     def __str__(self):
         return f"{self.code} {self.subject}"

@@ -75,7 +75,7 @@ export function ClientTable({ rows, selected, onSelect, empty }: { rows: ClientR
           <span>حساب</span>
           <span>مدت اتصال · ۳۰ روز</span>
           <span>سیستم‌عامل</span>
-          <span>تیکت</span>
+          <span>بازخورد</span>
           <span>نسخه</span>
         </div>
         {rows?.map((c) => <Row key={c.id} c={c} selected={c.id === selected} onSelect={() => onSelect(c.id)} />)}

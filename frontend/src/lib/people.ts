@@ -1,4 +1,4 @@
-// قالب‌بندی مشترک تب‌های «کلاینت‌ها» و «تیکت‌ها»
+// قالب‌بندی مشترک تب‌های «کلاینت‌ها» و «بازخوردها»
 import { dfDay, toFa } from "./fa";
 import type { Priority, TicketStatus } from "./types";
 
@@ -68,8 +68,20 @@ export const PRIORITY: Record<Priority, [string, string, string]> = {
   low: ["کم", "var(--subtle)", "var(--muted)"],
 };
 
+// بازخوردهای اپلیکیشن هم‌ساختار تیکت‌اند؛ فقط نام‌ها «بازخورد» است
 export const TICKET_STATUS: Record<TicketStatus, [string, string]> = {
-  open: ["باز", "var(--danger)"],
-  pending: ["در انتظار کاربر", "var(--warn)"],
+  open: ["جدید", "var(--danger)"],
+  pending: ["پاسخ داده شد", "var(--warn)"],
   closed: ["بسته", "var(--older)"],
 };
+
+/** دستهٔ بازخورد اپلیکیشن (bug|idea|other)؛ تیکت‌های قدیمی دسته‌شان متن آزاد است */
+export const FEEDBACK_CATEGORY: Record<string, string> = { bug: "مشکل", idea: "پیشنهاد", other: "سایر" };
+export const categoryText = (c: string) => FEEDBACK_CATEGORY[c] ?? c;
+
+/** «۱۲۰ کیلوبایت»، «۲٫۱ مگابایت» */
+export function bytesText(n: number): string {
+  if (n < 1024) return `${toFa(n)} بایت`;
+  if (n < 1024 * 1024) return `${toFa(Math.round(n / 1024))} کیلوبایت`;
+  return `${toFa((n / 1024 / 1024).toFixed(1))} مگابایت`;
+}

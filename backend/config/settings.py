@@ -140,6 +140,13 @@ SERVER_OFFLINE_AFTER_SECONDS = int(env("SERVER_OFFLINE_AFTER_SECONDS", "120"))
 # کلاینت‌ها: heartbeat هر ۱۵ ثانیه است؛ بعد از این مدت بدون تماس «آفلاین» حساب می‌شوند
 CLIENT_OFFLINE_AFTER_SECONDS = int(env("CLIENT_OFFLINE_AFTER_SECONDS", "60"))
 CLIENT_TICKETS_PER_HOUR = int(env("CLIENT_TICKETS_PER_HOUR", "5"))
+# «ارسال بازخورد» اپلیکیشن: متن + لاگ فشرده (gzip+base64) در یک درخواست JSON
+CLIENT_FEEDBACK_PER_HOUR = int(env("CLIENT_FEEDBACK_PER_HOUR", "5"))
+FEEDBACK_MAX_BODY = 4 * 1024 * 1024
+# سقف حجم لاگِ بازشده؛ جلوی فایل فشردهٔ مخرب (zip bomb) را می‌گیرد
+FEEDBACK_MAX_LOG_BYTES = int(env("FEEDBACK_MAX_LOG_MB", "10")) * 1024 * 1024
+# Django بدنهٔ بزرگ‌تر از این را قبل از خواندن request.body رد می‌کند (پیش‌فرض ۲٫۵ مگابایت)
+DATA_UPLOAD_MAX_MEMORY_SIZE = FEEDBACK_MAX_BODY + 1024 * 1024
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

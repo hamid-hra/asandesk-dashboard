@@ -81,7 +81,7 @@ function MessageComposer({ id, onSent, onCancel }: { id: string; onSent: (ticket
           انصراف
         </button>
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--faint)", lineHeight: 1.8 }}>پیام به‌صورت تیکت پشتیبانی برای کاربر ثبت می‌شود و در بخش تیکت‌ها پیگیری می‌شود.</div>
+      <div style={{ fontSize: 11.5, color: "var(--faint)", lineHeight: 1.8 }}>پیام برای کاربر ثبت می‌شود و در بخش بازخوردها پیگیری می‌شود.</div>
     </div>
   );
 }
@@ -168,9 +168,9 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
           <span>{c.memory || " "}</span>
         </div>
         <div className={s.miniStat}>
-          <span>تیکت‌ها</span>
+          <span>بازخوردها</span>
           <span>{toFa(c.tickets.length)}</span>
-          <span>{openT ? `${toFa(openT)} باز` : "بدون تیکت باز"}</span>
+          <span>{openT ? `${toFa(openT)} جدید` : "بدون بازخورد جدید"}</span>
         </div>
       </div>
 
@@ -219,8 +219,8 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
 
       <div className={s.section}>
         <div className={s.sectionHead}>
-          <span>تیکت‌ها و گزارش مشکل</span>
-          <span>{c.tickets.length ? `${toFa(c.tickets.length)} تیکت · ${toFa(openT)} باز` : ""}</span>
+          <span>بازخوردها و گزارش مشکل</span>
+          <span>{c.tickets.length ? `${toFa(c.tickets.length)} بازخورد · ${toFa(openT)} جدید` : ""}</span>
         </div>
         {c.tickets.map((t) => (
           <Link key={t.id} href={`/tickets?id=${t.id}`} className={s.linkRow}>
@@ -229,7 +229,7 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
             <span style={{ fontSize: 11.5, color: "var(--faint)", whiteSpace: "nowrap" }}>{TICKET_STATUS[t.status][0]}</span>
           </Link>
         ))}
-        {!c.tickets.length && <div style={{ fontSize: 12.5, color: "var(--faint)", padding: "4px 0" }}>این کاربر تیکتی ثبت نکرده و مشکلی گزارش نداده است.</div>}
+        {!c.tickets.length && <div style={{ fontSize: 12.5, color: "var(--faint)", padding: "4px 0" }}>این کاربر بازخوردی نفرستاده است.</div>}
       </div>
 
       {user.can_manage && (

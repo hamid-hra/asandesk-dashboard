@@ -19,7 +19,7 @@ export const SECTIONS: [string, string][] = [
   ["server", "سرور و منابع"],
   ["release", "نسخه‌ها"],
   ["clients", "کلاینت‌ها"],
-  ["tickets", "تیکت‌ها"],
+  ["tickets", "بازخوردها"],
   ["ads", "تبلیغات"],
   ["announce", "اطلاعیه‌ها"],
   ["users", "تنظیمات ← کاربران"],
@@ -41,7 +41,7 @@ export const PRESET: Record<"owner" | "admin" | "viewer", Perms> = {
 };
 
 export const ROLE_CARDS: { id: "admin" | "viewer" | "custom"; label: string; desc: string }[] = [
-  { id: "admin", label: "مدیر", desc: "انتشار نسخه، مدیریت کلاینت‌ها و تیکت‌ها." },
+  { id: "admin", label: "مدیر", desc: "انتشار نسخه، مدیریت کلاینت‌ها و بازخوردها." },
   { id: "viewer", label: "ناظر", desc: "فقط مشاهده؛ هیچ تغییری نمی‌تواند بدهد." },
   { id: "custom", label: "سفارشی", desc: "دسترسی هر بخش جداگانه تعیین می‌شود." },
 ];

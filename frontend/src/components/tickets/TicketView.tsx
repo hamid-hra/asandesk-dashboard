@@ -9,13 +9,14 @@ import s from "@/components/clients/clients.module.css";
 import { Seg } from "@/components/clients/SearchBox";
 import { api, ApiError, fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { agoText, PRIORITY, TICKET_STATUS, timeOnly, whenText } from "@/lib/people";
+import { agoText, bytesText, categoryText, PRIORITY, TICKET_STATUS, timeOnly, whenText } from "@/lib/people";
+import { toFa } from "@/lib/fa";
 import { useToast } from "@/lib/toast";
 import type { TicketDetail, TicketStatus } from "@/lib/types";
 
 function quickReplies(latest: string | null): [string, string][] {
   return [
-    ["درخواست لاگ", "لطفاً از منوی راهنما ← ارسال گزارش، لاگ برنامه را برای ما بفرستید."],
+    ["تشکر", "ممنون از بازخوردتان؛ بررسی می‌کنیم و نتیجه را اطلاع می‌دهیم."],
     [
       "به‌روزرسانی",
       `لطفاً برنامه را به آخرین نسخه${latest ? ` (${latest})` : ""} به‌روزرسانی کنید و دوباره امتحان کنید.`,
@@ -54,7 +55,7 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
     if (!text) return;
     const ok = await run(
       () => api<TicketDetail>(`/api/tickets/${id}/reply`, { method: "POST", body: { text, close } }),
-      close ? "پاسخ ارسال و تیکت بسته شد" : "پاسخ ارسال شد",
+      close ? "پاسخ ارسال و بازخورد بسته شد" : "پاسخ ارسال شد",
     );
     if (ok) setReply("");
   };
@@ -62,7 +63,7 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
   if (error) {
     return (
       <div className={`card ${s.tDetail}`}>
-        <div className="empty">این تیکت پیدا نشد.</div>
+        <div className="empty">این بازخورد پیدا نشد.</div>
       </div>
     );
   }
@@ -93,7 +94,7 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
               </span>
               {t.category && (
                 <span className={s.chip} style={{ background: "var(--seg-track)", color: "var(--muted)" }}>
-                  {t.category}
+                  {categoryText(t.category)}
                 </span>
               )}
             </div>
@@ -132,6 +133,29 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
               {t.diag || "—"}
             </span>
           </div>
+          {(t.contact || t.log) && (
+            <div className={s.diag}>
+              {t.contact && (
+                <>
+                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>راه تماس</span>
+                  <span dir="auto" style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)", textAlign: "right" }}>
+                    {t.contact}
+                  </span>
+                </>
+              )}
+              {t.log && (
+                <>
+                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                    لاگ برنامه · {bytesText(t.log.size)}
+                    {t.log.files.length ? ` · ${toFa(t.log.files.length)} فایل` : ""}
+                  </span>
+                  <a className={s.btnGhost} style={{ height: 34, padding: "0 14px", fontSize: 12.5, display: "inline-flex", alignItems: "center" }} href={`/api/tickets/${id}/log`} download>
+                    دانلود لاگ
+                  </a>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -163,7 +187,7 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
               ارسال پاسخ
             </button>
             <button className={s.btnGhost} style={{ height: 40, padding: "0 16px", fontSize: 13.5 }} disabled={busy || !reply.trim()} onClick={() => send(true)}>
-              ارسال و بستن تیکت
+              ارسال و بستن
             </button>
           </div>
         </div>

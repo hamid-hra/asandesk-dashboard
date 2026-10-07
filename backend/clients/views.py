@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.db import transaction
 from django.db.models import Count, Q
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -35,6 +36,7 @@ def ticket_row(t: Ticket) -> dict:
         "status": t.status,
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
+        "has_log": bool(t.log_file),
         "client": client_brief(t.client),
     }
 
@@ -43,6 +45,8 @@ def ticket_detail(t: Ticket) -> dict:
     return {
         **ticket_row(t),
         "diag": t.diag,
+        "contact": t.contact,
+        "log": {"size": t.log_size, "files": t.log_files} if t.log_file else None,
         "messages": [
             {
                 "id": m.pk,
@@ -203,6 +207,22 @@ class TicketDetailView(APIView):
         t.set_status(new)
         t.save(update_fields=["status", "closed_at", "updated_at"])
         return Response(ticket_detail(t))
+
+
+class TicketLogView(APIView):
+    """دانلود لاگ برنامه‌ای که همراه بازخورد فرستاده شده (فقط با دسترسی به بخش بازخوردها)."""
+
+    def get(self, request, pk):
+        t = get_object_or_404(Ticket.objects.select_related("client"), pk=pk)
+        if not t.log_file:
+            raise Http404
+        name = f"AsanDesk-{t.code}-{t.client.rd_id}.log"
+        resp = FileResponse(
+            t.log_file.open("rb"), as_attachment=True, filename=name, content_type="text/plain; charset=utf-8"
+        )
+        resp["Cache-Control"] = "private, no-store"
+        resp["X-Content-Type-Options"] = "nosniff"
+        return resp
 
 
 class TicketReplyView(APIView):

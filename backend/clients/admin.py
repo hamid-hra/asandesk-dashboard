@@ -66,7 +66,8 @@ class MessageInline(admin.TabularInline):
 
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
-    list_display = ("code", "subject", "client", "priority", "status", "created_at")
-    list_filter = ("status", "priority")
-    search_fields = ("subject", "client__rd_id")
+    list_display = ("code", "subject", "category", "client", "priority", "status", "created_at")
+    list_filter = ("status", "category", "priority")
+    search_fields = ("subject", "client__rd_id", "contact")
+    readonly_fields = ("log_file", "log_size", "log_files")
     inlines = [MessageInline]

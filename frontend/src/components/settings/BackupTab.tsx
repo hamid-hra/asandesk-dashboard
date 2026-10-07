@@ -294,7 +294,7 @@ function RestoreDialog({ backup, word, onClose, onStarted }: { backup: BackupRow
     >
       <div className={s.note} data-tone="danger">
         <Icon d={I.alert} size={18} />
-        <span><b>همهٔ اطلاعات فعلی پنل با این نسخه جایگزین می‌شود</b>کاربران، کلاینت‌ها، تیکت‌ها و تنظیمات به وضعیت تاریخ این پشتیبان برمی‌گردند و نشست همهٔ مدیران بسته می‌شود.</span>
+        <span><b>همهٔ اطلاعات فعلی پنل با این نسخه جایگزین می‌شود</b>کاربران، کلاینت‌ها، بازخوردها و تنظیمات به وضعیت تاریخ این پشتیبان برمی‌گردند و نشست همهٔ مدیران بسته می‌شود.</span>
       </div>
       <div className={s.kv}>
         <div><span>تاریخ پشتیبان</span><span>{jStamp(backup.created_at)}</span></div>

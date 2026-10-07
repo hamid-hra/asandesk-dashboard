@@ -22,14 +22,14 @@ const FILTERS: [Filter, string][] = [
   ["online", "آنلاین"],
   ["logged", "وارد شده"],
   ["guest", "مهمان"],
-  ["tickets", "دارای تیکت باز"],
+  ["tickets", "دارای بازخورد جدید"],
   ["blocked", "مسدود"],
 ];
 const SORTS: [Sort, string][] = [
   ["recent", "آخرین فعالیت"],
   ["mins", "مدت اتصال"],
   ["sessions", "نشست"],
-  ["tickets", "تیکت"],
+  ["tickets", "بازخورد"],
 ];
 
 function ClientsInner() {
@@ -91,7 +91,7 @@ function ClientsInner() {
           />
           <div className={s.footer}>
             {list
-              ? `نمایش ${toFa(rows?.length ?? 0)} کلاینت از ${toFa(list.count)}${st ? ` · ${toFa(st.with_open_tickets)} کلاینت با تیکت باز` : ""}`
+              ? `نمایش ${toFa(rows?.length ?? 0)} کلاینت از ${toFa(list.count)}${st ? ` · ${toFa(st.with_open_tickets)} کلاینت با بازخورد جدید` : ""}`
               : "…"}
           </div>
         </div>

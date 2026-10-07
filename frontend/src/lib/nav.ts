@@ -24,7 +24,7 @@ export const TABS: Tab[] = [
   { href: "/server", label: "سرور و منابع", icon: ICONS.server, sections: ["server"] },
   { href: "/releases", label: "نسخه‌ها", icon: ICONS.release, sections: ["release"] },
   { href: "/clients", label: "کلاینت‌ها", icon: ICONS.clients, sections: ["clients"] },
-  { href: "/tickets", label: "تیکت‌ها", icon: ICONS.ticket, sections: ["tickets"] },
+  { href: "/tickets", label: "بازخوردها", icon: ICONS.ticket, sections: ["tickets"] },
   {
     href: "/ads",
     label: "تبلیغات",
