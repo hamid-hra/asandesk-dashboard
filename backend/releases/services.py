@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import re
 import tempfile
@@ -8,8 +9,11 @@ from urllib.parse import quote
 
 import jdatetime
 from django.conf import settings
+from django.db import transaction
 
 from .models import Channel, Release, version_key
+
+log = logging.getLogger(__name__)
 
 _DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
@@ -107,6 +111,39 @@ def write_manifests():
     root = settings.RELEASES_ROOT
     _atomic_write_json(root / "latest.json", release_manifest(latest_release([Channel.STABLE])))
     _atomic_write_json(root / "latest-beta.json", release_manifest(latest_release([Channel.STABLE, Channel.BETA])))
+
+
+def delete_release(release: Release) -> None:
+    """حذف کامل یک نسخه: رکورد، فایل‌های نصب روی دیسک، و شمارندهٔ دانلودهای آن.
+
+    بعد از حذف latest.json و latest-beta.json دوباره ساخته می‌شوند، پس اگر نسخهٔ حذف‌شده «آخرین»
+    بود کلاینت‌ها نسخهٔ قبلی را می‌بینند. فایل‌هایی که مالک روی CDN گذاشته (لینک‌هایی که داده بود)
+    دست‌نخورده می‌مانند؛ فقط نسخه‌ای که داشبورد خودش نگه می‌داشت پاک می‌شود.
+    """
+    paths = []
+    for a in release.assets.all():
+        if a.file:
+            try:
+                paths.append(a.file.storage.path(a.file.name))
+            except NotImplementedError:
+                pass
+    with transaction.atomic():
+        release.delete()
+    folders = set()
+    for p in paths:
+        folders.add(os.path.dirname(p))
+        try:
+            os.remove(p)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            log.warning("could not remove release file %s: %s", p, e)
+    for d in folders:
+        try:
+            os.rmdir(d)  # only when it is empty
+        except OSError:
+            pass
+    write_manifests()
 
 
 # ---------------------------------------------------------------------------

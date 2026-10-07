@@ -77,7 +77,16 @@ export default function ReleasesPage() {
         ) : (
           <div className="card empty">برای انتشار نسخه جدید به نقش «مدیر» یا «مالک» نیاز دارید.</div>
         )}
-        <ReleaseHistory releases={releases} current={stats?.latest_stable ?? null} />
+        <ReleaseHistory
+          releases={releases}
+          current={stats?.latest_stable ?? null}
+          canDelete={user.perms.release === "edit"}
+          onDeleted={(version) => {
+            mutate((cur) => (cur ?? []).filter((r) => r.version !== version), { revalidate: true });
+            mutateStats();
+            flash(`نسخه ${version} حذف شد`);
+          }}
+        />
       </div>
 
       <UpdateJsonCard releases={releases} onSaved={() => mutate()} />

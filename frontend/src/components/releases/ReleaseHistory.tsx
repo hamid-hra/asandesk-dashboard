@@ -2,13 +2,46 @@
 
 import { useState } from "react";
 
+import { Icon } from "@/components/Icon";
+import { errText, I, Modal } from "@/components/settings/ui";
+import st from "@/components/settings/settings.module.css";
+import { api } from "@/lib/api";
 import { faDate, fmt, toFa } from "@/lib/fa";
 import type { Channel, Release } from "@/lib/types";
 
 import s from "./releases.module.css";
 
-export function ReleaseHistory({ releases, current }: { releases: Release[] | undefined; current: string | null }) {
+export function ReleaseHistory({
+  releases,
+  current,
+  canDelete = false,
+  onDeleted,
+}: {
+  releases: Release[] | undefined;
+  current: string | null;
+  canDelete?: boolean;
+  onDeleted?: (version: string) => void;
+}) {
   const [filter, setFilter] = useState<"all" | Channel>("all");
+  const [del, setDel] = useState<Release | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const remove = async () => {
+    if (!del) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/releases/${encodeURIComponent(del.version)}`, { method: "DELETE" });
+      onDeleted?.(del.version);
+      setDel(null);
+    } catch (e) {
+      setError(errText(e, "حذف نسخه انجام نشد."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const rows = (releases ?? []).filter((r) => filter === "all" || r.channel === filter);
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -101,11 +134,57 @@ export function ReleaseHistory({ releases, current }: { releases: Release[] | un
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
               <span style={{ fontSize: 16, fontWeight: 700 }}>{fmt(r.downloads)}</span>
               <span style={{ fontSize: 11.5, color: "var(--faint)" }}>دانلود</span>
+              {canDelete && (
+                <button
+                  type="button"
+                  className={st.iconBtn}
+                  title={`حذف نسخه ${r.version}`}
+                  aria-label={`حذف نسخه ${r.version}`}
+                  style={{ marginTop: 6, color: "var(--danger-text)" }}
+                  onClick={() => {
+                    setError("");
+                    setDel(r);
+                  }}
+                >
+                  <Icon d={I.trash} size={16} />
+                </button>
+              )}
             </div>
           </div>
         );
       })}
       {releases && !rows.length && <div className="empty">هنوز نسخه‌ای منتشر نشده است.</div>}
+      {del && (
+        <Modal
+          title="حذف نسخه"
+          onClose={() => setDel(null)}
+          busy={busy}
+          footer={
+            <>
+              <button className={st.btnGhost} onClick={() => setDel(null)} disabled={busy}>
+                انصراف
+              </button>
+              <button className={st.btnDanger} onClick={remove} disabled={busy}>
+                {busy ? "در حال حذف…" : "حذف نسخه"}
+              </button>
+            </>
+          }
+        >
+          <div className={st.note} data-tone="danger">
+            <Icon d={I.alert} size={18} />
+            <span>
+              <b>
+                نسخهٔ <span dir="ltr">{del.version}</span> برای همیشه حذف می‌شود.
+              </b>
+              فایل‌های نصبی که داشبورد نگه داشته و شمارندهٔ دانلودهایش پاک می‌شود و قابل بازگشت نیست.
+              {del.version === current && " این نسخهٔ فعلی است؛ بعد از حذف، کاربران نسخهٔ پایدار قبلی را به‌عنوان آخرین نسخه می‌بینند."}
+              {" "}
+              اگر update.json این نسخه را روی CDN گذاشته‌اید، آن را هم جایگزین یا پاک کنید.
+            </span>
+          </div>
+          {error && <div className={st.err}>{error}</div>}
+        </Modal>
+      )}
     </div>
   );
 }

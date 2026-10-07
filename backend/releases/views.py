@@ -19,7 +19,14 @@ from clients.stats import version_distribution
 from .links import LinkError, fetch_installer, platform_of_name
 from .models import DEFAULT_BALE_URL, Channel, DownloadEvent, Release, ReleaseAsset
 from .serializers import ReleaseCreateSerializer, ReleaseSerializer, ReleaseUpdateSerializer
-from .services import file_sha256, latest_release, remember_base_url, update_json_bytes, write_manifests
+from .services import (
+    delete_release,
+    file_sha256,
+    latest_release,
+    remember_base_url,
+    update_json_bytes,
+    write_manifests,
+)
 
 
 def parse_links(raw) -> dict:
@@ -131,6 +138,12 @@ class ReleaseDetailView(APIView):
         release.save(update_fields=list(ser.validated_data) or None)
         write_manifests()
         return Response(ReleaseSerializer(release).data)
+
+    def delete(self, request, version):
+        """حذف نسخه (مثلاً وقتی اشتباه منتشر شده)؛ نیاز به سطح «ویرایش» بخش نسخه‌ها دارد."""
+        release = get_object_or_404(Release.objects.prefetch_related("assets"), version=version)
+        delete_release(release)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UpdateJsonView(APIView):
