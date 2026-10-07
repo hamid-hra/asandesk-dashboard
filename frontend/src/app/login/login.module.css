@@ -114,3 +114,23 @@
   color: var(--faint);
   padding-inline-start: 24px;
 }
+.link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px;
+  align-self: center;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.notice {
+  font-size: 13px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+}

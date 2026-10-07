@@ -11,8 +11,9 @@ import { fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dfToday, pctText, toFa } from "@/lib/fa";
 import { canSee, TABS, tabFor } from "@/lib/nav";
-import type { Status } from "@/lib/types";
+import type { RecoveryStatus, Status } from "@/lib/types";
 
+import { RECOVERY_KEY, RecoveryDialog } from "./RecoveryDialog";
 import { ThemeToggle } from "./ThemeToggle";
 import { VersionBadge } from "./VersionBadge";
 import s from "./Shell.module.css";
@@ -59,6 +60,9 @@ function StatusBox() {
 function UserMenu() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const { data: recovery } = useSWR<RecoveryStatus>(RECOVERY_KEY, fetcher);
+  const noCodes = recovery?.remaining === 0;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -71,7 +75,10 @@ function UserMenu() {
   return (
     <div className={s.userWrap} ref={ref}>
       <button className={s.user} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu">
-        <div className={s.avatar}>{user.display_name.trim().charAt(0).toUpperCase() || "م"}</div>
+        <div className={s.avatar}>
+          {user.display_name.trim().charAt(0).toUpperCase() || "م"}
+          {noCodes && <span className={s.avatarDot} />}
+        </div>
         <div className={s.userText}>
           <div className={s.userName}>{user.display_name}</div>
           <div className={s.userRole}>{ROLE_EN[user.role]}</div>
@@ -85,11 +92,24 @@ function UserMenu() {
               مدیریت کاربران و نقش‌ها
             </a>
           )}
+          <button
+            className={s.menuItem}
+            onClick={() => {
+              setOpen(false);
+              setRecoveryOpen(true);
+            }}
+            role="menuitem"
+            title={noCodes ? "برای فراموشی رمز کد بازیابی بسازید" : undefined}
+          >
+            کدهای بازیابی رمز
+            {noCodes && <span className={s.menuDot} />}
+          </button>
           <button className={s.menuItem} onClick={logout} role="menuitem">
             خروج
           </button>
         </div>
       )}
+      {recoveryOpen && <RecoveryDialog onClose={() => setRecoveryOpen(false)} />}
     </div>
   );
 }

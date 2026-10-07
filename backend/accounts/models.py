@@ -83,3 +83,19 @@ class User(AbstractUser):
     @property
     def display_name(self):
         return self.get_full_name() or self.username
+
+
+class RecoveryCode(models.Model):
+    """One-time code that lets a user who forgot the password set a new one (see recovery.py).
+
+    Only an HMAC of the code is stored, never the code itself.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recovery_codes")
+    code_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "کد بازیابی"
+        verbose_name_plural = "کدهای بازیابی"

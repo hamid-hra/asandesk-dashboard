@@ -255,3 +255,8 @@ export interface VersionInfo {
   version: string;
   changelog: ChangelogEntry[];
 }
+
+export interface RecoveryStatus {
+  remaining: number;
+  total: number;
+}

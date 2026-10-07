@@ -1,9 +1,17 @@
 import json
 
 import pytest
+from django.core.cache import cache
 from django.test import Client
 
 from accounts.models import Role, User
+
+
+@pytest.fixture(autouse=True)
+def _fresh_throttle():
+    cache.clear()  # login throttle counters live in the cache
+    yield
+    cache.clear()
 
 
 @pytest.fixture

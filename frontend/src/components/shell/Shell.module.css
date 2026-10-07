@@ -543,3 +543,26 @@
   color: var(--faint);
   text-align: center;
 }
+
+/* ---------- نقطهٔ هشدار «کد بازیابی ندارید» ---------- */
+.avatar {
+  position: relative;
+}
+.avatarDot {
+  position: absolute;
+  top: -1px;
+  inset-inline-end: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid var(--surface);
+}
+.menuDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  margin-inline-start: 8px;
+}

@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from . import setup
+from . import recovery, setup
 from .models import Role, User
 from .serializers import UserSerializer
 
@@ -58,6 +58,65 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+class RecoveryStatusView(APIView):
+    """How many unused recovery codes the signed-in user has left."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"remaining": recovery.remaining(request.user), "total": recovery.COUNT})
+
+
+class RecoveryGenerateView(APIView):
+    """New set of recovery codes (the old ones stop working). Needs the current password."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "recovery"
+
+    def post(self, request):
+        if not request.user.check_password(request.data.get("password") or ""):
+            return Response({"password": ["رمز عبور فعلی درست نیست."]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"codes": recovery.generate_for(request.user), "total": recovery.COUNT})
+
+
+@method_decorator(csrf_protect, name="post")
+class RecoveryResetView(APIView):
+    """Forgot password: username + one recovery code + new password (signed out)."""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "recovery"
+
+    # The same text for an unknown user, a wrong code and a used code: nothing to enumerate
+    BAD = "نام کاربری یا کد بازیابی درست نیست."
+
+    def post(self, request):
+        username = (request.data.get("username") or "").strip()
+        code = request.data.get("code") or ""
+        password = request.data.get("password") or ""
+
+        user = User.objects.filter(username=username, is_active=True).first()
+        if user is None:
+            recovery.digest(0, code)  # similar work, so timing does not tell the user exists
+            return Response({"detail": self.BAD}, status=status.HTTP_400_BAD_REQUEST)
+        if not recovery.is_valid(user, code):
+            return Response({"detail": self.BAD}, status=status.HTTP_400_BAD_REQUEST)
+        # A weak password must not burn the code, so it is checked before the code is used
+        try:
+            validate_password(password, user)
+        except ValidationError as e:
+            return Response({"password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            if not recovery.consume(user, code):
+                return Response({"detail": self.BAD}, status=status.HTTP_400_BAD_REQUEST)
+            user.set_password(password)
+            user.save(update_fields=["password"])
+        # Django ties every session to the password hash, so old sessions of this user end here
+        return Response({"ok": True, "remaining": recovery.remaining(user)})
 
 
 @method_decorator(csrf_protect, name="post")

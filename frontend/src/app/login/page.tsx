@@ -93,10 +93,84 @@ function SetupForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function LoginForm() {
+/** رمز را فراموش کرده‌ام: نام کاربری + یکی از کدهای بازیابی + رمز تازه (بدون ایمیل) */
+function ResetForm({ onBack, onDone }: { onBack: () => void; onDone: (username: string) => void }) {
+  const [username, setUsername] = useState("");
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username.trim()) return setError("نام کاربری را وارد کنید.");
+    if (!code.trim()) return setError("کد بازیابی را وارد کنید.");
+    if (password.length < 8) return setError("رمز عبور باید حداقل ۸ کاراکتر باشد.");
+    if (password !== password2) return setError("تکرار رمز عبور با رمز عبور یکسان نیست.");
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/auth/recovery/reset", { method: "POST", body: { username: username.trim(), code, password } });
+      onDone(username.trim());
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 429
+          ? "تعداد تلاش‌ها زیاد است؛ یک دقیقه دیگر دوباره امتحان کنید."
+          : err instanceof Error
+            ? err.message
+            : "تغییر رمز ناموفق بود.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className={s.card} onSubmit={submit} method="post">
+      <Brand />
+      <div>
+        <div className={s.title}>بازیابی رمز عبور</div>
+        <div className={s.sub}>نام کاربری، یکی از کدهای بازیابی که قبلاً ذخیره کرده‌اید و رمز تازه را وارد کنید.</div>
+      </div>
+      <label className={s.field}>
+        <span>نام کاربری</span>
+        <input name="username" dir="ltr" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+      </label>
+      <label className={s.field}>
+        <span>کد بازیابی</span>
+        <input name="code" dir="ltr" className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX" autoComplete="off" spellCheck={false} />
+        <small className={s.hint}>هر کد فقط یک بار کار می‌کند. کدها را بعد از ورود از منوی پروفایل، بخش کدهای بازیابی رمز، می‌سازید.</small>
+      </label>
+      <label className={s.field}>
+        <span>رمز عبور تازه</span>
+        <input name="new-password" dir="ltr" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </label>
+      <label className={s.field}>
+        <span>تکرار رمز عبور تازه</span>
+        <input name="new-password-confirm" dir="ltr" type="password" autoComplete="new-password" value={password2} onChange={(e) => setPassword2(e.target.value)} />
+      </label>
+      {error && <div className={s.error}>{error}</div>}
+      <button className={s.submit} disabled={busy}>
+        {busy ? "در حال تغییر…" : "تغییر رمز"}
+      </button>
+      <button type="button" className={s.link} onClick={onBack}>
+        بازگشت به ورود
+      </button>
+      <small className={s.hint}>
+        کد ندارید؟ مالک پنل می‌تواند رمز شما را از تنظیمات، بخش کاربران، عوض کند. رمز مالک را روی سرور با این دستور عوض کنید:
+        <code dir="ltr" style={{ display: "block", marginTop: 6 }}>
+          docker compose exec backend python manage.py changepassword USERNAME
+        </code>
+      </small>
+    </form>
+  );
+}
+
+function LoginForm({ onForgot, notice, initialUsername }: { onForgot: () => void; notice: string; initialUsername: string }) {
   const router = useRouter();
   const params = useSearchParams();
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
@@ -153,9 +227,13 @@ function LoginForm() {
         <span>مرا به خاطر بسپار</span>
         <small>{remember ? "تا ۳۰ روز در همین مرورگر وارد می‌مانید" : "با بستن مرورگر خارج می‌شوید"}</small>
       </label>
+      {notice && <div className={s.notice}>{notice}</div>}
       {error && <div className={s.error}>{error}</div>}
       <button className={s.submit} disabled={busy}>
         {busy ? "در حال ورود…" : "ورود"}
+      </button>
+      <button type="button" className={s.link} onClick={onForgot}>
+        رمز عبور را فراموش کرده‌ام
       </button>
     </form>
   );
@@ -164,8 +242,23 @@ function LoginForm() {
 function Gate() {
   const router = useRouter();
   const { data } = useSWR<{ needed: boolean }>("/api/auth/setup", fetcher, { revalidateOnFocus: false });
+  const [view, setView] = useState<"login" | "reset">("login");
+  // بعد از بازیابی موفق: پیام و نام کاربری در فرم ورود
+  const [done, setDone] = useState<{ username: string } | null>(null);
   if (!data) return null;
-  return data.needed ? <SetupForm onDone={() => router.replace("/server")} /> : <LoginForm />;
+  if (data.needed) return <SetupForm onDone={() => router.replace("/server")} />;
+  if (view === "reset") {
+    return (
+      <ResetForm
+        onBack={() => setView("login")}
+        onDone={(username) => {
+          setDone({ username });
+          setView("login");
+        }}
+      />
+    );
+  }
+  return <LoginForm onForgot={() => setView("reset")} notice={done ? "رمز عبور عوض شد. با رمز تازه وارد شوید." : ""} initialUsername={done?.username ?? ""} />;
 }
 
 export default function LoginPage() {

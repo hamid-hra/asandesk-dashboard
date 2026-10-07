@@ -1,0 +1,36 @@
+.status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.status[data-empty="true"] {
+  color: var(--danger-text);
+}
+.codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  direction: ltr;
+}
+.code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 9px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--subtle);
+  color: var(--text);
+  user-select: all;
+}
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 420px) {
+  .codes {
+    grid-template-columns: 1fr;
+  }
+}

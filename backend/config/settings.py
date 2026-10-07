@@ -170,7 +170,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["accounts.permissions.ReadOnlyForViewer"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "setup": "10/min"},
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "setup": "10/min", "recovery": "5/min"},
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
 }
 
