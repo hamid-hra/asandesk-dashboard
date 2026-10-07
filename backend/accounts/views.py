@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -38,6 +39,9 @@ class LoginView(APIView):
                 {"detail": "نام کاربری یا رمز عبور اشتباه است."}, status=status.HTTP_400_BAD_REQUEST
             )
         login(request, user)
+        # Missing field = remember (old clients); 0 = the session ends when the browser closes
+        remember = request.data.get("remember", True) not in (False, 0, "0", "false", "False")
+        request.session.set_expiry(settings.SESSION_REMEMBER_AGE if remember else 0)
         return Response(UserSerializer(user).data)
 
 

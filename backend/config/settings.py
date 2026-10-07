@@ -158,6 +158,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 7
+# "Remember me" at login: the session lasts this long. Without it the session ends when the browser closes.
+SESSION_REMEMBER_AGE = 60 * 60 * 24 * 30
 CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SECURE = env_bool("SECURE_COOKIES", False)
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE

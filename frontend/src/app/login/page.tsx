@@ -98,6 +98,7 @@ function LoginForm() {
   const params = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   // بعد از ورود موفق تا باز شدن پنل، صفحهٔ لودینگ دیده می‌شود
@@ -109,7 +110,7 @@ function LoginForm() {
     setBusy(true);
     setError("");
     try {
-      const user = await api<User>("/api/auth/login", { method: "POST", body: { username, password } });
+      const user = await api<User>("/api/auth/login", { method: "POST", body: { username, password, remember } });
       await mutate("/api/auth/me", user, { revalidate: false });
       setEntering(true);
       // لوگو یک چرخهٔ کامل دیده می‌شود و بعد پنل باز می‌شود (مثل انتقال بین صفحات)
@@ -131,20 +132,26 @@ function LoginForm() {
   };
 
   return (
-    <form className={s.card} onSubmit={submit}>
+    <form className={s.card} onSubmit={submit} method="post">
       {entering && <AsanLoader full label="در حال ورود" />}
       <Brand />
       <div>
         <div className={s.title}>ورود به پنل</div>
         <div className={s.sub}>برای مدیریت سرورها و نسخه‌ها وارد شوید.</div>
       </div>
+      {/* name و id لازم است تا مرورگر و مدیر رمز، رمز را ذخیره و خودکار پر کنند */}
       <label className={s.field}>
         <span>نام کاربری</span>
-        <input dir="ltr" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        <input id="username" name="username" dir="ltr" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
       </label>
       <label className={s.field}>
         <span>رمز عبور</span>
-        <input dir="ltr" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <input id="password" name="password" dir="ltr" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </label>
+      <label className={s.remember}>
+        <input type="checkbox" name="remember" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+        <span>مرا به خاطر بسپار</span>
+        <small>{remember ? "تا ۳۰ روز در همین مرورگر وارد می‌مانید" : "با بستن مرورگر خارج می‌شوید"}</small>
       </label>
       {error && <div className={s.error}>{error}</div>}
       <button className={s.submit} disabled={busy}>
