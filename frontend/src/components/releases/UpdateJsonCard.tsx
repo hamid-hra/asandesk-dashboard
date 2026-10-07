@@ -33,6 +33,8 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
   const [mandatory, setMandatory] = useState(release.mandatory);
   const [maintenance, setMaintenance] = useState(release.maintenance);
   const [enabled, setEnabled] = useState(release.enabled);
+  const [baleUrl, setBaleUrl] = useState(release.bale_url);
+  const [baleId, setBaleId] = useState(release.bale_id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,7 +49,7 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
     try {
       await api<Release>(`/api/releases/${encodeURIComponent(release.version)}`, {
         method: "PATCH",
-        body: { build: Number(build.trim() || 0), message: message.trim(), mandatory, maintenance, enabled },
+        body: { build: Number(build.trim() || 0), message: message.trim(), mandatory, maintenance, enabled, bale_url: baleUrl.trim(), bale_id: baleId.trim() },
       });
       await mutate();
       onSaved();
@@ -79,6 +81,17 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
         <label className={s.field}>
           <span className={s.label}>پیام به کاربران</span>
           <input className={s.input} value={message} maxLength={500} disabled={!canEdit} placeholder="خالی یعنی بدون پیام" onChange={(e) => setMessage(e.target.value)} />
+        </label>
+      </div>
+      <div className={s.two}>
+        <label className={s.field}>
+          <span className={s.label}>لینک کانال بله</span>
+          <input dir="ltr" className={`${s.input} mono`} value={baleUrl} maxLength={200} disabled={!canEdit} placeholder="https://ble.ir/join/…" onChange={(e) => setBaleUrl(e.target.value)} />
+          <span className={s.hint}>در ارتباط با ما نمایش داده می‌شود و فقط روی ble.ir پذیرفته می‌شود</span>
+        </label>
+        <label className={s.field}>
+          <span className={s.label}>آیدی بله</span>
+          <input dir="ltr" className={`${s.input} mono`} value={baleId} maxLength={64} disabled={!canEdit} placeholder="اختیاری" onChange={(e) => setBaleId(e.target.value)} />
         </label>
       </div>
       <Switch on={mandatory} disabled={!canEdit} onToggle={() => setMandatory((v) => !v)} title="به‌روزرسانی اجباری" hint="در فایل force_update می‌شود و دکمهٔ اپلیکیشن قرمز می‌شود" />

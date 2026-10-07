@@ -52,6 +52,27 @@ def is_trusted_url(raw: str) -> bool:
     )
 
 
+SUPPORT_DOMAIN = "ble.ir"
+
+
+def is_trusted_support_url(raw: str) -> bool:
+    """Same rule as is_trusted_support_url in src/asandesk.rs: https on ble.ir (or a subdomain).
+    The app ignores any other support link."""
+    try:
+        parts = urlsplit((raw or "").strip())
+        port = parts.port
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower()
+    return (
+        parts.scheme == "https"
+        and not parts.username
+        and not parts.password
+        and port in (None, 443)
+        and (host == SUPPORT_DOMAIN or host.endswith("." + SUPPORT_DOMAIN))
+    )
+
+
 def _check_not_internal(host: str):
     """نام میزبان نباید به آدرس خصوصی یا محلی برسد."""
     if settings.RELEASE_LINK_ALLOW_PRIVATE:

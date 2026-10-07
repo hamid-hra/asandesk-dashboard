@@ -114,6 +114,9 @@ export interface Release {
   message: string;
   maintenance: boolean;
   enabled: boolean;
+  /** کانال پشتیبانی در بله (بخش support در update.json) */
+  bale_url: string;
+  bale_id: string;
   /** چیزهایی که باعث می‌شود اپلیکیشن پیشنهاد دانلود را نشان ندهد */
   update_warnings: string[];
   assets: { platform: Platform; filename: string; size: number; sha256: string; source_url: string }[];

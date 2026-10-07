@@ -7,6 +7,10 @@ from django.db import models
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(\.\d+)?(-[a-z]+\.?\d*)?$", re.IGNORECASE)
 
 
+# AsanDesk channel on Bale; the app shows it under "Contact us" (support.bale_url in update.json)
+DEFAULT_BALE_URL = "https://ble.ir/join/AqZGNkLToJ"
+
+
 class Channel(models.TextChoices):
     STABLE = "stable", "پایدار"
     BETA = "beta", "بتا"
@@ -56,6 +60,9 @@ class Release(models.Model):
     message = models.CharField("پیام به کاربران", max_length=500, blank=True)
     maintenance = models.BooleanField("حالت تعمیر", default=False)
     enabled = models.BooleanField("فعال", default=True)
+    # بخش support در update.json: کانالی که اپلیکیشن در «ارتباط با ما» نشان می‌دهد
+    bale_url = models.CharField("لینک کانال بله", max_length=200, blank=True, default=DEFAULT_BALE_URL)
+    bale_id = models.CharField("آیدی بله", max_length=64, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
 

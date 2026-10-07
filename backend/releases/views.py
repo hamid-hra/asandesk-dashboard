@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from clients.stats import version_distribution
 
 from .links import LinkError, fetch_installer, platform_of_name
-from .models import Channel, DownloadEvent, Release, ReleaseAsset
+from .models import DEFAULT_BALE_URL, Channel, DownloadEvent, Release, ReleaseAsset
 from .serializers import ReleaseCreateSerializer, ReleaseSerializer, ReleaseUpdateSerializer
 from .services import file_sha256, latest_release, remember_base_url, update_json_bytes, write_manifests
 
@@ -61,6 +61,8 @@ class ReleaseListView(APIView):
             "message": request.data.get("message", ""),
             "maintenance": request.data.get("maintenance", False),
             "enabled": request.data.get("enabled", True),
+            "bale_url": request.data.get("bale_url", DEFAULT_BALE_URL),
+            "bale_id": request.data.get("bale_id", ""),
             "links": parse_links(request.data.get("links")),
         }
         ser = ReleaseCreateSerializer(data=data)
@@ -89,6 +91,8 @@ class ReleaseListView(APIView):
                     message=d["message"],
                     maintenance=d["maintenance"],
                     enabled=d["enabled"],
+                    bale_url=d["bale_url"],
+                    bale_id=d["bale_id"],
                     created_by=request.user,
                 )
                 for platform, f in d["files_by_platform"].items():

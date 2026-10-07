@@ -199,13 +199,23 @@ docker compose up -d --build
   "app": "AsanDesk", "version": "1.4.9.4", "build": 1494, "force_update": false,
   "download_url": "https://update.asandesk.ir/releases/1.4.9.4/AsanDesk-1.4.9.4-x86_64-install.exe",
   "downloads": { "windows": "…exe", "linux": "https://update.asandesk.ir/releases/1.4.9.4/asandesk-1.4.9.4.deb" },
-  "release_notes": "خط اول\nخط دوم", "message": "", "maintenance": false, "enabled": true
+  "release_notes": "خط اول\nخط دوم", "message": "", "maintenance": false, "enabled": true,
+  "support": { "bale_url": "https://ble.ir/join/AqZGNkLToJ", "bale_id": "" }
 }
 ```
 
 - `downloads.<os>` همان لینکی است که شما دادید؛ برای فایلی که بارگذاری کرده باشید لینک دانلود خود داشبورد می‌آید (اگر روی دامنهٔ آسان‌دسک با https نباشد، زیر فرم هشدار می‌دهد که اپلیکیشن آن را نمی‌پذیرد).
 - `download_url` فقط وقتی ویندوز دارید و همیشه exe ویندوز است (نسخه‌های ۱٫۴٫۹٫۱ و ۱٫۴٫۹٫۲ فقط همین را می‌شناسند).
 - فایل را خودتان روی CDN بگذارید. اول فایل‌های نصب و آخر `update.json`.
+- `support.bale_url` کانال آسان‌دسک در بله است. اپلیکیشن در پنجرهٔ «ارسال بازخورد»، برگهٔ «ارتباط با ما»، همین لینک (و `bale_id` اگر پر باشد) را نشان می‌دهد. در فرم انتشار و در کارت update.json قابل ویرایش است، پیش‌فرضش `https://ble.ir/join/AqZGNkLToJ` است و فقط `https` روی `ble.ir` پذیرفته می‌شود. اگر فیلد نباشد یا نامعتبر باشد، اپلیکیشن لینک داخل خودش را نشان می‌دهد.
+
+## صفحه‌های خطا
+
+خطاهای خود nginx (مثلاً ۴۰۴ برای هر مسیر غیرمجاز روی `api.asandesk.ir`، یا ۵۰۲ وقتی یکی از سرویس‌ها بالا نیست) صفحهٔ خطای برندشده می‌گیرند: ۴۰۴، ۴۰۳، ۵۰۰ و ۵۰۳ (برای ۵۰۲ و ۵۰۳ و ۵۰۴). پاسخ خطای خود backend (JSON) دست‌نخورده به کلاینت می‌رسد، پس اپلیکیشن چیزی متفاوت نمی‌بیند. صفحه‌های ۴۰۴ و ۵۰۰ خود پنل را Next.js می‌دهد (`frontend/src/app/not-found.tsx` و `error.tsx`) با همان طرح.
+
+- صفحه‌ها استاتیک‌اند (`nginx/errors/api` و `nginx/errors/panel`) و با خرابی backend هم نمایش داده می‌شوند. متن و طرح در `scripts/gen-error-pages.py` است؛ بعد از ویرایش `python3 scripts/gen-error-pages.py` را اجرا کنید و خروجی را کامیت کنید.
+- هر صفحه یک **شناسهٔ پیگیری** دارد (مثل `AD-7F3K-92QX`) با دکمهٔ کپی. این ۸ نویسهٔ اول `$request_id` است و در لاگ دسترسی nginx به‌صورت `rid=…` (کامل) هست: `docker compose logs nginx | grep rid=7f3k92qx`.
+- نسخهٔ nginx در پاسخ‌ها نمایش داده نمی‌شود (`server_tokens off`).
 
 ## کلاینت‌ها و تیکت‌ها
 

@@ -150,6 +150,7 @@ def update_manifest(release: Release) -> dict:
             "message": release.message,
             "maintenance": release.maintenance,
             "enabled": release.enabled,
+            "support": {"bale_url": release.bale_url, "bale_id": release.bale_id},
         }
     )
     return data
@@ -157,7 +158,7 @@ def update_manifest(release: Release) -> dict:
 
 def update_warnings(release: Release) -> list[str]:
     """چیزهایی که باعث می‌شود اپلیکیشن پیشنهاد دانلود را نشان ندهد."""
-    from .links import is_trusted_url
+    from .links import is_trusted_support_url, is_trusted_url
 
     out = []
     if not CLIENT_VERSION_RE.match(release.version):
@@ -168,6 +169,8 @@ def update_warnings(release: Release) -> list[str]:
     for key, url in downloads.items():
         if not is_trusted_url(url):
             out.append(f"لینک {key} روی دامنهٔ آسان‌دسک با https نیست؛ اپلیکیشن آن را نمی‌پذیرد.")
+    if release.bale_url and not is_trusted_support_url(release.bale_url):
+        out.append("لینک کانال بله باید https و روی ble.ir باشد؛ وگرنه اپلیکیشن لینک پیش‌فرض خودش را نشان می‌دهد.")
     return out
 
 

@@ -99,6 +99,7 @@ def test_publish_from_links_stores_files_and_generates_update_json(links, releas
         "message": "سرویس تا ساعت ۲۳ در دسترس است",
         "maintenance": False,
         "enabled": True,
+        "support": {"bale_url": "https://ble.ir/join/AqZGNkLToJ", "bale_id": ""},
     }
     # ترتیب کلیدها مثل نمونهٔ README اپلیکیشن
     assert list(data)[:5] == ["app", "version", "build", "force_update", "download_url"]
@@ -181,3 +182,36 @@ def test_update_warnings_for_untrusted_download_host():
     assert r.status_code == 201, r.content
     # لینک فایل بارگذاری‌شده روی آدرس خود پنل است (testserver، http) و اپلیکیشن آن را نمی‌پذیرد
     assert any("windows" in w for w in r.json()["update_warnings"])
+
+
+@pytest.mark.django_db
+def test_support_channel_is_in_update_json_and_can_be_changed(links):
+    c = client_for(Role.ADMIN)
+    r = c.post(
+        "/api/releases",
+        link_form(bale_url="https://ble.ir/join/OTHER", bale_id=" @asan desk "),
+        format="multipart",
+    )
+    assert r.status_code == 201, r.content
+    assert r.json()["bale_url"] == "https://ble.ir/join/OTHER" and r.json()["bale_id"] == "@asandesk"
+    assert json.loads(c.get("/api/releases/1.4.9.4/update.json").content)["support"] == {
+        "bale_url": "https://ble.ir/join/OTHER",
+        "bale_id": "@asandesk",
+    }
+    # editable after publishing
+    p = c.patch("/api/releases/1.4.9.4", {"bale_url": "https://ble.ir/join/NEW3", "bale_id": ""}, format="json")
+    assert p.status_code == 200 and p.json()["bale_url"] == "https://ble.ir/join/NEW3"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("bad", [
+    "http://ble.ir/join/x",
+    "https://evil.com/join/x",
+    "https://ble.ir.evil.com/join/x",
+    "https://ble.ir@evil.com/join/x",
+])
+def test_support_channel_outside_ble_ir_is_rejected(links, bad):
+    c = client_for(Role.ADMIN)
+    r = c.post("/api/releases", link_form(bale_url=bad), format="multipart")
+    assert r.status_code == 400 and "bale_url" in r.json()
+    assert Release.objects.count() == 0

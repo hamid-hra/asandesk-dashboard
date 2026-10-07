@@ -3,8 +3,8 @@ import os
 from django.conf import settings
 from rest_framework import serializers
 
-from .links import is_trusted_url
-from .models import PLATFORM_EXTENSIONS, VERSION_RE, Channel, Platform, Release, ReleaseAsset
+from .links import is_trusted_support_url, is_trusted_url
+from .models import DEFAULT_BALE_URL, PLATFORM_EXTENSIONS, VERSION_RE, Channel, Platform, Release, ReleaseAsset
 from .services import parse_jalali, to_jalali, update_warnings
 
 
@@ -28,7 +28,8 @@ class ReleaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Release
         fields = ("id", "version", "channel", "date", "published_on", "platforms", "notes", "mandatory",
-                  "rollout", "downloads", "build", "message", "maintenance", "enabled", "update_warnings",
+                  "rollout", "downloads", "build", "message", "maintenance", "enabled", "bale_url", "bale_id",
+                  "update_warnings",
                   "assets", "created_at")
 
     def get_date(self, obj):
@@ -36,6 +37,18 @@ class ReleaseSerializer(serializers.ModelSerializer):
 
     def get_update_warnings(self, obj):
         return update_warnings(obj)
+
+
+def clean_bale_url(v: str) -> str:
+    v = v.strip()
+    if v and not is_trusted_support_url(v):
+        raise serializers.ValidationError("لینک کانال بله باید با https و روی ble.ir باشد.")
+    return v
+
+
+def clean_bale_id(v: str) -> str:
+    # an ID has no spaces (the app removes them as well)
+    return "".join(v.split())
 
 
 def clean_notes(v: str) -> str:
@@ -54,9 +67,17 @@ class ReleaseUpdateSerializer(serializers.Serializer):
     maintenance = serializers.BooleanField(required=False)
     enabled = serializers.BooleanField(required=False)
     notes = serializers.CharField(required=False)
+    bale_url = serializers.CharField(max_length=200, allow_blank=True, required=False)
+    bale_id = serializers.CharField(max_length=64, allow_blank=True, required=False)
 
     def validate_notes(self, v):
         return clean_notes(v)
+
+    def validate_bale_url(self, v):
+        return clean_bale_url(v)
+
+    def validate_bale_id(self, v):
+        return clean_bale_id(v)
 
     def validate_message(self, v):
         return v.strip()
@@ -86,8 +107,16 @@ class ReleaseCreateSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=500, allow_blank=True, required=False, default="")
     maintenance = serializers.BooleanField(default=False)
     enabled = serializers.BooleanField(default=True)
+    bale_url = serializers.CharField(max_length=200, allow_blank=True, required=False, default=DEFAULT_BALE_URL)
+    bale_id = serializers.CharField(max_length=64, allow_blank=True, required=False, default="")
     # {"Windows": "https://…/AsanDesk-1.4.9.4-x86_64-install.exe"}؛ داشبورد فایل را از لینک می‌گیرد
     links = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False, default=dict)
+
+    def validate_bale_url(self, v):
+        return clean_bale_url(v)
+
+    def validate_bale_id(self, v):
+        return clean_bale_id(v)
 
     def validate_version(self, v):
         v = v.strip()

@@ -20,6 +20,9 @@ const EXT: [RegExp, Platform][] = [
 ];
 const platformOf = (name: string) => EXT.find(([re]) => re.test(name))?.[1];
 
+/** کانال پیش‌فرض آسان‌دسک در بله؛ همان لینک داخل اپلیکیشن */
+const DEFAULT_BALE_URL = "https://ble.ir/join/AqZGNkLToJ";
+
 export function ReleaseForm({ existing, onPublished }: { existing: string[]; onPublished: (r: Release) => void }) {
   const [version, setVersion] = useState("");
   const [date, setDate] = useState(jalaliToday);
@@ -32,6 +35,8 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
   // فیلدهای update.json
   const [build, setBuild] = useState("");
   const [message, setMessage] = useState("");
+  const [baleUrl, setBaleUrl] = useState(DEFAULT_BALE_URL);
+  const [baleId, setBaleId] = useState("");
   const [maintenance, setMaintenance] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [links, setLinks] = useState<Partial<Record<Platform, string>>>({});
@@ -46,6 +51,8 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
     setMandatory(false);
     setBuild("");
     setMessage("");
+    setBaleUrl(DEFAULT_BALE_URL);
+    setBaleId("");
     setMaintenance(false);
     setEnabled(true);
     setLinks({});
@@ -101,6 +108,8 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
     form.append("rollout", String(rollout));
     form.append("build", build.trim() || "0");
     form.append("message", message.trim());
+    form.append("bale_url", baleUrl.trim());
+    form.append("bale_id", baleId.trim());
     form.append("maintenance", String(maintenance));
     form.append("enabled", String(enabled));
     form.append("links", JSON.stringify(activeLinks()));
@@ -262,6 +271,17 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
           <label className={s.field}>
             <span className={s.label}>پیام به کاربران</span>
             <input className={s.input} value={message} maxLength={500} placeholder="اختیاری" onChange={(e) => setMessage(e.target.value)} />
+          </label>
+        </div>
+        <div className={s.two}>
+          <label className={s.field}>
+            <span className={s.label}>لینک کانال بله</span>
+            <input dir="ltr" className={`${s.input} mono`} value={baleUrl} maxLength={200} placeholder="https://ble.ir/join/…" onChange={(e) => setBaleUrl(e.target.value)} />
+            <span className={s.hint}>اپلیکیشن در ارتباط با ما نشان می‌دهد؛ فقط ble.ir</span>
+          </label>
+          <label className={s.field}>
+            <span className={s.label}>آیدی بله</span>
+            <input dir="ltr" className={`${s.input} mono`} value={baleId} maxLength={64} placeholder="اختیاری" onChange={(e) => setBaleId(e.target.value)} />
           </label>
         </div>
 
