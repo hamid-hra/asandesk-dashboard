@@ -16,6 +16,7 @@ urlpatterns = [
     path("tickets/<int:pk>", views.TicketDetailView.as_view()),
     path("tickets/<int:pk>/reply", views.TicketReplyView.as_view()),
     path("tickets/<int:pk>/log", views.TicketLogView.as_view()),
+    path("tickets/<int:pk>/images/<int:image_id>", views.TicketImageView.as_view()),
     # اپلیکیشن آسان‌دسک (سازگار با API سرور RustDesk؛ client_api.py)
     path("heartbeat", client_api.HeartbeatView.as_view()),
     path("sysinfo", client_api.SysinfoView.as_view()),

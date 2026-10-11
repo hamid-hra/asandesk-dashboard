@@ -157,6 +157,19 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
             </div>
           )}
         </div>
+        {t.images.length > 0 && (
+          <div className={s.shots}>
+            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>تصویرهای پیوست · {toFa(t.images.length)} (برای دیدن اندازهٔ اصلی بزنید)</span>
+            <div className={s.shotRow}>
+              {t.images.map((im, i) => (
+                <a key={im.id} className={s.shot} href={`/api/tickets/${id}/images/${im.id}`} target="_blank" rel="noopener noreferrer" title={bytesText(im.size)}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- تصویر کاربر از API پنل با نشست لاگین؛ بهینه‌سازی next/image لازم نیست */}
+                  <img src={`/api/tickets/${id}/images/${im.id}`} alt={`تصویر پیوست ${toFa(i + 1)}`} loading="lazy" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className={s.msgs}>

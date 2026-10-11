@@ -107,6 +107,11 @@ function TicketsInner() {
                       لاگ
                     </span>
                   )}
+                  {t.image_count > 0 && (
+                    <span className={s.chip} style={{ background: "var(--info-soft)", color: "var(--info-text)" }} title="تصویر پیوست است">
+                      {toFa(t.image_count)} تصویر
+                    </span>
+                  )}
                   {t.category && (
                     <span className={s.chip} style={{ background: "var(--seg-track)", color: "var(--muted)" }}>
                       {categoryText(t.category)}

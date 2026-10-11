@@ -221,6 +221,8 @@ export interface TicketRow {
   updated_at: string;
   /** لاگ برنامه همراه این بازخورد فرستاده شده */
   has_log: boolean;
+  /** تعداد تصویرهای پیوست (حداکثر ۳) */
+  image_count: number;
   client: ClientBrief;
 }
 
@@ -228,6 +230,8 @@ export interface TicketDetail extends TicketRow {
   diag: string;
   contact: string;
   log: { size: number; files: string[] } | null;
+  /** تصویرها از /api/tickets/{id}/images/{image.id} نمایش داده می‌شوند */
+  images: { id: number; mime: string; size: number }[];
   messages: { id: number; from_client: boolean; author: string; text: string; created_at: string }[];
 }
 

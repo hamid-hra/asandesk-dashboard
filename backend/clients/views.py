@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import stats
-from .models import AccessToken, Client, Priority, Ticket, TicketMessage, TicketStatus
+from .models import AccessToken, Client, Priority, Ticket, TicketImage, TicketMessage, TicketStatus
 
 
 def client_brief(c: Client) -> dict:
@@ -37,16 +37,21 @@ def ticket_row(t: Ticket) -> dict:
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
         "has_log": bool(t.log_file),
+        # در فهرست از annotate(n_images) می‌آید؛ جزئیات خودش دوباره می‌شمارد
+        "image_count": getattr(t, "n_images", 0),
         "client": client_brief(t.client),
     }
 
 
 def ticket_detail(t: Ticket) -> dict:
+    images = list(t.images.all())
     return {
         **ticket_row(t),
+        "image_count": len(images),
         "diag": t.diag,
         "contact": t.contact,
         "log": {"size": t.log_size, "files": t.log_files} if t.log_file else None,
+        "images": [{"id": im.pk, "mime": im.mime, "size": im.size} for im in images],
         "messages": [
             {
                 "id": m.pk,
@@ -168,7 +173,7 @@ class ClientMessageView(APIView):
 class TicketListView(APIView):
     def get(self, request):
         p = request.query_params
-        qs = Ticket.objects.select_related("client__account")
+        qs = Ticket.objects.select_related("client__account").annotate(n_images=Count("images"))
         st = p.get("status", "open")
         if st in TicketStatus.values:
             qs = qs.filter(status=st)
@@ -222,6 +227,19 @@ class TicketLogView(APIView):
         )
         resp["Cache-Control"] = "private, no-store"
         resp["X-Content-Type-Options"] = "nosniff"
+        return resp
+
+
+class TicketImageView(APIView):
+    """نمایش تصویری که همراه بازخورد فرستاده شده (فقط با دسترسی به بخش بازخوردها)."""
+
+    def get(self, request, pk, image_id):
+        im = get_object_or_404(TicketImage, pk=image_id, ticket_id=pk)
+        resp = FileResponse(im.file.open("rb"), content_type=im.mime)
+        # نوعِ ثبت‌شده را مرورگر عوض نکند و هیچ اسکریپتی از این پاسخ اجرا نشود
+        resp["X-Content-Type-Options"] = "nosniff"
+        resp["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; sandbox"
+        resp["Cache-Control"] = "private, max-age=86400"
         return resp
 
 

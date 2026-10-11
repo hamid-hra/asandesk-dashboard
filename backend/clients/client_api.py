@@ -26,7 +26,8 @@ from django.utils.decorators import method_decorator
 from rest_framework.throttling import SimpleRateThrottle
 
 from .models import (
-    AccessToken, Account, Client, ConnSession, FeedbackCategory, Priority, Ticket, TicketMessage, TicketStatus, sha256,
+    AccessToken, Account, Client, ConnSession, FeedbackCategory, Priority, Ticket, TicketImage, TicketMessage,
+    TicketStatus, sha256,
 )
 
 log = logging.getLogger(__name__)
@@ -389,13 +390,60 @@ def decode_feedback_log(data: dict) -> bytes | None:
     return raw
 
 
+def sniff_image(raw: bytes) -> tuple[str, str] | None:
+    """نوع تصویر را از روی ابتدای محتوا تشخیص می‌دهد: (mime, پسوند) یا None. نام و نوعی که کلاینت می‌گوید باور نمی‌شود."""
+    if raw.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", "jpg"
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", "png"
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif", "gif"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    return None
+
+
+def decode_feedback_images(data: dict) -> list[tuple[bytes, str, str]]:
+    """تصویرهای پیوستی (`images`: فهرستی از {name, mime, data=base64}) را بررسی و باز می‌کند.
+
+    خروجی: فهرست (محتوا، mime، پسوند). بدون تصویر فهرست خالی؛ نامعتبر ValueError("invalid")،
+    بیش از سقف حجم ValueError("too-big").
+    """
+    items = data.get("images")
+    if not items:
+        return []
+    if not isinstance(items, list) or len(items) > settings.FEEDBACK_MAX_IMAGES:
+        raise ValueError("invalid")
+    limit = settings.FEEDBACK_MAX_IMAGE_BYTES
+    out = []
+    for item in items:
+        blob = item.get("data") if isinstance(item, dict) else None
+        if not isinstance(blob, str) or not blob:
+            raise ValueError("invalid")
+        # پیش از decode: طول base64 تقریباً ۴/۳ حجم واقعی است؛ تصویر بزرگ را بی‌خود باز نمی‌کنیم
+        if len(blob) > limit * 4 // 3 + 8:
+            raise ValueError("too-big")
+        try:
+            raw = base64.b64decode(blob, validate=True)
+        except ValueError:
+            raise ValueError("invalid")
+        if len(raw) > limit:
+            raise ValueError("too-big")
+        kind = sniff_image(raw)
+        if kind is None:
+            raise ValueError("invalid")
+        out.append((raw, *kind))
+    return out
+
+
 class ClientFeedbackView(ClientView):
-    """«ارسال بازخورد» از داخل اپلیکیشن: متن کاربر + لاگ برنامه از لحظهٔ باز شدن.
+    """«ارسال بازخورد» از داخل اپلیکیشن: متن کاربر + لاگ برنامه از لحظهٔ باز شدن + حداکثر ۳ تصویر.
 
     بدنهٔ JSON (جزئیات: docs/ASANDESK-FEEDBACK-API.md در ریپوی اپلیکیشن):
       id، uuid، category (bug|idea|other)، message، contact، version، os، os_version،
-      screen، lang، theme، log_attached، log (gzip+base64)، log_files.
-    بازخورد به‌صورت یک «تیکت» ثبت می‌شود و لاگ بازشده کنارش نگه‌داری می‌شود.
+      screen، lang، theme، log_attached، log (gzip+base64)، log_files،
+      images ([{name, mime, data}] با data=base64 خود تصویر).
+    بازخورد به‌صورت یک «تیکت» ثبت می‌شود و لاگ بازشده و تصویرها کنارش نگه‌داری می‌شوند.
     """
 
     def post(self, request):
@@ -432,6 +480,14 @@ class ClientFeedbackView(ClientView):
                 {"error": "حجم لاگ زیاد است." if too_big else "لاگ پیوست‌شده معتبر نیست."},
                 status=413 if too_big else 400,
             )
+        try:
+            images = decode_feedback_images(data)
+        except ValueError as e:
+            too_big = str(e) == "too-big"
+            return JsonResponse(
+                {"error": "حجم تصویر زیاد است." if too_big else "تصویر پیوست‌شده معتبر نیست."},
+                status=413 if too_big else 400,
+            )
 
         category = s(data, "category", 16)
         if category not in FeedbackCategory.values:
@@ -453,7 +509,12 @@ class ClientFeedbackView(ClientView):
                 t.log_size = len(raw)
                 t.log_files = files
                 t.save(update_fields=["log_file", "log_size", "log_files"])
-        return JsonResponse({"ok": True, "id": t.code, "code": t.code}, status=201)
+            for n, (raw, mime, ext) in enumerate(images, 1):
+                # نام فایل را خودمان می‌سازیم، نه از ورودی
+                shot = TicketImage(ticket=t, mime=mime, size=len(raw))
+                shot.file.save(f"{t.code}-{n}.{ext}", ContentFile(raw), save=False)
+                shot.save()
+        return JsonResponse({"ok": True, "id": t.code, "code": t.code, "images": len(images)}, status=201)
 
 
 class ClientTicketReplyView(ClientView):

@@ -226,6 +226,22 @@ class Ticket(models.Model):
         self.closed_at = timezone.now() if status == TicketStatus.CLOSED else None
 
 
+class TicketImage(models.Model):
+    """تصویری که کاربر همراه بازخورد فرستاده (حداکثر FEEDBACK_MAX_IMAGES عدد)."""
+
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="images")
+    file = models.FileField("تصویر", upload_to="feedback-images/%Y/%m", max_length=255)
+    # نوع را سرور از روی محتوای فایل تشخیص می‌دهد، نه از ورودی کلاینت
+    mime = models.CharField(max_length=32)
+    size = models.PositiveIntegerField("حجم (بایت)", default=0)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "تصویر بازخورد"
+        verbose_name_plural = "تصویرهای بازخورد"
+
+
 class TicketMessage(models.Model):
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="messages")
     from_client = models.BooleanField(default=True)

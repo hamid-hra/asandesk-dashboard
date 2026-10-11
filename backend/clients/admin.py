@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin, messages
 
-from .models import AccessToken, Account, Client, Ticket, TicketMessage
+from .models import AccessToken, Account, Client, Ticket, TicketImage, TicketMessage
 
 
 class AccountForm(forms.ModelForm):
@@ -64,10 +64,20 @@ class MessageInline(admin.TabularInline):
     readonly_fields = ("from_client", "author", "created_at")
 
 
+class ImageInline(admin.TabularInline):
+    model = TicketImage
+    extra = 0
+    can_delete = True
+    readonly_fields = ("file", "mime", "size", "created_at")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
     list_display = ("code", "subject", "category", "client", "priority", "status", "created_at")
     list_filter = ("status", "category", "priority")
     search_fields = ("subject", "client__rd_id", "contact")
     readonly_fields = ("log_file", "log_size", "log_files")
-    inlines = [MessageInline]
+    inlines = [MessageInline, ImageInline]

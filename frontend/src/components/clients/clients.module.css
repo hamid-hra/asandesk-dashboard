@@ -609,6 +609,40 @@
   background: var(--subtle);
 }
 
+/* تصویرهای پیوست بازخورد */
+.shots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shotRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.shot {
+  display: block;
+  width: 150px;
+  height: 104px;
+  border-radius: 11px;
+  overflow: hidden;
+  border: 1px solid var(--divider);
+  background: var(--subtle);
+}
+
+.shot:hover {
+  border-color: var(--accent);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .msgs {
   padding: 18px 22px;
   display: flex;

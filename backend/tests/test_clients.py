@@ -301,3 +301,82 @@ def test_feedback_log_file_is_removed_with_ticket(tmp_path):
     assert os.path.exists(path)
     t.delete()
     assert not os.path.exists(path)
+
+
+# ---------- تصویرهای پیوست بازخورد ----------
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+JPG = b"\xff\xd8\xff\xe0" + b"\x00" * 40
+
+
+def shot(raw: bytes, name="image-1.jpg", mime="image/jpeg") -> dict:
+    import base64
+
+    return {"name": name, "mime": mime, "data": base64.b64encode(raw).decode()}
+
+
+@pytest.mark.django_db
+def test_feedback_with_images_is_stored_listed_and_served():
+    r = feedback(log=None, images=[shot(JPG), shot(PNG, "x.png", "image/png")])
+    assert r.status_code == 201 and r.json()["images"] == 2
+    t = Ticket.objects.get()
+    assert t.images.count() == 2
+
+    admin = panel()
+    assert admin.get("/api/tickets").json()[0]["image_count"] == 2
+    d = admin.get(f"/api/tickets/{t.pk}").json()
+    assert d["image_count"] == 2 and [i["mime"] for i in d["images"]] == ["image/jpeg", "image/png"]
+    assert [i["size"] for i in d["images"]] == [len(JPG), len(PNG)]
+
+    first = admin.get(f"/api/tickets/{t.pk}/images/{d['images'][0]['id']}")
+    assert first.status_code == 200 and first["Content-Type"] == "image/jpeg"
+    assert b"".join(first.streaming_content) == JPG
+    assert first["X-Content-Type-Options"] == "nosniff"
+    # فقط با دسترسی به پنل، و فقط داخل همان بازخورد
+    assert APIClient().get(f"/api/tickets/{t.pk}/images/{d['images'][0]['id']}").status_code == 403
+    assert admin.get(f"/api/tickets/{t.pk + 1}/images/{d['images'][0]['id']}").status_code == 404
+
+
+@pytest.mark.django_db
+def test_feedback_without_images_has_none():
+    assert feedback(log=None).json()["images"] == 0
+    t = Ticket.objects.get()
+    d = panel().get(f"/api/tickets/{t.pk}").json()
+    assert d["images"] == [] and d["image_count"] == 0
+    assert panel().get("/api/tickets").json()[0]["image_count"] == 0
+
+
+@pytest.mark.django_db
+def test_feedback_image_type_comes_from_content_not_from_client():
+    # کلاینت می‌گوید jpeg است و نام png می‌گذارد؛ محتوا HTML است → رد می‌شود
+    html = shot(b"<html><script>alert(1)</script></html>", "a.png", "image/png")
+    assert feedback(log=None, images=[html]).status_code == 400
+    # محتوای واقعی PNG با mime دروغ: با نوع واقعی ذخیره می‌شود
+    assert feedback(log=None, images=[shot(PNG, "a.html", "text/html")]).status_code == 201
+    im = Ticket.objects.get().images.get()
+    assert im.mime == "image/png" and im.file.name.endswith(".png")
+
+
+@pytest.mark.django_db
+def test_feedback_rejects_bad_images(settings):
+    assert feedback(log=None, images=[shot(JPG)] * 4).status_code == 400  # بیشتر از سه تا
+    assert feedback(log=None, images="nope").status_code == 400
+    assert feedback(log=None, images=["nope"]).status_code == 400
+    assert feedback(log=None, images=[{"data": "!!not base64!!"}]).status_code == 400
+    assert feedback(log=None, images=[{"name": "x.jpg"}]).status_code == 400
+    settings.FEEDBACK_MAX_IMAGE_BYTES = 1000
+    assert feedback(log=None, images=[shot(JPG + b"\x00" * 2000)]).status_code == 413
+    # هیچ‌کدام بازخورد نساخته‌اند
+    assert Ticket.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_feedback_image_files_are_removed_with_ticket():
+    import os
+
+    feedback(log=None, images=[shot(JPG), shot(PNG)])
+    t = Ticket.objects.get()
+    paths = [i.file.path for i in t.images.all()]
+    assert len(paths) == 2 and all(os.path.exists(p) for p in paths)
+    t.delete()
+    assert not any(os.path.exists(p) for p in paths)

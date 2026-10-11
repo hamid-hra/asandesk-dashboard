@@ -147,9 +147,13 @@ CLIENT_OFFLINE_AFTER_SECONDS = int(env("CLIENT_OFFLINE_AFTER_SECONDS", "60"))
 CLIENT_TICKETS_PER_HOUR = int(env("CLIENT_TICKETS_PER_HOUR", "5"))
 # «ارسال بازخورد» اپلیکیشن: متن + لاگ فشرده (gzip+base64) در یک درخواست JSON
 CLIENT_FEEDBACK_PER_HOUR = int(env("CLIENT_FEEDBACK_PER_HOUR", "5"))
-FEEDBACK_MAX_BODY = 4 * 1024 * 1024
+# بدنه: متن + لاگ (تا ~۲ مگابایت base64) + حداکثر ۳ تصویر (اپ هرکدام را زیر ~۰٫۶ مگابایت نگه می‌دارد)
+FEEDBACK_MAX_BODY = 8 * 1024 * 1024
 # سقف حجم لاگِ بازشده؛ جلوی فایل فشردهٔ مخرب (zip bomb) را می‌گیرد
 FEEDBACK_MAX_LOG_BYTES = int(env("FEEDBACK_MAX_LOG_MB", "10")) * 1024 * 1024
+# تصویرهای پیوست بازخورد: تعداد و سقف حجم هر تصویر (بعد از base64)
+FEEDBACK_MAX_IMAGES = 3
+FEEDBACK_MAX_IMAGE_BYTES = int(env("FEEDBACK_MAX_IMAGE_MB", "2")) * 1024 * 1024
 # Django بدنهٔ بزرگ‌تر از این را قبل از خواندن request.body رد می‌کند (پیش‌فرض ۲٫۵ مگابایت)
 DATA_UPLOAD_MAX_MEMORY_SIZE = FEEDBACK_MAX_BODY + 1024 * 1024
 
