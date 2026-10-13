@@ -20,13 +20,16 @@ import s from "./Shell.module.css";
 
 const ROLE_EN = { owner: "Owner", admin: "Admin", viewer: "Viewer", custom: "Custom" } as const;
 
+/** منوی کناری جمع‌شده (فقط آیکون‌ها) در همین مرورگر یادآوری می‌شود */
+const COLLAPSE_KEY = "ad_nav_collapsed";
+
 function NavItem({ tab, active, onClick, badge }: { tab: (typeof TABS)[number]; active: boolean; onClick: () => void; badge?: number }) {
   return (
-    <Link href={tab.href} className={s.navItem} aria-current={active ? "page" : undefined} onClick={onClick}>
+    <Link href={tab.href} className={s.navItem} aria-current={active ? "page" : undefined} onClick={onClick} title={tab.label}>
       <Icon d={tab.icon} />
-      <span style={{ flex: 1 }}>{tab.label}</span>
+      <span className={s.navLabel}>{tab.label}</span>
       {tab.soon && <span className={s.soonBadge}>به‌زودی</span>}
-      {!!badge && <span className={s.countBadge}>{toFa(badge)}</span>}
+      {!!badge && <span className={s.countBadge} title={`${toFa(badge)} مورد جدید`}>{toFa(badge)}</span>}
     </Link>
   );
 }
@@ -46,13 +49,15 @@ function StatusBox() {
     }
   }
   const uptime = data?.uptime_30d;
+  const text = data ? label : "در حال بررسی…";
+  const sub = `آپتایم ۳۰ روز: ${uptime == null ? "—" : pctText(uptime, 2)}`;
   return (
-    <div className={s.status} data-tone={tone}>
+    <div className={s.status} data-tone={tone} title={`${text} — ${sub}`}>
       <div className={s.statusLabel}>
         <span className={s.statusDot} />
-        {data ? label : "در حال بررسی…"}
+        <span className={s.statusText}>{text}</span>
       </div>
-      <div className={s.statusSub}>آپتایم ۳۰ روز: {uptime == null ? "—" : pctText(uptime, 2)}</div>
+      <div className={s.statusSub}>{sub}</div>
     </div>
   );
 }
@@ -118,6 +123,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const tab = tabFor(pathname);
   const [navOpen, setNavOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapsed = () =>
+    setCollapsed((v) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, v ? "0" : "1");
+      } catch {
+        // حافظهٔ مرورگر بسته است؛ فقط برای همین بازدید جمع می‌شود
+      }
+      return !v;
+    });
   const { user } = useAuth();
   const { data: status } = useSWR<Status>("/api/monitoring/status", fetcher, { refreshInterval: 30000 });
   const visible = TABS.filter((t) => canSee(t, user.perms));
@@ -125,20 +146,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
   // Shell فقط سمت کلاینت (بعد از احراز هویت) رندر می‌شود
   const today = dfToday.format(new Date());
 
-  const pageTitle = tab?.soon ? tab.label : "داشبورد مالک";
   const close = () => setNavOpen(false);
 
   return (
     <div className={s.root}>
-      <aside className={s.aside} data-open={navOpen}>
+      <aside className={s.aside} data-open={navOpen} data-collapsed={collapsed}>
         <div className={s.brand}>
           <Logo size={36} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div className={s.brandText}>
             <div className={s.brandName}>آسان‌دسک</div>
             <div className={s.brandSub}>پنل مالک</div>
           </div>
+          <button className={s.collapseBtn} onClick={toggleCollapsed} aria-label={collapsed ? "باز کردن منو" : "جمع کردن منو"} aria-expanded={!collapsed} title={collapsed ? "باز کردن منو" : "جمع کردن منو"}>
+            <Icon d={collapsed ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} size={16} />
+          </button>
         </div>
-        <div className={s.section}>مدیریت</div>
+        <div className={s.section}><span className={s.sectionText}>مدیریت</span></div>
         <nav className={s.nav}>
           {visible.filter((t) => !t.soon).map((t) => (
             <NavItem key={t.href} tab={t} active={t === tab} onClick={close} badge={t.href === "/tickets" ? status?.open_tickets : 0} />
@@ -147,7 +170,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {visible.some((t) => t.soon) && (
           <>
             <div className={s.section} style={{ padding: "18px 10px 6px", display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ whiteSpace: "nowrap" }}>فاز ۳</span>
+              <span className={s.sectionText} style={{ whiteSpace: "nowrap" }}>فاز ۳</span>
               <span className={s.rule} />
             </div>
             <nav className={s.nav}>
@@ -167,7 +190,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <button className={s.menuBtn} onClick={() => setNavOpen(true)} aria-label="منو">
             <Icon d="M4 7h16M4 12h16M4 17h16" />
           </button>
-          <div className={s.pageTitle}>{pageTitle}</div>
           <div className={s.today}>{today}</div>
           <div style={{ flex: 1 }} />
           <div className={s.search} title="به‌زودی">

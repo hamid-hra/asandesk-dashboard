@@ -1,0 +1,124 @@
+"""Settings → panel update and docker logs. Owner only: these reach the host's Docker."""
+
+import re
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from accounts.permissions import IsOwner
+from activity.service import record
+from backups.models import Operation
+from config.version import VERSION
+
+from . import control
+from .control import ControlError
+
+SERVICE_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
+SINCE_RE = re.compile(r"^\d{1,4}[smh]$")  # مثل 10m یا 2h
+MAX_NEW_ENTRIES = 10
+
+
+def entries_after(changelog: list[dict], current: str) -> list[dict]:
+    """The changelog entries newer than the running version (the list is newest first)."""
+    out = []
+    for entry in changelog:
+        if entry.get("version") == current:
+            break
+        out.append(entry)
+    return out[:MAX_NEW_ENTRIES]
+
+
+def shape(raw: dict) -> dict:
+    """What the panel shows: running version, the last check against GitHub, and the update job."""
+    out = {"version": VERSION, "control": {"online": True}, "job": raw.get("job"), "check": None, "check_error": raw.get("check_error") or ""}
+    check = raw.get("check")
+    if check:
+        changelog = check.get("remote_changelog") or []
+        disk = check.get("disk_version") or ""
+        behind = int(check.get("behind") or 0)
+        pending = bool(disk and disk != VERSION)  # کد جدید pull شده ولی هنوز بیلد نشده
+        out["check"] = {
+            "checked_at": check.get("checked_at"),
+            "branch": check.get("branch"),
+            "behind": behind,
+            "ahead": int(check.get("ahead") or 0),
+            "dirty": bool(check.get("dirty")),
+            "commits": check.get("commits") or [],
+            "remote_version": changelog[0]["version"] if changelog else None,
+            "disk_version": disk or None,
+            "pending_build": pending,
+            "available": behind > 0 or pending,
+            "new_entries": entries_after(changelog, VERSION),
+        }
+    return out
+
+
+def offline(e: ControlError) -> Response:
+    """The panel keeps working without `control`; only these pages say so."""
+    return Response({"version": VERSION, "control": {"online": False, "error": e.message}, "job": None, "check": None, "check_error": ""})
+
+
+class OwnerView(APIView):
+    permission_classes = [IsOwner]
+
+
+class UpdateStatusView(OwnerView):
+    def get(self, request):
+        try:
+            return Response(shape(control.call("GET", "/update/status")))
+        except ControlError as e:
+            return offline(e) if e.offline else Response({"detail": e.message}, status=e.status)
+
+
+class UpdateCheckView(OwnerView):
+    """Fetch from GitHub now and compare (a few seconds)."""
+
+    def post(self, request):
+        try:
+            return Response(shape(control.call("POST", "/update/check", timeout=55)))
+        except ControlError as e:
+            return offline(e) if e.offline else Response({"detail": e.message}, status=e.status)
+
+
+class UpdateStartView(OwnerView):
+    """git pull + docker compose up -d --build, in a separate container that survives the restart."""
+
+    def post(self, request):
+        if Operation.objects.filter(status__in=[Operation.Status.QUEUED, Operation.Status.RUNNING]).exists():
+            return Response({"detail": "یک پشتیبان‌گیری یا بازگردانی در جریان است؛ بعد از پایانش به‌روزرسانی کنید."}, status=status.HTTP_409_CONFLICT)
+        try:
+            before = shape(control.call("GET", "/update/status"))
+            control.call("POST", "/update/start")
+            raw = control.call("GET", "/update/status")
+        except ControlError as e:
+            return Response({"detail": e.message}, status=e.status)
+        target = (before["check"] or {}).get("remote_version") or "آخرین نسخه"
+        record("system.update", f"به‌روزرسانی پنل را شروع کرد ({VERSION} ← {target})", request=request)
+        return Response(shape(raw), status=status.HTTP_202_ACCEPTED)
+
+
+class ServicesView(OwnerView):
+    def get(self, request):
+        try:
+            return Response(control.call("GET", "/services"))
+        except ControlError as e:
+            return Response({"detail": e.message, "offline": e.offline}, status=status.HTTP_503_SERVICE_UNAVAILABLE if e.offline else e.status)
+
+
+class LogsView(OwnerView):
+    def get(self, request):
+        service = request.query_params.get("service", "")
+        if not SERVICE_RE.match(service):
+            return Response({"service": ["سرویس نامعتبر است."]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            tail = max(10, min(int(request.query_params.get("tail", 300)), 2000))
+        except ValueError:
+            tail = 300
+        since = request.query_params.get("since", "")
+        if since and not SINCE_RE.match(since):
+            return Response({"since": ["بازهٔ زمانی نامعتبر است."]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            return Response(control.call("GET", "/logs", params={"service": service, "tail": tail, "since": since}, timeout=40))
+        except ControlError as e:
+            return Response({"detail": e.message}, status=status.HTTP_503_SERVICE_UNAVAILABLE if e.offline else e.status)

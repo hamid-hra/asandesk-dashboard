@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import useSWR from "swr";
 
+import { ClientChartsView } from "@/components/clients/charts/ClientCharts";
 import { ClientPanel } from "@/components/clients/ClientPanel";
 import { ClientTable } from "@/components/clients/ClientTable";
 import s from "@/components/clients/clients.module.css";
@@ -12,10 +13,16 @@ import { SearchBox, Seg } from "@/components/clients/SearchBox";
 import { fetcher } from "@/lib/api";
 import { fmt, pctText, toFa } from "@/lib/fa";
 import { minutesText } from "@/lib/people";
-import type { ClientList, ClientStats } from "@/lib/types";
+import type { ClientCharts, ClientList, ClientStats } from "@/lib/types";
 
 type Filter = "all" | "online" | "logged" | "guest" | "tickets" | "blocked";
 type Sort = "recent" | "mins" | "sessions" | "tickets";
+type View = "list" | "charts";
+
+const VIEWS: [View, string][] = [
+  ["list", "فهرست کلاینت‌ها"],
+  ["charts", "نمودارها"],
+];
 
 const FILTERS: [Filter, string][] = [
   ["all", "همه"],
@@ -35,15 +42,19 @@ const SORTS: [Sort, string][] = [
 function ClientsInner() {
   const router = useRouter();
   const pathname = usePathname();
-  const selected = useSearchParams().get("id");
+  const params = useSearchParams();
+  const selected = params.get("id");
+  const view: View = params.get("view") === "charts" ? "charts" : "list";
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("recent");
   const [q, setQ] = useState("");
 
-  const params = new URLSearchParams({ filter, sort, q });
-  const { data: list, mutate } = useSWR<ClientList>(`/api/clients?${params}`, fetcher, { refreshInterval: 30000, keepPreviousData: true });
+  const query = new URLSearchParams({ filter, sort, q });
+  const { data: list, mutate } = useSWR<ClientList>(view === "list" ? `/api/clients?${query}` : null, fetcher, { refreshInterval: 30000, keepPreviousData: true });
+  const { data: charts } = useSWR<ClientCharts>(view === "charts" ? "/api/clients/charts" : null, fetcher, { refreshInterval: 60000 });
   const { data: st, mutate: mutateStats } = useSWR<ClientStats>("/api/clients/stats", fetcher, { refreshInterval: 30000 });
 
+  const setView = (v: View) => router.replace(v === "charts" ? `${pathname}?view=charts` : pathname, { scroll: false });
   const select = (id: string | null) => router.replace(id ? `${pathname}?id=${encodeURIComponent(id)}` : pathname, { scroll: false });
   const guest = st?.logged_share == null ? null : 100 - st.logged_share;
 
@@ -67,12 +78,17 @@ function ClientsInner() {
   const rows = list?.results;
   return (
     <div className={s.page}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <div className={s.title}>کلاینت‌ها</div>
-        <div className={s.subtitle}>فعالیت، مصرف و پشتیبانی هر کلاینت</div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div className={s.title}>کلاینت‌ها</div>
+          <div className={s.subtitle}>{view === "charts" ? "نصب‌ها بر اساس نسخه، پلتفرم و روز" : "فعالیت، مصرف و پشتیبانی هر کلاینت"}</div>
+        </div>
+        <span style={{ flex: 1 }} />
+        <Seg options={VIEWS} value={view} onChange={setView} />
       </div>
-      <KpiStrip items={kpis} />
-      <div className={s.split}>
+      {view === "charts" && <ClientChartsView data={charts} />}
+      {view === "list" && <KpiStrip items={kpis} />}
+      {view === "list" && <div className={s.split}>
         <div className={`card ${s.listCard}`}>
           <div className={s.toolbar}>
             <SearchBox value={q} onChange={setQ} placeholder="نام، شناسه، ایمیل یا IP…" />
@@ -106,7 +122,7 @@ function ClientsInner() {
             }}
           />
         )}
-      </div>
+      </div>}
     </div>
   );
 }

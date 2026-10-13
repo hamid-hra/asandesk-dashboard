@@ -7,7 +7,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import LEVELS, SECTIONS, Role, User, clean_perms
+from .models import LEVELS, SECTIONS, Role, User, clean_extras, clean_perms
+
+from activity.service import note
 
 ASSIGNABLE = (Role.ADMIN, Role.VIEWER, Role.CUSTOM)
 RANK = {lv: i for i, lv in enumerate(LEVELS)}
@@ -23,7 +25,8 @@ def user_row(u: User, me: User) -> dict:
         "active": u.is_active,
         "last_login": u.last_login.isoformat() if u.last_login else None,
         "created": u.date_joined.isoformat(),
-        "perms": {k: u.level(k) for k in SECTIONS} if u.is_active else clean_perms(u.perms) if u.role == Role.CUSTOM else None,
+        # دسترسی نهایی؛ برای حساب غیرفعال همان چیزی که با فعال‌شدن خواهد داشت
+        "perms": effective(u.role, u.perms),
         "me": u.pk == me.pk,
         "locked": u.role == Role.OWNER,
     }
@@ -44,6 +47,16 @@ def error(field: str, msg: str, code=status.HTTP_400_BAD_REQUEST):
 def effective(role: str, perms) -> dict:
     """دسترسی نهایی نقش/دسترسی داده‌شده، بدون ساخت کاربر."""
     return User(role=role, perms=perms or {}, is_active=True).resolved_perms()
+
+
+def perms_for(role: str, incoming, existing, previous_role=None) -> dict:
+    """چیزی که در `perms` ذخیره می‌شود: ماتریس کامل برای «سفارشی»، فقط موارد اضافه برای مدیر/ناظر.
+
+    اگر نقش عوض شده و دسترسی تازه‌ای نیامده، دسترسی‌های نقش قبلی همراه نمی‌شوند.
+    """
+    if incoming is None:
+        incoming = {} if previous_role is not None and role != previous_role else existing
+    return clean_perms(incoming) if role == Role.CUSTOM else clean_extras(incoming)
 
 
 class UserListView(APIView):
@@ -69,7 +82,7 @@ class UserListView(APIView):
             return error("username", "این نام کاربری قبلاً استفاده شده است.")
         if role not in ASSIGNABLE:
             return error("role", "نقش نامعتبر است.")
-        perms = clean_perms(d.get("perms")) if role == Role.CUSTOM else {}
+        perms = perms_for(role, d.get("perms"), {})
         if exceeds(request.user, effective(role, perms)):
             return Response({"detail": "نمی‌توانید دسترسی بیشتر از دسترسی خودتان بدهید."}, status=status.HTTP_403_FORBIDDEN)
         user = User(username=username, first_name=name, role=role, perms=perms, is_active=d.get("active", True) is not False)
@@ -79,6 +92,7 @@ class UserListView(APIView):
             return Response({"password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
         user.set_password(password)
         user.save()
+        note(request, f"کاربر «{user.username}» را ساخت (نقش {user.get_role_display()})", "users.create")
         return Response(user_row(user, request.user), status=status.HTTP_201_CREATED)
 
 
@@ -89,8 +103,9 @@ class UserDetailView(APIView):
         d = request.data
         if user.role == Role.OWNER and actor.role != Role.OWNER:
             return Response({"detail": "فقط مالک می‌تواند حساب مالک را ویرایش کند."}, status=status.HTTP_403_FORBIDDEN)
-        if user.role != Role.OWNER and exceeds(actor, user.resolved_perms() if user.is_active else clean_perms(user.perms)):
+        if user.role != Role.OWNER and exceeds(actor, effective(user.role, user.perms)):
             return Response({"detail": "این کاربر از شما دسترسی بیشتری دارد."}, status=status.HTTP_403_FORBIDDEN)
+        before = (user.role, dict(user.perms or {}), user.is_active, user.first_name)
 
         if "display_name" in d:
             name = (d.get("display_name") or "").strip()
@@ -106,7 +121,7 @@ class UserDetailView(APIView):
             role = d.get("role", user.role)
             if role not in ASSIGNABLE:
                 return error("role", "نقش نامعتبر است.")
-            perms = clean_perms(d["perms"]) if "perms" in d and role == Role.CUSTOM else (user.perms if role == Role.CUSTOM else {})
+            perms = perms_for(role, d.get("perms") if "perms" in d else None, user.perms, user.role)
             if exceeds(actor, effective(role, perms)):
                 return Response({"detail": "نمی‌توانید دسترسی بیشتر از دسترسی خودتان بدهید."}, status=status.HTTP_403_FORBIDDEN)
             if user.pk == actor.pk and (role != user.role or d.get("active") is False):
@@ -122,6 +137,18 @@ class UserDetailView(APIView):
                 return Response({"password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
             user.set_password(d["password"])
         user.save()
+        changed = []
+        if d.get("password"):
+            changed.append("رمز")
+        if before[0] != user.role:
+            changed.append(f"نقش ({user.get_role_display()})")
+        if before[1] != (user.perms or {}) or (user.role == Role.CUSTOM and "perms" in d):
+            changed.append("دسترسی‌ها")
+        if before[2] != user.is_active:
+            changed.append("فعال بودن حساب" if user.is_active else "غیرفعال کردن حساب")
+        if before[3] != user.first_name:
+            changed.append("نام")
+        note(request, f"کاربر «{user.username}» را ویرایش کرد" + (f": {'، '.join(changed)}" if changed else ""), "users.update")
         return Response(user_row(user, actor))
 
     def delete(self, request, pk):
@@ -130,7 +157,8 @@ class UserDetailView(APIView):
             return Response({"detail": "حساب مالک قابل حذف نیست."}, status=status.HTTP_400_BAD_REQUEST)
         if user.pk == request.user.pk:
             return Response({"detail": "حساب خودتان را نمی‌توانید حذف کنید."}, status=status.HTTP_400_BAD_REQUEST)
-        if exceeds(request.user, user.resolved_perms() if user.is_active else clean_perms(user.perms)):
+        if exceeds(request.user, effective(user.role, user.perms)):
             return Response({"detail": "این کاربر از شما دسترسی بیشتری دارد."}, status=status.HTTP_403_FORBIDDEN)
+        note(request, f"کاربر «{user.username}» را حذف کرد", "users.delete")
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

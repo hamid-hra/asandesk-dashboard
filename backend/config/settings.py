@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     "clients",
     "backups",
     "ha",
+    "activity",
+    "ops",
 ]
 
 MIDDLEWARE = [
@@ -68,6 +70,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "activity.middleware.ActivityMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -137,6 +140,13 @@ X_ACCEL_PREFIX = "/_protected/releases/"
 # پشتیبان‌گیری: فایل‌های .adbk اینجا نگه‌داری می‌شوند (volume مشترک backend و scheduler)
 BACKUPS_ROOT = Path(env("BACKUPS_ROOT", BASE_DIR / "data" / "backups"))
 BACKUP_MAX_UPLOAD = 4 * 1024 ** 3
+
+# سرویس control (به‌روزرسانی پنل و لاگ داکر): فقط backend با این توکن با آن حرف می‌زند
+CONTROL_URL = env("CONTROL_URL", "http://control:8100")
+CONTROL_TOKEN_FILE = Path(env("CONTROL_TOKEN_FILE", BASE_DIR / "data" / "control" / "token"))
+
+# لاگ فعالیت: ردیف‌های قدیمی‌تر از این تعداد روز پاک می‌شوند (۰ = هرگز)
+ACTIVITY_KEEP_DAYS = int(env("ACTIVITY_KEEP_DAYS", "180"))
 
 # مانیتورینگ
 METRICS_RETENTION_DAYS = int(env("METRICS_RETENTION_DAYS", "90"))

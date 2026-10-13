@@ -11,6 +11,7 @@ PATH_SECTIONS = (
     ("/api/settings/users", "users"),
     ("/api/settings/backups", "backup"),
     ("/api/settings/ha", "ha"),
+    ("/api/settings/activity", "activity"),
 )
 
 

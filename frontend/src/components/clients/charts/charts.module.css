@@ -1,0 +1,389 @@
+/* نمای «نمودارها» در تب کلاینت‌ها: کمان‌های هم‌مرکز، رادار، گیج خط‌دار و نمودار روند */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.loading {
+  padding: 60px 22px;
+  text-align: center;
+  color: var(--faint);
+  font-size: 13.5px;
+}
+
+.chartCard {
+  min-width: 0;
+  padding: 18px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 18px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cardHead > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardTitle {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.cardSub {
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 3px;
+  line-height: 1.8;
+}
+
+/* ---------- کمان‌های هم‌مرکز ---------- */
+.radial {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.radialSvg {
+  width: 260px;
+  max-width: 100%;
+  height: auto;
+  flex: none;
+}
+
+.radialBig {
+  font-size: 30px;
+  font-weight: 800;
+  fill: var(--text);
+}
+
+.radialCap {
+  font-size: 12px;
+  fill: var(--muted);
+}
+
+.radialLegend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 260px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.radialLegend li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  font-size: 13px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.radialLegend li:hover {
+  background: var(--subtle);
+}
+
+.radialLegend li[data-dim="true"] {
+  opacity: 0.4;
+}
+
+.lgLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.lgLabel[data-latin="true"] {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.lgBadge {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 1px 6px;
+  flex: none;
+}
+
+.stack {
+  display: flex;
+  flex: 1;
+  min-width: 36px;
+  max-width: 90px;
+  height: 6px;
+  margin-inline-start: auto;
+  border-radius: 3px;
+  overflow: hidden;
+  gap: 2px;
+  background: var(--track);
+}
+
+.stack > i {
+  display: block;
+  min-width: 3px;
+}
+
+.lgPct {
+  color: var(--faint);
+  font-size: 12px;
+  min-width: 36px;
+  text-align: end;
+}
+
+.lgNum {
+  min-width: 44px;
+  text-align: end;
+}
+
+/* ---------- رادار و فهرست پلتفرم‌ها ---------- */
+.platformBody {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.platformList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 200px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.platformList li {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.platformList li > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.platformList li > div:first-child b {
+  margin-inline-start: auto;
+}
+
+.radar {
+  flex: 1 1 300px;
+  min-width: 260px;
+}
+
+.radarSvg {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  overflow: visible;
+}
+
+.radarLabel {
+  font-size: 11.5px;
+  fill: var(--muted);
+}
+
+/* ---------- گیج ---------- */
+.gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+}
+
+.gaugeSvg {
+  width: min(100%, 300px);
+  height: auto;
+}
+
+.gaugeBig {
+  font-size: 40px;
+  font-weight: 800;
+  fill: var(--text);
+}
+
+.gaugeSub {
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.9;
+  max-width: 280px;
+}
+
+/* ---------- روند نصب ---------- */
+.trend {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trendTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dotLegend {
+  display: flex;
+  gap: 14px;
+  margin-inline-start: auto;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.dotLegend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dotLegend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  display: block;
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+
+.plot {
+  position: relative;
+  cursor: crosshair;
+}
+
+.plot > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ticks {
+  position: relative;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.ticks > span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.xLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--faint);
+  margin-right: 52px;
+}
+
+.cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--cursor);
+  pointer-events: none;
+}
+
+.marker {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--surface);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.tip {
+  position: absolute;
+  top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--tip-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.tipTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.tipRow > span:not(.dot) {
+  flex: 1;
+  color: var(--muted);
+}
+
+.noData {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .xLabels > span:nth-child(even) {
+    display: none;
+  }
+}

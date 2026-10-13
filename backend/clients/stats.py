@@ -6,12 +6,13 @@ from datetime import datetime, time, timedelta
 from django.conf import settings
 from django.db import connection
 from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from releases.models import Channel
 from releases.services import latest_release
 
-from .models import Client, ConnSession, Ticket, TicketStatus
+from .models import Client, ConnSession, Ticket, TicketStatus, platform_of
 
 
 def close_stale_sessions():
@@ -208,3 +209,95 @@ def version_distribution():
     if rest:
         top.append({"version": "قدیمی‌تر", "share": round(rest / total * 100, 1)})
     return (round(on_current / total * 100, 1) if latest else None), top
+
+
+def install_charts(days: int = 90) -> dict:
+    """Numbers for the clients «نمودارها» view: installs by version and platform, and new installs per day.
+
+    An install is one device that has ever reported (a Client row); «active» means seen in the last
+    30 days. Counting is done by the database per (os, version); the platform name comes from the os text.
+    """
+    now = timezone.now()
+    latest = latest_stable_version()
+    active_after = now - timedelta(days=30)
+    online_after = now - timedelta(seconds=settings.CLIENT_OFFLINE_AFTER_SECONDS)
+
+    groups = Client.objects.values("os", "version").annotate(
+        n=Count("id"),
+        active=Count("id", filter=Q(last_seen__gte=active_after)),
+        online=Count("id", filter=Q(last_seen__gte=online_after)),
+        new30=Count("id", filter=Q(first_seen__gte=active_after)),
+        logged=Count("id", filter=Q(account__isnull=False)),
+    )
+    platforms: dict[str, dict] = {}
+    versions: dict[str, dict] = {}
+    for g in groups:
+        plat = platform_of(g["os"]) or "نامشخص"
+        p = platforms.setdefault(plat, dict.fromkeys(("installs", "active_30d", "online", "new_30d", "logged", "on_latest"), 0))
+        p["installs"] += g["n"]
+        p["active_30d"] += g["active"]
+        p["online"] += g["online"]
+        p["new_30d"] += g["new30"]
+        p["logged"] += g["logged"]
+        v = versions.setdefault(g["version"], {"installs": 0, "active_30d": 0, "platforms": {}, "platforms_active": {}})
+        v["installs"] += g["n"]
+        v["active_30d"] += g["active"]
+        v["platforms"][plat] = v["platforms"].get(plat, 0) + g["n"]
+        if g["active"]:
+            v["platforms_active"][plat] = v["platforms_active"].get(plat, 0) + g["active"]
+        if latest and g["version"] == latest:
+            p["on_latest"] += g["active"]
+
+    total = sum(p["installs"] for p in platforms.values())
+    active = sum(p["active_30d"] for p in platforms.values())
+    on_latest = sum(p["on_latest"] for p in platforms.values())
+
+    # new installs per day in the panel's time zone, plus the running total
+    tz = timezone.get_current_timezone()
+    today = timezone.localdate()
+    first_day = today - timedelta(days=days - 1)
+    start = timezone.make_aware(datetime.combine(first_day, time.min))
+    before = Client.objects.filter(first_seen__lt=start).count()
+    per_day: dict = {}
+    for row in (
+        Client.objects.filter(first_seen__gte=start)
+        .annotate(d=TruncDate("first_seen", tzinfo=tz))
+        .values("d", "os")
+        .annotate(n=Count("id"))
+    ):
+        day = per_day.setdefault(row["d"], {})
+        plat = platform_of(row["os"]) or "نامشخص"
+        day[plat] = day.get(plat, 0) + row["n"]
+    series, running = [], before
+    for i in range(days):
+        d = first_day + timedelta(days=i)
+        by_platform = per_day.get(d, {})
+        new = sum(by_platform.values())
+        running += new
+        series.append({"date": d.isoformat(), "new": new, "total": running, "platforms": by_platform})
+
+    return {
+        "latest": latest,
+        "totals": {
+            "installs": total,
+            "active_30d": active,
+            "online": sum(p["online"] for p in platforms.values()),
+            "new_30d": sum(p["new_30d"] for p in platforms.values()),
+            "logged": sum(p["logged"] for p in platforms.values()),
+            "on_latest": on_latest,
+            "on_latest_share": round(on_latest / active * 100, 1) if latest and active else None,
+        },
+        "platforms": sorted(
+            ({"platform": name, **vals, "share": round(vals["installs"] / total * 100, 1) if total else 0} for name, vals in platforms.items()),
+            key=lambda x: -x["installs"],
+        ),
+        "versions": sorted(
+            (
+                {"version": name, **vals, "share": round(vals["installs"] / total * 100, 1) if total else 0,
+                 "latest": bool(latest and name == latest), "old": version_old(name, latest)}
+                for name, vals in versions.items()
+            ),
+            key=lambda x: -x["installs"],
+        ),
+        "daily": series,
+    }

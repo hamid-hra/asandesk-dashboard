@@ -59,6 +59,7 @@
   --toast: #0f1f1e;
   --row-new: #f7fcfa;
   --shadow: 0 8px 24px rgba(15, 31, 30, 0.1);
+  --shell-shadow: 0 1px 3px rgba(15, 31, 30, 0.06);
   --link-hover: #146045;
 }
 
@@ -115,6 +116,7 @@
   --toast: #2c2c2c;
   --row-new: #15211c;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shell-shadow: none;
   --link-hover: #5fd6a9;
 }
 

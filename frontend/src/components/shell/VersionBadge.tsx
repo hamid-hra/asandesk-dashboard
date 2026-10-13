@@ -6,7 +6,9 @@ import useSWR from "swr";
 import { Icon } from "@/components/Icon";
 import { I, Modal } from "@/components/settings/ui";
 import { fetcher } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { toFa } from "@/lib/fa";
+import type { UpdateInfo } from "@/lib/settings";
 import type { ChangelogItem, VersionInfo } from "@/lib/types";
 
 import s from "./Shell.module.css";
@@ -18,13 +20,17 @@ const KIND: Record<ChangelogItem["type"], string> = { new: "جدید", change: "
 /** Panel version at the bottom of the sidebar; click opens the changelog. */
 export function VersionBadge() {
   const { data } = useSWR<VersionInfo>("/api/version", fetcher);
+  const { user } = useAuth();
+  // فقط مالک: نتیجهٔ آخرین بررسی را می‌پرسد (خودش GitHub را صدا نمی‌زند) و اگر نسخهٔ جدید آماده باشد نقطه می‌گذارد
+  const { data: update } = useSWR<UpdateInfo>(user.role === "owner" ? "/api/settings/system/update" : null, fetcher, { refreshInterval: 30 * 60 * 1000, shouldRetryOnError: false });
   const [open, setOpen] = useState(false);
   if (!data) return null;
   return (
     <>
-      <button className={s.versionBtn} onClick={() => setOpen(true)} title="تاریخچهٔ تغییرات پنل">
+      <button className={s.versionBtn} onClick={() => setOpen(true)} title={update?.check?.available ? "نسخهٔ جدید پنل آماده است (تنظیمات ← به‌روزرسانی پنل)" : "تاریخچهٔ تغییرات پنل"}>
         <Icon d={I.info} size={14} />
-        <span>نسخهٔ پنل</span>
+        <span className={s.versionLabel}>نسخهٔ پنل</span>
+        {update?.check?.available && <span className={s.updateDot} aria-label="نسخهٔ جدید آماده است" />}
         <span className={s.versionNum} dir="ltr">
           {data.version}
         </span>

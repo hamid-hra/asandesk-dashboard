@@ -53,3 +53,30 @@ export function tipBox(i: number, n: number) {
   const x = n > 1 ? (i / (n - 1)) * 100 : 0;
   return { left: `${x}%`, transform: x > 70 ? "translateX(calc(-100% - 12px))" : "translateX(12px)" };
 }
+
+/** نقطهٔ روی دایره؛ زاویه به درجه، ۰ = راست و مثبت = ساعت‌گرد (مثل SVG) */
+export function polar(cx: number, cy: number, r: number, deg: number): Pt {
+  const a = (deg * Math.PI) / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+}
+
+/** کمان ساعت‌گرد از زاویهٔ a0 تا a1 */
+export function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
+  const [x0, y0] = polar(cx, cy, r, a0);
+  const [x1, y1] = polar(cx, cy, r, a1);
+  return `M${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
+}
+
+/** رنگ‌های نمودارهای دایره‌ای (نسخه‌ها و ...) */
+export const PALETTE = ["#26a379", "#4c8bf5", "#a855f7", "#14b8c4", "#f59e0b", "#ec4899", "#8b95a1"];
+
+/** رنگ هر پلتفرم در همهٔ نمودارهای کلاینت‌ها */
+export const PLATFORM_COLOR: Record<string, string> = {
+  Windows: "#4c8bf5",
+  Linux: "#f59e0b",
+  macOS: "#a855f7",
+  Android: "#26a379",
+  iOS: "#ec4899",
+  نامشخص: "#8b95a1",
+};
+export const platformColor = (name: string) => PLATFORM_COLOR[name] ?? "#8b95a1";

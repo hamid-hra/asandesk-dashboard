@@ -57,6 +57,8 @@ services:
       - secrets:/data/secrets
       - agent-token:/data/agent
       - backups:/data/backups
+      # توکن سرویس control (فقط خواندنی): با آن به‌روزرسانی پنل و لاگ داکر فراخوانی می‌شود
+      - control-token:/data/control:ro
     depends_on:
       db:
         condition: service_healthy
@@ -103,10 +105,15 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    # entrypoint.sh از PANEL_KEY فایل آدرس مخفی را می‌نویسد و بعد nginx را اجرا می‌کند (README: «آدرس مخفی پنل»)
+    entrypoint: ["/bin/sh", "/gate/entrypoint.sh"]
+    environment:
+      PANEL_KEY: ${PANEL_KEY:-}
     ports:
       - "${HTTP_PORT:-8080}:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/gate:/gate:ro
       # صفحه‌های خطای برندشده (scripts/gen-error-pages.py)
       - ./nginx/errors:/usr/share/nginx/errors:ro
       - releases:/data/releases:ro
@@ -140,6 +147,32 @@ services:
       backend:
         condition: service_healthy
 
+  # تنها بخشی که با داکر حرف می‌زند: لاگ کانتینرها و «به‌روزرسانی پنل» از داخل تنظیمات.
+  # روی هیچ پورتی منتشر نمی‌شود؛ فقط backend، با توکنی که در volume مشترک است، می‌تواند صدایش کند.
+  # دسترسی به docker.sock یعنی دسترسی root به میزبان، برای همین کدش کوچک و جداست (control/control.py).
+  control:
+    build:
+      context: ./control
+      # شبکه میزبان فقط هنگام بیلد، تا پروکسی روی 127.0.0.1 سرور در دسترس باشد
+      network: host
+      args: *build-proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TZ: ${TZ:-Asia/Tehran}
+      # پروکسی HTTP برای git (گرفتن نسخهٔ جدید از GitHub)؛ پیش‌فرض همان BUILD_PROXY
+      GIT_PROXY: ${GIT_PROXY:-}
+      BUILD_PROXY: ${BUILD_PROXY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - control-token:/run/control
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:
   releases:
@@ -147,3 +180,4 @@ volumes:
   secrets:
   agent-token:
   backups:
+  control-token:

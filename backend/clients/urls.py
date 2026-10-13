@@ -7,6 +7,7 @@ urlpatterns = [
     # پنل
     path("clients", views.ClientListView.as_view()),
     path("clients/stats", views.ClientStatsView.as_view()),
+    path("clients/charts", views.ClientChartsView.as_view()),
     path("clients/<str:rd_id>", views.ClientDetailView.as_view()),
     path("clients/<str:rd_id>/block", views.ClientBlockView.as_view()),
     path("clients/<str:rd_id>/logout", views.ClientLogoutView.as_view()),

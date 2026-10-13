@@ -7,7 +7,7 @@ import { Icon } from "@/components/Icon";
 import { api, fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { avatarOf, initialOf } from "@/lib/people";
-import { agoText, jDate, LEVELS, PRESET, randomPassword, RO_TIP, ROLE_CARDS, ROLE_TONE, SECTIONS, copyText, strength, STRENGTH, type UserRow } from "@/lib/settings";
+import { agoText, jDate, LEVELS, PRESET, randomPassword, RO_TIP, ROLE_CARDS, ROLE_TONE, SECTION_LEVELS, SECTIONS, copyText, strength, STRENGTH, type UserRow } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 import type { Level, Perms } from "@/lib/types";
 
@@ -183,6 +183,8 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
   const [active, setActive] = useState(user?.active ?? true);
   const [role, setRole] = useState<Role>(owner ? "admin" : ((user?.role as Role) ?? "viewer"));
   const [perms, setPerms] = useState<Perms>(user?.role === "custom" && user.perms ? user.perms : { ...PRESET.viewer });
+  // مدیر/ناظر: دیدن لاگ فعالیت‌ها را مالک جداگانه می‌دهد (روی نقش «سفارشی» از ماتریس تنظیم می‌شود)
+  const [seeLog, setSeeLog] = useState(user?.role !== "custom" && user?.perms?.activity === "view");
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const flash = useToast();
@@ -191,7 +193,8 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
   const showRoles = mode !== "password" && !owner;
   const showMatrix = showRoles;
   const st = strength(pw);
-  const effective: Perms = role === "custom" ? perms : PRESET[role];
+  const effective: Perms = role === "custom" ? perms : { ...PRESET[role], activity: seeLog ? "view" : "none" };
+  const extraPerms = role === "custom" ? perms : { activity: seeLog ? "view" : "none" };
   // مدیر غیرمالک نمی‌تواند بیش از دسترسی خودش بدهد
   const myRank = (sec: string) => (me.role === "owner" ? 2 : LEVELS.findIndex(([l]) => l === (me.perms[sec] ?? "none")));
 
@@ -209,14 +212,14 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
     setBusy(true);
     try {
       if (creating) {
-        await api("/api/settings/users", { method: "POST", body: { display_name: name.trim(), username, password: pw, role, perms: role === "custom" ? perms : {}, active } });
+        await api("/api/settings/users", { method: "POST", body: { display_name: name.trim(), username, password: pw, role, perms: extraPerms, active } });
         onSaved(`کاربر ${name.trim()} اضافه شد`);
       } else if (mode === "password") {
         await api(`/api/settings/users/${user!.id}`, { method: "PATCH", body: { password: pw } });
         onSaved("رمز عبور تغییر کرد");
       } else {
         const body: Record<string, unknown> = { display_name: name.trim() };
-        if (!owner) Object.assign(body, { role, active, ...(role === "custom" ? { perms } : {}) });
+        if (!owner) Object.assign(body, { role, active, perms: extraPerms });
         await api(`/api/settings/users/${user!.id}`, { method: "PATCH", body });
         onSaved("تغییرات ذخیره شد");
       }
@@ -303,6 +306,15 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
           {errs.role && <span className={s.err}>{errs.role}</span>}
         </div>
       )}
+      {showRoles && role !== "custom" && (
+        <div className={s.toggleRow}>
+          <span>
+            <b>دیدن لاگ فعالیت‌ها</b>
+            <small>با روشن بودن، این کاربر در تنظیمات ← لاگ فعالیت‌ها می‌بیند هر کس در پنل چه کاری کرده و می‌تواند روی یک نفر فیلتر کند.</small>
+          </span>
+          <Switch on={seeLog} onChange={setSeeLog} label="دیدن لاگ فعالیت‌ها" disabled={myRank("activity") < 1} title={myRank("activity") < 1 ? "شما خودتان به لاگ فعالیت‌ها دسترسی ندارید" : undefined} />
+        </div>
+      )}
       {owner && mode === "edit" && (
         <div className={s.note} data-tone="info"><Icon d={I.lock} size={18} />نقش «مالک» قفل است و همهٔ دسترسی‌ها را دارد.</div>
       )}
@@ -316,7 +328,7 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
             <div key={key} className={s.mRow}>
               <span>{label}</span>
               <div className={s.tri} data-locked={role !== "custom"}>
-                {LEVELS.map(([lv, lvLabel], i) => (
+                {LEVELS.map(([lv, lvLabel], i) => (SECTION_LEVELS[key] && !SECTION_LEVELS[key].includes(lv) ? null : (
                   <button
                     key={lv}
                     type="button"
@@ -328,7 +340,7 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
                   >
                     {lvLabel}
                   </button>
-                ))}
+                )))}
               </div>
             </div>
           ))}

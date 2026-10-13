@@ -39,7 +39,7 @@ export const TABS: Tab[] = [
     sections: ["announce"],
     soon: "ارسال پیام و اطلاعیه به همه کاربران یا گروه‌های مشخص، درون اپ و از طریق اعلان.",
   },
-  { href: "/settings", label: "تنظیمات", icon: ICONS.settings, sections: ["users", "backup", "ha"] },
+  { href: "/settings", label: "تنظیمات", icon: ICONS.settings, sections: ["users", "backup", "ha", "activity", "system"] },
 ];
 
 export const tabFor = (pathname: string) => TABS.find((t) => pathname.startsWith(t.href));

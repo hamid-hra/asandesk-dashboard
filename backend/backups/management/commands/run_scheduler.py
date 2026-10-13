@@ -48,6 +48,14 @@ def maybe_schedule_auto():
     )
 
 
+def purge_activity():
+    from activity import service as activity
+
+    n = activity.purge()
+    if n:
+        log.info("activity log: %s old rows removed", n)
+
+
 def run_one():
     op = Operation.objects.filter(status=Operation.Status.QUEUED).order_by("created_at", "pk").first()
     if op:
@@ -82,12 +90,16 @@ class Command(BaseCommand):
         threading.Thread(target=ha_loop, args=(stop,), daemon=True).start()
         reap_stale()
         log.info("scheduler started")
+        last_purge = 0.0
         while True:
             try:
                 close_old_connections()
                 beat()
                 maybe_schedule_auto()
                 run_one()
+                if time.monotonic() - last_purge > 3600:
+                    last_purge = time.monotonic()
+                    purge_activity()
             except Exception:  # noqa: BLE001
                 log.exception("scheduler tick failed")
             time.sleep(2)

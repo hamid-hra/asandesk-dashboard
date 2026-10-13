@@ -78,6 +78,13 @@ class ClientStatsView(APIView):
         return Response(stats.clients_summary())
 
 
+class ClientChartsView(APIView):
+    """Installs by version, platform and day for the «نمودارها» view (needs the clients section)."""
+
+    def get(self, request):
+        return Response(stats.install_charts())
+
+
 class ClientDetailView(APIView):
     def get(self, request, rd_id):
         stats.close_stale_sessions()

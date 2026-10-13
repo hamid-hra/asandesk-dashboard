@@ -1,5 +1,8 @@
+/* قالب کلی: سایدبار و نوار بالا دو کارت شناور با فاصله از لبه‌ها، مثل بقیهٔ کارت‌های صفحه */
 .root {
   display: flex;
+  gap: 12px;
+  padding: 12px;
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
@@ -7,34 +10,67 @@
 
 /* ---------- سایدبار ---------- */
 .aside {
-  width: 256px;
+  width: 236px;
   flex: none;
   background: var(--chrome);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shell-shadow);
   display: flex;
   flex-direction: column;
   position: sticky;
-  top: 0;
-  height: 100vh;
-  padding: 16px 14px;
+  top: 12px;
+  height: calc(100vh - 24px);
+  padding: 14px 12px;
+  overflow-x: hidden;
   overflow-y: auto;
+  transition: width 0.2s ease;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 6px 18px;
+  padding: 4px 6px 16px;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .brandName {
   font-weight: 700;
   font-size: 15px;
+  white-space: nowrap;
 }
 
 .brandSub {
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
+}
+
+.collapseBtn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+}
+
+.collapseBtn:hover {
+  background: var(--subtle);
+  color: var(--text);
 }
 
 .section {
@@ -42,6 +78,7 @@
   color: var(--faint);
   font-weight: 600;
   padding: 6px 10px;
+  white-space: nowrap;
 }
 
 .rule {
@@ -53,20 +90,22 @@
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .navItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 40px;
-  padding: 0 10px;
-  border-radius: 10px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-2);
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .navItem:hover {
@@ -78,6 +117,13 @@
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-weight: 700;
+}
+
+.navLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .soonBadge {
@@ -102,7 +148,7 @@
   margin-top: auto;
   border: 1px solid var(--accent-border);
   background: var(--accent-softer);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -124,6 +170,7 @@
   border-radius: 50%;
   background: var(--ok);
   animation: pulse 2s infinite;
+  flex: none;
 }
 
 .statusSub {
@@ -146,37 +193,35 @@
   color: var(--danger-text);
 }
 
-/* ---------- هدر ---------- */
+/* ---------- نوار بالا ---------- */
 .main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
 .header {
-  height: 60px;
+  height: 58px;
   flex: none;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 0 28px;
+  padding: 0 18px;
   background: var(--chrome);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shell-shadow);
   position: sticky;
-  top: 0;
+  top: 12px;
   z-index: 5;
 }
 
-.pageTitle {
-  font-size: 16px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 .today {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -257,7 +302,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--danger);
-  border: 2px solid var(--chrome);
+  border: 2px solid var(--surface);
   box-sizing: content-box;
 }
 
@@ -310,7 +355,7 @@
 
 .menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 12px);
   left: 0;
   min-width: 200px;
   background: var(--surface);
@@ -358,11 +403,10 @@
 
 .content {
   animation: pageIn 0.32s ease-out;
-  padding: 24px 28px 40px;
+  padding: 0 0 12px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  max-width: 1640px;
+  gap: 14px;
   width: 100%;
 }
 
@@ -371,14 +415,75 @@
   display: none;
 }
 
+/* ---------- سایدبار جمع‌شده (فقط دسکتاپ): آیکون‌ها بدون متن ---------- */
+@media (min-width: 961px) {
+  .aside[data-collapsed="true"] {
+    width: 76px;
+    padding-inline: 10px;
+  }
+  .aside[data-collapsed="true"] .brand {
+    flex-direction: column;
+    gap: 12px;
+    padding-inline: 0;
+  }
+  .aside[data-collapsed="true"] .brandText,
+  .aside[data-collapsed="true"] .navLabel,
+  .aside[data-collapsed="true"] .soonBadge,
+  .aside[data-collapsed="true"] .sectionText,
+  .aside[data-collapsed="true"] .statusText,
+  .aside[data-collapsed="true"] .statusSub,
+  .aside[data-collapsed="true"] .versionLabel,
+  .aside[data-collapsed="true"] .versionNum {
+    display: none;
+  }
+  .aside[data-collapsed="true"] .navItem {
+    justify-content: center;
+    padding: 0;
+  }
+  .aside[data-collapsed="true"] .countBadge {
+    position: absolute;
+    top: 8px;
+    inset-inline-end: 12px;
+    width: 9px;
+    height: 9px;
+    padding: 0;
+    font-size: 0;
+    border: 2px solid var(--chrome);
+    box-sizing: content-box;
+  }
+  .aside[data-collapsed="true"] .section {
+    padding: 4px 8px;
+  }
+  .aside[data-collapsed="true"] .status {
+    padding: 12px 0;
+    align-items: center;
+  }
+  .aside[data-collapsed="true"] .versionBtn {
+    justify-content: center;
+    padding: 8px 0;
+    position: relative;
+  }
+  .aside[data-collapsed="true"] .updateDot {
+    position: absolute;
+    top: 5px;
+    inset-inline-end: 14px;
+  }
+}
+
 /* ---------- موبایل ---------- */
 @media (max-width: 960px) {
+  .root {
+    padding: 8px;
+    gap: 8px;
+  }
   .aside {
     position: fixed;
-    right: 0;
-    top: 0;
+    right: 8px;
+    top: 8px;
+    bottom: 8px;
+    height: auto;
     z-index: 30;
-    transform: translateX(100%);
+    transform: translateX(calc(100% + 16px));
     transition: transform 0.2s ease;
   }
   .aside[data-open="true"] {
@@ -405,9 +510,14 @@
     cursor: pointer;
     flex: none;
   }
+  .collapseBtn {
+    display: none;
+  }
   .header {
-    padding: 0 16px;
+    padding: 0 12px;
     gap: 10px;
+    top: 8px;
+    border-radius: 14px;
   }
   .today,
   .search,
@@ -415,7 +525,7 @@
     display: none;
   }
   .content {
-    padding: 16px 16px 32px;
+    padding: 0 0 8px;
   }
 }
 
@@ -446,6 +556,13 @@
 .versionBtn:hover {
   background: var(--subtle);
   color: var(--text-2);
+}
+.updateDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex: none;
 }
 .versionNum {
   margin-inline-start: auto;

@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BACKUPS_ROOT=/data/backups \
     SECRETS_DIR=/data/secrets \
     AGENT_TOKEN_FILE=/data/agent/token \
+    CONTROL_TOKEN_FILE=/data/control/token \
     FILE_UPLOAD_TEMP_DIR=/data/releases/.uploads
 
 WORKDIR /app
@@ -17,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY . .
 RUN useradd --uid 1000 --create-home app \
-    && mkdir -p /data/static /data/releases/.uploads /data/secrets /data/agent /data/backups \
+    && mkdir -p /data/static /data/releases/.uploads /data/secrets /data/agent /data/control /data/backups \
     && chown -R app:app /data
 USER app
 

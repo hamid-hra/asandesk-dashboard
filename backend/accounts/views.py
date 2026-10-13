@@ -11,6 +11,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from activity.service import record
+
 from . import recovery, setup
 from .models import Role, User
 from .serializers import UserSerializer
@@ -115,6 +117,7 @@ class RecoveryResetView(APIView):
                 return Response({"detail": self.BAD}, status=status.HTTP_400_BAD_REQUEST)
             user.set_password(password)
             user.save(update_fields=["password"])
+        record("auth.password_reset", "رمز را با کد بازیابی عوض کرد", request=request, user=user)
         # Django ties every session to the password hash, so old sessions of this user end here
         return Response({"ok": True, "remaining": recovery.remaining(user)})
 

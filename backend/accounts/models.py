@@ -10,8 +10,15 @@ class Role(models.TextChoices):
 
 
 # بخش‌های پنل که دسترسی هر کدام جدا تعیین می‌شود
-SECTIONS = ("server", "release", "clients", "tickets", "ads", "announce", "users", "backup", "ha")
+SECTIONS = ("server", "release", "clients", "tickets", "ads", "announce", "users", "backup", "ha", "activity", "system")
 LEVELS = ("none", "view", "edit")
+
+# «system» (به‌روزرسانی پنل و لاگ داکر) فقط مال مالک است و به هیچ نقش یا کاربری داده نمی‌شود.
+OWNER_ONLY = ("system",)
+# «activity» (لاگ فعالیت‌ها) فقط مشاهده دارد؛ «ویرایش» همان «مشاهده» حساب می‌شود.
+VIEW_ONLY = ("activity",)
+# بخش‌هایی که مالک می‌تواند به یک «مدیر» یا «ناظر» جداگانه بدهد، بدون اینکه نقشش «سفارشی» شود.
+EXTRA_SECTIONS = ("activity",)
 
 # دسترسی پیش‌فرض نقش‌ها؛ برای نقش «سفارشی» از فیلد perms خوانده می‌شود
 PRESETS = {
@@ -19,10 +26,12 @@ PRESETS = {
     Role.ADMIN: {
         "server": "edit", "release": "edit", "clients": "edit", "tickets": "edit", "ads": "edit",
         "announce": "edit", "users": "none", "backup": "view", "ha": "view",
+        "activity": "none", "system": "none",
     },
     Role.VIEWER: {
         "server": "view", "release": "view", "clients": "view", "tickets": "view", "ads": "view",
         "announce": "view", "users": "none", "backup": "view", "ha": "view",
+        "activity": "none", "system": "none",
     },
 }
 
@@ -30,7 +39,19 @@ PRESETS = {
 def clean_perms(perms) -> dict:
     """فقط بخش‌ها و سطح‌های شناخته‌شده؛ بقیه «بدون دسترسی»."""
     perms = perms if isinstance(perms, dict) else {}
-    return {k: (perms.get(k) if perms.get(k) in LEVELS else "none") for k in SECTIONS}
+    out = {k: (perms.get(k) if perms.get(k) in LEVELS else "none") for k in SECTIONS}
+    for k in OWNER_ONLY:
+        out[k] = "none"
+    for k in VIEW_ONLY:
+        if out[k] == "edit":
+            out[k] = "view"
+    return out
+
+
+def clean_extras(perms) -> dict:
+    """دسترسی‌های جداگانهٔ یک مدیر/ناظر روی نقشش (فقط EXTRA_SECTIONS و فقط «مشاهده»)."""
+    perms = perms if isinstance(perms, dict) else {}
+    return {k: "view" for k in EXTRA_SECTIONS if perms.get(k) in ("view", "edit")}
 
 
 class UserManager(BaseUserManager):
@@ -48,7 +69,7 @@ class User(AbstractUser):
     """
 
     role = models.CharField("نقش", max_length=16, choices=Role.choices, default=Role.VIEWER)
-    # فقط برای نقش «سفارشی»: {بخش: none|view|edit}
+    # نقش «سفارشی»: {بخش: none|view|edit}. مدیر/ناظر: فقط دسترسی‌های اضافه، مثل {"activity": "view"}
     perms = models.JSONField("دسترسی بخش‌ها", default=dict, blank=True)
 
     objects = UserManager()
@@ -70,7 +91,10 @@ class User(AbstractUser):
             return dict.fromkeys(SECTIONS, "none")
         if self.role == Role.CUSTOM:
             return clean_perms(self.perms)
-        return dict(PRESETS.get(self.role, PRESETS[Role.VIEWER]))
+        perms = dict(PRESETS.get(self.role, PRESETS[Role.VIEWER]))
+        if self.role in (Role.ADMIN, Role.VIEWER):
+            perms.update(clean_extras(self.perms))
+        return perms
 
     def level(self, section: str) -> str:
         return self.resolved_perms().get(section, "none")

@@ -13,6 +13,8 @@ urlpatterns = [
     path("api/settings/", include("accounts.settings_urls")),
     path("api/settings/backups/", include("backups.urls")),
     path("api/settings/ha/", include("ha.urls")),
+    path("api/settings/system/", include("ops.urls")),
+    path("api/settings/", include("activity.urls")),
     path("api/monitoring/", include("monitoring.urls")),
     path("api/agent/ingest", IngestView.as_view()),
     path("api/releases", ReleaseListView.as_view()),

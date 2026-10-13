@@ -1,5 +1,5 @@
 import { toFa } from "./fa";
-import type { Level, Perms } from "./types";
+import type { ChangelogEntry, Level, Perms } from "./types";
 
 export interface UserRow {
   id: number;
@@ -25,7 +25,11 @@ export const SECTIONS: [string, string][] = [
   ["users", "تنظیمات ← کاربران"],
   ["backup", "تنظیمات ← پشتیبان‌گیری"],
   ["ha", "تنظیمات ← HA"],
+  ["activity", "تنظیمات ← لاگ فعالیت"],
 ];
+
+/** سطح‌هایی که یک بخش دارد (پیش‌فرض هر سه). «لاگ فعالیت» فقط مشاهده دارد */
+export const SECTION_LEVELS: Record<string, Level[]> = { activity: ["none", "view"] };
 
 export const LEVELS: [Level, string][] = [
   ["none", "بدون دسترسی"],
@@ -35,9 +39,9 @@ export const LEVELS: [Level, string][] = [
 
 /** باید با PRESETS در backend/accounts/models.py یکی باشد */
 export const PRESET: Record<"owner" | "admin" | "viewer", Perms> = {
-  owner: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "edit", backup: "edit", ha: "edit" },
-  admin: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "none", backup: "view", ha: "view" },
-  viewer: { server: "view", release: "view", clients: "view", tickets: "view", ads: "view", announce: "view", users: "none", backup: "view", ha: "view" },
+  owner: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "edit", backup: "edit", ha: "edit", activity: "edit", system: "edit" },
+  admin: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "none", backup: "view", ha: "view", activity: "none", system: "none" },
+  viewer: { server: "view", release: "view", clients: "view", tickets: "view", ads: "view", announce: "view", users: "none", backup: "view", ha: "view", activity: "none", system: "none" },
 };
 
 export const ROLE_CARDS: { id: "admin" | "viewer" | "custom"; label: string; desc: string }[] = [
@@ -203,4 +207,94 @@ export interface HAOverview {
   total: number;
   ip: string;
   last_failover: HAEventRow | null;
+}
+
+// ---------- لاگ فعالیت ----------
+export interface ActivityRow {
+  id: number;
+  ts: string;
+  username: string;
+  display_name: string;
+  action: string;
+  category: string;
+  text: string;
+  ok: boolean;
+  ip: string;
+}
+export interface ActivityPerson {
+  username: string;
+  display_name: string;
+  count: number;
+  last: string;
+  exists: boolean;
+}
+export interface ActivityPage {
+  rows: ActivityRow[];
+  next: number | null;
+  people?: ActivityPerson[];
+}
+/** برچسب و رنگ هر بخش در لاگ فعالیت: [متن، پس‌زمینه، رنگ متن] */
+export const ACTIVITY_CATEGORY: Record<string, [string, string, string]> = {
+  auth: ["ورود", "var(--info-soft)", "var(--info-text)"],
+  users: ["کاربران", "var(--warn-soft)", "var(--warn-text)"],
+  release: ["نسخه‌ها", "var(--accent-soft)", "var(--accent-strong)"],
+  clients: ["کلاینت‌ها", "var(--info-soft)", "var(--info-text)"],
+  tickets: ["بازخوردها", "var(--beta-soft)", "var(--beta-text)"],
+  backup: ["پشتیبان‌گیری", "var(--subtle)", "var(--text-2)"],
+  ha: ["HA", "var(--beta-soft)", "var(--beta-text)"],
+  server: ["سرور", "var(--subtle)", "var(--text-2)"],
+  system: ["سیستم", "var(--danger-soft)", "var(--danger-text)"],
+  other: ["سایر", "var(--subtle)", "var(--muted)"],
+};
+
+// ---------- به‌روزرسانی پنل و لاگ داکر (فقط مالک) ----------
+export interface UpdateCommit {
+  sha: string;
+  author: string;
+  date: string;
+  subject: string;
+}
+export interface UpdateCheck {
+  checked_at: string;
+  branch: string;
+  behind: number;
+  ahead: number;
+  dirty: boolean;
+  commits: UpdateCommit[];
+  remote_version: string | null;
+  disk_version: string | null;
+  pending_build: boolean;
+  available: boolean;
+  new_entries: ChangelogEntry[];
+}
+export interface UpdateJob {
+  state: "none" | "running" | "ok" | "failed";
+  exit_code?: number | null;
+  started_at?: string;
+  finished_at?: string | null;
+  log?: string;
+}
+export interface UpdateInfo {
+  version: string;
+  control: { online: boolean; error?: string };
+  job: UpdateJob | null;
+  check: UpdateCheck | null;
+  check_error: string;
+}
+export interface DockerService {
+  service: string;
+  container: string;
+  state: string;
+  status: string;
+}
+export interface DockerLogLine {
+  ts: string;
+  stream: "out" | "err";
+  text: string;
+}
+export interface DockerLogs {
+  service: string;
+  container: string;
+  state: string;
+  lines: DockerLogLine[];
 }

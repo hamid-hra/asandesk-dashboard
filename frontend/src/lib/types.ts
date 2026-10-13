@@ -269,3 +269,41 @@ export interface RecoveryStatus {
   remaining: number;
   total: number;
 }
+
+export interface ChartPlatform {
+  platform: string;
+  installs: number;
+  active_30d: number;
+  online: number;
+  new_30d: number;
+  logged: number;
+  on_latest: number;
+  share: number;
+}
+
+export interface ChartVersion {
+  version: string;
+  installs: number;
+  active_30d: number;
+  platforms: Record<string, number>;
+  platforms_active: Record<string, number>;
+  share: number;
+  latest: boolean;
+  old: boolean;
+}
+
+export interface ChartDay {
+  date: string;
+  new: number;
+  total: number;
+  platforms: Record<string, number>;
+}
+
+/** پاسخ /api/clients/charts */
+export interface ClientCharts {
+  latest: string | null;
+  totals: { installs: number; active_30d: number; online: number; new_30d: number; logged: number; on_latest: number; on_latest_share: number | null };
+  platforms: ChartPlatform[];
+  versions: ChartVersion[];
+  daily: ChartDay[];
+}
