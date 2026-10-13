@@ -60,6 +60,8 @@
   --row-new: #f7fcfa;
   --shadow: 0 8px 24px rgba(15, 31, 30, 0.1);
   --shell-shadow: 0 1px 3px rgba(15, 31, 30, 0.06);
+  --scroll-thumb: #c4cfce;
+  --scroll-thumb-hover: #93a7a4;
   --link-hover: #146045;
 }
 
@@ -117,6 +119,8 @@
   --row-new: #15211c;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   --shell-shadow: none;
+  --scroll-thumb: #3a3f3d;
+  --scroll-thumb-hover: #5a6360;
   --link-hover: #5fd6a9;
 }
 
@@ -264,4 +268,35 @@ a:focus-visible {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* ---------- اسکرول‌بار: باریک، گرد و هم‌رنگ تم ---------- */
+@supports selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+  }
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+    background-clip: content-box;
+  }
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
 }

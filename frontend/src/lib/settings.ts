@@ -29,6 +29,12 @@ export const SECTIONS: [string, string][] = [
   ["activity", "تنظیمات ← لاگ فعالیت"],
 ];
 
+/** توضیح زیر نام بخش در ماتریس دسترسی، جایی که «مشاهده» و «ویرایش» معنای ویژه‌ای دارند */
+export const SECTION_HINT: Record<string, string> = {
+  backup: "«مشاهده» فقط فهرست را نشان می‌دهد؛ دانلود، ساخت و بازگردانی پشتیبان «ویرایش» می‌خواهد (پشتیبان = کپی کل دیتابیس)",
+  users: "«مشاهده» فهرست کاربران؛ ساخت، تغییر رمز و حذف «ویرایش» می‌خواهد",
+};
+
 /** سطح‌هایی که یک بخش دارد (پیش‌فرض هر سه). «لاگ فعالیت» فقط مشاهده دارد */
 export const SECTION_LEVELS: Record<string, Level[]> = { activity: ["none", "view"] };
 
@@ -41,7 +47,7 @@ export const LEVELS: [Level, string][] = [
 /** باید با PRESETS در backend/accounts/models.py یکی باشد */
 export const PRESET: Record<"owner" | "admin" | "viewer", Perms> = {
   owner: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "edit", backup: "edit", ha: "edit", activity: "edit", system: "edit" },
-  admin: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "none", backup: "view", ha: "view", activity: "none", system: "none" },
+  admin: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "none", backup: "none", ha: "none", activity: "none", system: "none" },
   viewer: { server: "view", release: "view", clients: "view", tickets: "view", ads: "view", announce: "view", users: "none", backup: "view", ha: "view", activity: "none", system: "none" },
 };
 
@@ -122,10 +128,27 @@ export function randomPassword(len = 16): string {
   return chars.join("");
 }
 
+/** کپی در کلیپ‌بورد. روی http (مثل http://IP:پورت) مرورگر navigator.clipboard را نمی‌دهد، پس راه قدیمی execCommand هم امتحان می‌شود. */
 export async function copyText(text: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
-    return true;
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // به راه قدیمی می‌رویم
+  }
+  try {
+    const box = document.createElement("textarea");
+    box.value = text;
+    box.setAttribute("readonly", "");
+    box.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(box);
+    box.select();
+    box.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    document.body.removeChild(box);
+    return ok;
   } catch {
     return false;
   }

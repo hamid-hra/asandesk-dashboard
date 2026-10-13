@@ -58,6 +58,8 @@
 /* ---------- منو ---------- */
 .menuWrap { position: relative; display: inline-flex; }
 .menu { position: absolute; inset-inline-start: 0; top: calc(100% + 4px); z-index: 30; min-width: 210px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+/* منو در body و با موقعیت ثابت باز می‌شود (Menu در ui.tsx) تا هیچ کادری آن را نبُرد */
+.menu[data-float] { position: fixed; inset-inline-start: auto; inset-inline-end: auto; z-index: 70; }
 .menu button { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font-size: 13px; cursor: pointer; text-align: start; }
 .menu button:hover:not(:disabled) { background: var(--subtle); }
 .menu button[data-danger="true"] { color: var(--danger-text); }
@@ -117,6 +119,8 @@
 .matrixHead small { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-weight: 400; }
 .mRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--divider); font-size: 13px; flex-wrap: wrap; }
 .mRow:last-child { border-bottom: 0; }
+.mLabel { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
+.mLabel small { color: var(--faint); font-size: 11.5px; line-height: 1.7; }
 .tri { display: inline-flex; padding: 2px; background: var(--seg-track); border-radius: 8px; gap: 2px; }
 .tri button { height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; white-space: nowrap; }
 .tri button[aria-pressed="true"] { background: var(--seg-on); color: var(--text); font-weight: 700; box-shadow: var(--seg-shadow); }

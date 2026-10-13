@@ -113,7 +113,13 @@ def self_info() -> dict:
 # ---------------------------------------------------------------- git (in helper containers)
 
 def git_prefix() -> str:
-    args = ["git", "-c", "safe.directory=*"]
+    args = [
+        "git", "-c", "safe.directory=*",
+        # The server's clone often has an SSH remote (git@github.com:owner/repo.git), but the helper
+        # container has neither ssh nor keys. The repository is public, so GitHub is fetched over https.
+        "-c", "url.https://github.com/.insteadOf=git@github.com:",
+        "-c", "url.https://github.com/.insteadOf=ssh://git@github.com/",
+    ]
     if PROXY:
         args += ["-c", f"http.proxy={PROXY}"]
     return shlex.join(args)
@@ -185,7 +191,11 @@ def build_check(sections: dict[str, str]) -> dict:
     fetch = sections.get("fetch", "")
     if not fetch.rstrip().endswith("rc=0"):
         reason = clean(fetch).replace("rc=", "").strip().splitlines()
-        raise ApiError("گرفتن تغییرات از GitHub نشد: " + (" ".join(reason[-3:])[:300] or "بدون پیام") + " (اگر سرور به GitHub مستقیم نمی‌رسد، GIT_PROXY را در .env بگذارید.)")
+        detail = " ".join(reason[-3:])[:300] or "بدون پیام"
+        hint = " (اگر سرور به GitHub مستقیم نمی‌رسد، GIT_PROXY را در .env بگذارید.)"
+        if "Permission denied" in detail or "Authentication failed" in detail or "could not read Username" in detail:
+            hint = " (مخزن خصوصی است؟ این بخش فقط مخزن عمومی را بدون رمز می‌گیرد؛ آدرس origin را با توکن در خودش بگذارید.)"
+        raise ApiError("گرفتن تغییرات از GitHub نشد: " + detail + hint)
     m = re.fullmatch(r"(\d+)\s+(\d+)", sections.get("counts", "").strip())
     if not m:
         raise ApiError(f"شاخهٔ origin/{branch} پیدا نشد.")

@@ -16,7 +16,7 @@ export interface Tab {
   label: string;
   icon: string;
   soon?: string;
-  /** بخش(های) دسترسی لازم برای دیدن تب (هرکدام «مشاهده» یا بیشتر کافی است) */
+  /** بخش(های) دسترسی لازم برای دیدن تب (هرکدام «مشاهده» یا بیشتر کافی است). خالی = همهٔ واردشده‌ها */
   sections: string[];
 }
 
@@ -39,7 +39,7 @@ export const TABS: Tab[] = [
     sections: ["announce"],
     soon: "ارسال پیام و اطلاعیه به همه کاربران یا گروه‌های مشخص، درون اپ و از طریق اعلان.",
   },
-  { href: "/settings", label: "تنظیمات", icon: ICONS.settings, sections: ["users", "backup", "ha", "activity", "system"] },
+  { href: "/settings", label: "تنظیمات", icon: ICONS.settings, sections: [] },
 ];
 
 export const tabFor = (pathname: string) => TABS.find((t) => pathname.startsWith(t.href));
@@ -49,4 +49,4 @@ export const levelOf = (perms: Record<string, string> | undefined, section: stri
 
 /** آیا کاربر به این تب دسترسی دارد؟ */
 export const canSee = (tab: Tab, perms: Record<string, string> | undefined) =>
-  tab.sections.some((sec) => levelOf(perms, sec) !== "none");
+  tab.sections.length === 0 || tab.sections.some((sec) => levelOf(perms, sec) !== "none");

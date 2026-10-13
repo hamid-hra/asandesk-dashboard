@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { KpiStrip } from "@/components/clients/KpiStrip";
+import { errText } from "@/components/settings/ui";
 import { PALETTE, platformColor } from "@/lib/chart";
 import { fmt, pctText, toFa } from "@/lib/fa";
 import type { ChartPlatform, ClientCharts } from "@/lib/types";
@@ -42,7 +43,7 @@ function ChartCard({ title, sub, actions, children, grow }: { title: string; sub
 }
 
 /** نمای «نمودارها» در تب کلاینت‌ها: نصب‌ها بر اساس نسخه و پلتفرم، روند نصب و سهم آخرین نسخه. */
-export function ClientChartsView({ data }: { data: ClientCharts | undefined }) {
+export function ClientChartsView({ data, error, onRetry }: { data: ClientCharts | undefined; error?: unknown; onRetry?: () => void }) {
   const [scope, setScope] = useState<"installs" | "active_30d">("installs");
 
   const versionItems = useMemo<RadialItem[]>(() => {
@@ -77,6 +78,20 @@ export function ClientChartsView({ data }: { data: ClientCharts | undefined }) {
     }));
   }, [data]);
 
+  if (!data && error) {
+    return (
+      <div className={`card ${s.loading}`}>
+        نمودارها بارگذاری نشد: {errText(error, "پاسخی از سرور نیامد.")}
+        {onRetry && (
+          <div style={{ marginTop: 12 }}>
+            <button className="seg-retry" onClick={onRetry} style={{ height: 34, padding: "0 16px", border: "1px solid var(--input-border)", borderRadius: 10, background: "var(--surface)", color: "var(--text-2)", cursor: "pointer" }}>
+              تلاش دوباره
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
   if (!data) return <div className={`card ${s.loading}`}>در حال بارگذاری نمودارها…</div>;
   const t = data.totals;
   if (t.installs === 0) {

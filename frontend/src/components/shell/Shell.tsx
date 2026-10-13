@@ -13,7 +13,7 @@ import { dfToday, pctText, toFa } from "@/lib/fa";
 import { canSee, TABS, tabFor } from "@/lib/nav";
 import type { RecoveryStatus, Status } from "@/lib/types";
 
-import { RECOVERY_KEY, RecoveryDialog } from "./RecoveryDialog";
+import { RECOVERY_KEY } from "./RecoveryDialog";
 import { ThemeToggle } from "./ThemeToggle";
 import { VersionBadge } from "./VersionBadge";
 import s from "./Shell.module.css";
@@ -65,7 +65,6 @@ function StatusBox() {
 function UserMenu() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
-  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const { data: recovery } = useSWR<RecoveryStatus>(RECOVERY_KEY, fetcher);
   const noCodes = recovery?.remaining === 0;
   const ref = useRef<HTMLDivElement>(null);
@@ -79,7 +78,7 @@ function UserMenu() {
   }, [open]);
   return (
     <div className={s.userWrap} ref={ref}>
-      <button className={s.user} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu">
+      <button className={s.user} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu" title={noCodes ? "کد بازیابی ندارید؛ از تنظیمات ← حساب من بسازید" : undefined}>
         <div className={s.avatar}>
           {user.display_name.trim().charAt(0).toUpperCase() || "م"}
           {noCodes && <span className={s.avatarDot} />}
@@ -91,30 +90,11 @@ function UserMenu() {
       </button>
       {open && (
         <div className={s.menu} role="menu">
-          <div className={s.menuHead}>نقش: {user.role_label}</div>
-          {user.role === "owner" && (
-            <a className={s.menuItem} href="/admin/accounts/user/" target="_blank" rel="noreferrer" role="menuitem">
-              مدیریت کاربران و نقش‌ها
-            </a>
-          )}
-          <button
-            className={s.menuItem}
-            onClick={() => {
-              setOpen(false);
-              setRecoveryOpen(true);
-            }}
-            role="menuitem"
-            title={noCodes ? "برای فراموشی رمز کد بازیابی بسازید" : undefined}
-          >
-            کدهای بازیابی رمز
-            {noCodes && <span className={s.menuDot} />}
-          </button>
           <button className={s.menuItem} onClick={logout} role="menuitem">
             خروج
           </button>
         </div>
       )}
-      {recoveryOpen && <RecoveryDialog onClose={() => setRecoveryOpen(false)} />}
     </div>
   );
 }

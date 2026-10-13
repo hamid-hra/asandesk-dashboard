@@ -128,7 +128,7 @@ export function BackupTab({ canEdit }: { canEdit: boolean }) {
             <div className={s.muted}>{b.ok ? (b.include_files ? "دیتابیس + فایل‌ها" : "دیتابیس") : "—"}</div>
             <div className={s.status} title={b.error}><span className="dot" style={{ background: b.ok ? "var(--ok)" : "var(--danger)" }} />{b.ok ? "موفق" : "ناموفق"}</div>
             <div className={s.acts}>
-              <a className={s.iconBtn} href={b.ok ? `/api/settings/backups/${b.id}/download` : undefined} aria-disabled={!b.ok} title="دانلود" aria-label="دانلود" style={b.ok ? undefined : { opacity: 0.4, pointerEvents: "none" }}><Icon d={I.download} size={16} /></a>
+              <a className={s.iconBtn} href={b.ok && canEdit ? `/api/settings/backups/${b.id}/download` : undefined} aria-disabled={!b.ok || !canEdit} title={canEdit ? "دانلود" : "دانلود پشتیبان نیاز به دسترسی ویرایش دارد"} aria-label="دانلود" style={b.ok && canEdit ? undefined : { opacity: 0.4, pointerEvents: "none" }}><Icon d={I.download} size={16} /></a>
               <button className={s.iconBtn} onClick={() => setRestore(b)} disabled={!canEdit || !b.ok || active} title={canEdit ? "بازگردانی" : RO_TIP} aria-label="بازگردانی"><Icon d={I.restore} size={16} /></button>
               <button className={s.iconBtn} data-danger="true" onClick={() => setDel(b)} disabled={!canEdit} title={canEdit ? "حذف" : RO_TIP} aria-label="حذف"><Icon d={I.trash} size={16} /></button>
             </div>

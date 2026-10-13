@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
+import { AccountTab } from "@/components/settings/AccountTab";
 import { ActivityTab } from "@/components/settings/ActivityTab";
 import { BackupTab } from "@/components/settings/BackupTab";
 import { DockerLogsTab } from "@/components/settings/DockerLogsTab";
@@ -24,16 +25,18 @@ const SUB = [
   { id: "activity", section: "activity", label: "لاگ فعالیت‌ها", icon: I.activity, readOnlyTab: true },
   { id: "update", section: "system", label: "به‌روزرسانی پنل", icon: I.cloud, readOnlyTab: true },
   { id: "logs", section: "system", label: "لاگ داکر", icon: I.terminal, readOnlyTab: true },
+  // بدون بخش دسترسی: هر کاربر رمز و کدهای بازیابی خودش را این‌جا مدیریت می‌کند
+  { id: "account", section: null, label: "حساب من", icon: I.key, readOnlyTab: true },
 ] as const;
 
 function SettingsInner() {
   const { user } = useAuth();
   const router = useRouter();
   const param = useSearchParams().get("tab");
-  const tabs = SUB.filter((t) => levelOf(user.perms, t.section) !== "none");
+  const tabs = SUB.filter((t) => t.section === null || levelOf(user.perms, t.section) !== "none");
   const active = tabs.find((t) => t.id === param) ?? tabs[0];
   const current = active?.id;
-  const canEdit = active ? levelOf(user.perms, active.section) === "edit" : false;
+  const canEdit = active ? active.section === null || levelOf(user.perms, active.section) === "edit" : false;
   const readOnlyTab = !!active && "readOnlyTab" in active;
   void RO_TIP;
 
@@ -41,7 +44,7 @@ function SettingsInner() {
     <div className={s.page}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <div className={s.title}>تنظیمات</div>
-        <div className={s.subtitle}>کاربران پنل، پشتیبان‌گیری، افزونگی سرور، لاگ فعالیت‌ها و به‌روزرسانی پنل</div>
+        <div className={s.subtitle}>کاربران پنل، پشتیبان‌گیری، افزونگی سرور، لاگ فعالیت‌ها، به‌روزرسانی پنل و حساب خودتان</div>
       </div>
       <div className={s.subtabs} role="tablist">
         {tabs.map((t) => (
@@ -63,6 +66,7 @@ function SettingsInner() {
       {current === "activity" && <ActivityTab />}
       {current === "update" && <UpdateTab />}
       {current === "logs" && <DockerLogsTab />}
+      {current === "account" && <AccountTab />}
     </div>
   );
 }

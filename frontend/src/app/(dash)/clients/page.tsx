@@ -51,7 +51,7 @@ function ClientsInner() {
 
   const query = new URLSearchParams({ filter, sort, q });
   const { data: list, mutate } = useSWR<ClientList>(view === "list" ? `/api/clients?${query}` : null, fetcher, { refreshInterval: 30000, keepPreviousData: true });
-  const { data: charts } = useSWR<ClientCharts>(view === "charts" ? "/api/clients/charts" : null, fetcher, { refreshInterval: 60000 });
+  const { data: charts, error: chartsError, mutate: reloadCharts } = useSWR<ClientCharts>(view === "charts" ? "/api/clients/charts" : null, fetcher, { refreshInterval: 60000 });
   const { data: st, mutate: mutateStats } = useSWR<ClientStats>("/api/clients/stats", fetcher, { refreshInterval: 30000 });
 
   const setView = (v: View) => router.replace(v === "charts" ? `${pathname}?view=charts` : pathname, { scroll: false });
@@ -86,7 +86,7 @@ function ClientsInner() {
         <span style={{ flex: 1 }} />
         <Seg options={VIEWS} value={view} onChange={setView} />
       </div>
-      {view === "charts" && <ClientChartsView data={charts} />}
+      {view === "charts" && <ClientChartsView data={charts} error={chartsError} onRetry={() => reloadCharts()} />}
       {view === "list" && <KpiStrip items={kpis} />}
       {view === "list" && <div className={s.split}>
         <div className={`card ${s.listCard}`}>

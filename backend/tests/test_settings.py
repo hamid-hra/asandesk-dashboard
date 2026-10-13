@@ -35,11 +35,14 @@ def test_section_permissions_apply_per_role():
     assert owner.get("/api/settings/users").status_code == 200
     admin, _ = as_user(Role.ADMIN, username="a")
     assert admin.get("/api/settings/users").status_code == 403  # users: none
-    assert admin.get("/api/settings/backups/").status_code == 200  # backup: view
+    assert admin.get("/api/settings/backups/").status_code == 403  # backup: none (a backup is the whole database)
+    assert admin.get("/api/settings/ha/").status_code == 403
     assert admin.post("/api/settings/backups/run", {}, format="json").status_code == 403
     viewer, _ = as_user(Role.VIEWER, username="v")
     assert viewer.get("/api/monitoring/overview").status_code == 200
     assert viewer.post("/api/monitoring/alerts/ack-all").status_code == 403
+    assert viewer.get("/api/settings/backups/").status_code == 403
+    assert viewer.get("/api/settings/ha/").status_code == 403
 
 
 @pytest.mark.django_db
@@ -207,7 +210,9 @@ def test_ha_validation_promote_and_viewer_readonly():
     assert c.post(f"/api/settings/ha/servers/{b}/promote").status_code == 200
     assert HAServer.objects.get(pk=b).role == "primary" and HAServer.objects.get(pk=a).role == "backup"
     assert c.patch("/api/settings/ha/config", {"interval": 0}, format="json").status_code == 400
-    viewer, _ = as_user(Role.VIEWER, username="v")
+    preset_viewer, _ = as_user(Role.VIEWER, username="v0")
+    assert preset_viewer.get("/api/settings/ha/").status_code == 403  # the plain viewer role has no HA access
+    viewer, _ = as_user(Role.CUSTOM, {"ha": "view"}, username="v")
     assert viewer.get("/api/settings/ha/").status_code == 200
     assert viewer.post(f"/api/settings/ha/servers/{a}/promote").status_code == 403
     assert a
@@ -219,3 +224,30 @@ def test_agentless_ha_server_does_not_count_as_down(monkeypatch):
     c, _ = as_user(Role.OWNER, username="boss")
     c.post("/api/settings/ha/servers", {"name": "t1", "address": "10.0.0.1", "role": "primary"}, format="json")
     assert stats.live_snapshot()["total"] == 0  # هنوز agent گزارش نداده
+
+
+@pytest.mark.django_db
+def test_a_backup_can_only_be_downloaded_with_edit_access():
+    from datetime import timedelta
+
+    root = service.root()
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "b1.adbk").write_bytes(b"whole-database")
+    b = Backup.objects.create(kind="manual", created_at=timezone.now() - timedelta(hours=1), filename="b1.adbk", size=14)
+    url = f"/api/settings/backups/{b.pk}/download"
+
+    for role in (Role.ADMIN, Role.VIEWER):  # the roles have no backup access at all
+        c, _ = as_user(role, username=f"r-{role}")
+        assert c.get("/api/settings/backups/").status_code == 403
+        assert c.get(url).status_code == 403
+
+    viewer, _ = as_user(Role.CUSTOM, {"backup": "view"}, username="reader")
+    assert viewer.get("/api/settings/backups/").status_code == 200  # may see the list ...
+    r = viewer.get(url)
+    assert r.status_code == 403 and "ویرایش" in r.json()["detail"]  # ... but not take the data
+
+    editor, _ = as_user(Role.CUSTOM, {"backup": "edit"}, username="keeper")
+    r = editor.get(url)
+    assert r.status_code == 200 and b"".join(r.streaming_content) == b"whole-database"
+    owner, _ = as_user(Role.OWNER, username="boss")
+    assert owner.get(url).status_code == 200

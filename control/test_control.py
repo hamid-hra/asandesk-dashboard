@@ -122,6 +122,20 @@ def test_the_check_script_uses_the_proxy_only_when_one_is_set(monkeypatch):
     assert "'safe.directory=*'" in control.check_script()  # quoted: the star must not be expanded by the shell
 
 
+def test_ssh_remotes_of_github_are_fetched_over_https():
+    # the helper container has no ssh and no keys: the real server failed with "cannot run ssh"
+    for script in (control.check_script(), control.job_script("main", INFO)):
+        assert "url.https://github.com/.insteadOf=git@github.com:" in script
+        assert "url.https://github.com/.insteadOf=ssh://git@github.com/" in script
+
+
+def test_a_private_repository_gets_a_clear_message():
+    out = CHECK_OUTPUT.replace("From https://github.com/x/y\nrc=0", "git@github.com: Permission denied (publickey).\nrc=128")
+    with pytest.raises(control.ApiError) as e:
+        control.build_check(control.parse_sections(out))
+    assert "خصوصی" in e.value.message
+
+
 # ---------------------------------------------------------------- update job
 
 def test_the_job_script_quotes_everything_it_is_given():

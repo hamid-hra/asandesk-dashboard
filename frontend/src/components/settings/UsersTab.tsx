@@ -7,10 +7,11 @@ import { Icon } from "@/components/Icon";
 import { api, fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { avatarOf, initialOf } from "@/lib/people";
-import { agoText, downloadTextFile, jDate, LEVELS, loginFileText, PRESET, randomPassword, RO_TIP, ROLE_CARDS, ROLE_TONE, SECTION_LEVELS, SECTIONS, copyText, strength, STRENGTH, type UserRow } from "@/lib/settings";
+import { agoText, downloadTextFile, jDate, LEVELS, loginFileText, PRESET, randomPassword, RO_TIP, ROLE_CARDS, ROLE_TONE, SECTION_HINT, SECTION_LEVELS, SECTIONS, copyText, type UserRow } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 import type { Level, Perms } from "@/lib/types";
 
+import { StrengthMeter } from "./PasswordTools";
 import s from "./settings.module.css";
 import { Empty, ErrorState, errText, fieldErrors, I, Menu, Modal, Skeleton, Switch } from "./ui";
 
@@ -198,7 +199,6 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
   const showIdentity = mode !== "password";
   const showRoles = mode !== "password" && !owner;
   const showMatrix = showRoles;
-  const st = strength(pw);
   const effective: Perms = role === "custom" ? perms : { ...PRESET[role], activity: seeLog ? "view" : "none" };
   const extraPerms = role === "custom" ? perms : { activity: seeLog ? "view" : "none" };
   // مدیر غیرمالک نمی‌تواند بیش از دسترسی خودش بدهد
@@ -289,12 +289,9 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
             <div className={s.pwRow}>
               <input className={s.input} dir="ltr" type={show ? "text" : "password"} value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" />
               <button type="button" className={s.btnGhost} style={{ padding: "0 10px" }} onClick={() => setShow(!show)} title="نمایش رمز" aria-label="نمایش رمز"><Icon d={I.eye} size={16} /></button>
-              <button type="button" className={s.btnGhost} style={{ padding: "0 10px" }} onClick={async () => (await copyText(pw)) && flash("رمز کپی شد")} title="کپی رمز" aria-label="کپی رمز" disabled={!pw}><Icon d={I.copy} size={16} /></button>
+              <button type="button" className={s.btnGhost} style={{ padding: "0 10px" }} onClick={async () => flash((await copyText(pw)) ? "رمز کپی شد" : "کپی نشد؛ رمز را با دست انتخاب و کپی کنید")} title="کپی رمز" aria-label="کپی رمز" disabled={!pw}><Icon d={I.copy} size={16} /></button>
             </div>
-            <div className={s.meter}>
-              <div dir="ltr">{[1, 2, 3, 4].map((i) => <i key={i} style={{ background: i <= st ? STRENGTH[st][1] : undefined }} />)}</div>
-              <span style={{ color: STRENGTH[st][1], fontSize: 12, minWidth: 40 }}>{STRENGTH[st][0]}</span>
-            </div>
+            <StrengthMeter pw={pw} />
             <button type="button" className={s.linkBtn} onClick={() => { const p = randomPassword(); setPw(p); setPw2(p); setShow(true); }}>
               <Icon d={I.refresh} size={14} /> ساخت رمز تصادفی
             </button>
@@ -364,7 +361,10 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
           </div>
           {SECTIONS.map(([key, label]) => (
             <div key={key} className={s.mRow}>
-              <span>{label}</span>
+              <span className={s.mLabel}>
+                {label}
+                {SECTION_HINT[key] && <small>{SECTION_HINT[key]}</small>}
+              </span>
               <div className={s.tri} data-locked={role !== "custom"}>
                 {LEVELS.map(([lv, lvLabel], i) => (SECTION_LEVELS[key] && !SECTION_LEVELS[key].includes(lv) ? null : (
                   <button

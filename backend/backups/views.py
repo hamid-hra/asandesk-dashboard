@@ -163,7 +163,11 @@ class BackupDetailView(APIView):
 
 
 class DownloadView(APIView):
+    """A backup file is a copy of the whole database (accounts, hashes, secrets), so «view» is not enough."""
+
     def get(self, request, pk):
+        if request.user.level("backup") != "edit":
+            return Response({"detail": "دانلود پشتیبان نیاز به دسترسی «ویرایش» دارد."}, status=status.HTTP_403_FORBIDDEN)
         b = get_object_or_404(Backup, pk=pk)
         path = service.root() / b.filename if b.filename else None
         if not path or not path.is_file():

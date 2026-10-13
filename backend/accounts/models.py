@@ -20,17 +20,19 @@ VIEW_ONLY = ("activity",)
 # بخش‌هایی که مالک می‌تواند به یک «مدیر» یا «ناظر» جداگانه بدهد، بدون اینکه نقشش «سفارشی» شود.
 EXTRA_SECTIONS = ("activity",)
 
-# دسترسی پیش‌فرض نقش‌ها؛ برای نقش «سفارشی» از فیلد perms خوانده می‌شود
+# دسترسی پیش‌فرض نقش‌ها؛ برای نقش «سفارشی» از فیلد perms خوانده می‌شود.
+# بخش‌های حساس (کاربران، پشتیبان‌گیری، HA، لاگ فعالیت، سیستم) برای مدیر و ناظر «بدون دسترسی» است:
+# یک پشتیبان یعنی کپی کل دیتابیس. مالک می‌تواند با نقش «سفارشی» به کسی بدهد.
 PRESETS = {
     Role.OWNER: dict.fromkeys(SECTIONS, "edit"),
     Role.ADMIN: {
         "server": "edit", "release": "edit", "clients": "edit", "tickets": "edit", "ads": "edit",
-        "announce": "edit", "users": "none", "backup": "view", "ha": "view",
+        "announce": "edit", "users": "none", "backup": "none", "ha": "none",
         "activity": "none", "system": "none",
     },
     Role.VIEWER: {
         "server": "view", "release": "view", "clients": "view", "tickets": "view", "ads": "view",
-        "announce": "view", "users": "none", "backup": "view", "ha": "view",
+        "announce": "view", "users": "none", "backup": "none", "ha": "none",
         "activity": "none", "system": "none",
     },
 }

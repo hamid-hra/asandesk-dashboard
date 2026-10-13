@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Icon } from "@/components/Icon";
 import { ApiError, firstError } from "@/lib/api";
@@ -106,55 +107,79 @@ export function Stepper({ value, min, max, onChange, disabled, unit }: { value: 
 }
 
 export function Menu({ items, disabled, tip }: { items: { label: string; icon: string; onClick: () => void; danger?: boolean; disabled?: boolean; tip?: string }[]; disabled?: boolean; tip?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useOpen(ref);
-  return (
-    <div className={s.menuWrap} ref={ref}>
-      <button className={s.iconBtn} onClick={() => setOpen(!open)} disabled={disabled} title={disabled ? tip : "عملیات"} aria-label="عملیات" aria-haspopup="menu" aria-expanded={open}>
-        <Icon d={I.more} size={18} stroke={2.4} />
-      </button>
-      {open && (
-        <div className={s.menu} role="menu">
-          {items.map((m) => (
-            <button
-              key={m.label}
-              role="menuitem"
-              disabled={m.disabled}
-              title={m.tip}
-              data-danger={m.danger}
-              onClick={() => {
-                setOpen(false);
-                m.onClick();
-              }}
-            >
-              <Icon d={m.icon} size={15} />
-              <span>{m.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-import { useState } from "react";
-
-function useOpen(ref: React.RefObject<HTMLElement | null>): [boolean, (v: boolean) => void] {
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+
+  // The menu lives in <body> with a fixed position, so no card or table can clip it. It sits under its
+  // button (right edges together, as the page is RTL) and flips sideways/upwards when it would leave the screen.
+  useLayoutEffect(() => {
+    const btn = button.current;
+    const box = panel.current;
+    if (!open || !btn || !box) return;
+    const r = btn.getBoundingClientRect();
+    const w = box.offsetWidth;
+    const h = box.offsetHeight;
+    const pad = 8;
+    let left = r.right - w;
+    if (left < pad) left = r.left;
+    left = Math.max(pad, Math.min(left, window.innerWidth - w - pad));
+    let top = r.bottom + 6;
+    if (top + h > window.innerHeight - pad) top = Math.max(pad, r.top - h - 6);
+    box.style.left = `${left}px`;
+    box.style.top = `${top}px`;
+    box.style.visibility = "visible";
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const close = () => setOpen(false);
+    const away = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!panel.current?.contains(t) && !button.current?.contains(t)) setOpen(false);
     };
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", close);
+    document.addEventListener("mousedown", away);
     document.addEventListener("keydown", esc);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
     return () => {
-      document.removeEventListener("mousedown", close);
+      document.removeEventListener("mousedown", away);
       document.removeEventListener("keydown", esc);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
     };
-  }, [open, ref]);
-  return [open, setOpen];
+  }, [open]);
+
+  return (
+    <div className={s.menuWrap}>
+      <button ref={button} className={s.iconBtn} onClick={() => setOpen(!open)} disabled={disabled} title={disabled ? tip : "عملیات"} aria-label="عملیات" aria-haspopup="menu" aria-expanded={open}>
+        <Icon d={I.more} size={18} stroke={2.4} />
+      </button>
+      {open &&
+        createPortal(
+          <div className={s.menu} data-float ref={panel} role="menu" style={{ visibility: "hidden", top: 0, left: 0 }}>
+            {items.map((m) => (
+              <button
+                key={m.label}
+                role="menuitem"
+                disabled={m.disabled}
+                title={m.tip}
+                data-danger={m.danger}
+                onClick={() => {
+                  setOpen(false);
+                  m.onClick();
+                }}
+              >
+                <Icon d={m.icon} size={15} />
+                <span>{m.label}</span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
 }
 
 export function Skeleton({ rows = 5 }: { rows?: number }) {
