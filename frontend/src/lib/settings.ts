@@ -13,6 +13,7 @@ export interface UserRow {
   perms: Perms | null;
   me: boolean;
   locked: boolean;
+  must_change_password: boolean;
 }
 
 export const SECTIONS: [string, string][] = [
@@ -297,4 +298,42 @@ export interface DockerLogs {
   container: string;
   state: string;
   lines: DockerLogLine[];
+}
+
+// ---------- فایل «اطلاعات ورود» کاربر تازه ----------
+/** متن فایلی که مالک برای کاربر تازه می‌فرستد؛ فقط در مرورگر ساخته می‌شود و جایی ذخیره نمی‌شود */
+export function loginFileText(p: { url: string; username: string; password: string; name: string; hasKey: boolean }): string {
+  const lines = [
+    "آسان‌دسک — اطلاعات ورود به پنل",
+    "================================",
+    "",
+    `سلام ${p.name}،`,
+    "حساب شما در پنل آسان‌دسک ساخته شد.",
+    "",
+    `آدرس پنل: ${p.url}`,
+    `نام کاربری: ${p.username}`,
+    `رمز عبور موقت: ${p.password}`,
+    "",
+    "طرز ورود:",
+    "۱) آدرس بالا را در مرورگر باز کنید.",
+    "۲) با نام کاربری و رمز موقت وارد شوید.",
+    "۳) پنل از شما یک رمز عبور تازه می‌خواهد؛ رمزی قوی بگذارید.",
+    "۴) بعدش «کدهای بازیابی» را می‌بینید؛ فایلشان را دانلود کنید و نگه دارید (برای وقتی که رمز را فراموش کردید).",
+    "",
+    "نکته‌ها:",
+    "- رمز بالا فقط برای اولین ورود است و بعد از آن دیگر کار نمی‌کند.",
+    "- بعد از ورود، این فایل را پاک کنید و برای کسی نفرستید.",
+  ];
+  if (p.hasKey) lines.push("- آدرس بالا یک کلید دسترسی دارد (بخش آخرش). فقط بار اول لازم است؛ آن را با کسی در میان نگذارید.");
+  // BOM: نوت‌پد قدیمی هم فارسی را درست نشان بدهد؛ CRLF: همان‌طور که ویندوز انتظار دارد
+  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+
+export function downloadTextFile(filename: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

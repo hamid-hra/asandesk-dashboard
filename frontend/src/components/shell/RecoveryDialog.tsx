@@ -3,16 +3,15 @@
 import { useState } from "react";
 import useSWR, { mutate } from "swr";
 
-import { Icon } from "@/components/Icon";
-import { errText, I, Modal } from "@/components/settings/ui";
+import { errText, Modal } from "@/components/settings/ui";
 import st from "@/components/settings/settings.module.css";
 import { api, fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toFa } from "@/lib/fa";
-import { copyText } from "@/lib/settings";
 import type { RecoveryStatus } from "@/lib/types";
 
 import s from "./Recovery.module.css";
+import { RecoveryCodes } from "./RecoveryCodes";
 
 export const RECOVERY_KEY = "/api/auth/recovery";
 
@@ -24,7 +23,6 @@ export function RecoveryDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const generate = async () => {
     if (!password) return setError("رمز عبور فعلی را وارد کنید.");
@@ -42,32 +40,6 @@ export function RecoveryDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const copyAll = async () => {
-    if (codes && (await copyText(codes.join("\n")))) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const download = () => {
-    if (!codes) return;
-    const text = [
-      "AsanDesk panel recovery codes",
-      `user: ${user.username}`,
-      `date: ${new Date().toISOString().slice(0, 10)}`,
-      "",
-      ...codes,
-      "",
-      "Each code works once. Keep this file somewhere safe.",
-    ].join("\n");
-    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "asandesk-recovery-codes.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   if (codes) {
     return (
       <Modal
@@ -80,27 +52,7 @@ export function RecoveryDialog({ onClose }: { onClose: () => void }) {
           </button>
         }
       >
-        <div className={st.note} data-tone="warn">
-          <span>
-            <b>این کدها فقط همین یک بار نشان داده می‌شوند.</b>
-            آن‌ها را جای امن نگه دارید، مثلاً در مدیر رمز یا روی کاغذ. هر کد فقط یک بار کار می‌کند.
-          </span>
-        </div>
-        <div className={s.codes}>
-          {codes.map((c) => (
-            <div key={c} className={s.code}>
-              {c}
-            </div>
-          ))}
-        </div>
-        <div className={s.tools}>
-          <button className={st.btnGhost} onClick={copyAll}>
-            <Icon d={copied ? I.check : I.copy} size={16} /> {copied ? "کپی شد" : "کپی همه"}
-          </button>
-          <button className={st.btnGhost} onClick={download}>
-            <Icon d={I.download} size={16} /> دانلود فایل متنی
-          </button>
-        </div>
+        <RecoveryCodes codes={codes} username={user.username} />
       </Modal>
     );
   }

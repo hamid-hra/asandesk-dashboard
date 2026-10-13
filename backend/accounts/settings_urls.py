@@ -5,5 +5,6 @@ from . import users_api
 # زیر /api/settings/
 urlpatterns = [
     path("users", users_api.UserListView.as_view()),
+    path("users/access", users_api.AccessInfoView.as_view()),
     path("users/<int:pk>", users_api.UserDetailView.as_view()),
 ]

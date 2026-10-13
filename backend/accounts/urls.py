@@ -7,6 +7,7 @@ urlpatterns = [
     path("login", views.LoginView.as_view()),
     path("logout", views.LogoutView.as_view()),
     path("me", views.MeView.as_view()),
+    path("password", views.PasswordChangeView.as_view()),
     path("setup", views.SetupView.as_view()),
     path("recovery", views.RecoveryStatusView.as_view()),
     path("recovery/generate", views.RecoveryGenerateView.as_view()),

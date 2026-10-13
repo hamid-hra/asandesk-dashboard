@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import useSWR from "swr";
 
 import { AsanLoader } from "@/components/AsanLoader";
+import { FirstLoginGate } from "@/components/shell/FirstLoginGate";
 
 import { api, fetcher } from "./api";
 import type { User } from "./types";
@@ -59,5 +60,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mutate, router]);
 
   if (!user || !introDone) return <AsanLoader full label="در حال اتصال" />;
-  return <AuthContext.Provider value={{ user, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, logout }}>
+      <FirstLoginGate user={user} logout={logout} onDone={() => mutate()}>
+        {children}
+      </FirstLoginGate>
+    </AuthContext.Provider>
+  );
 }

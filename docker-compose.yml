@@ -51,6 +51,8 @@ services:
       RELEASE_MAX_FILE_MB: ${RELEASE_MAX_FILE_MB:-500}
       LOCAL_SERVER_NAME: ${LOCAL_SERVER_NAME:-dashboard-local}
       LOCAL_SERVER_REGION: ${LOCAL_SERVER_REGION:-محلی}
+      # آدرس مخفی پنل؛ backend فقط برای فایل «اطلاعات ورود» کاربر تازه به آن نیاز دارد
+      PANEL_KEY: ${PANEL_KEY:-}
     volumes:
       - releases:/data/releases
       - static:/data/static

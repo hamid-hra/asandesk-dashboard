@@ -10,6 +10,8 @@ export interface User {
   role_label: string;
   can_manage: boolean;
   perms: Perms;
+  /** رمز را کس دیگری گذاشته؛ پنل تا عوض‌کردنش فقط صفحهٔ «رمز تازه» را نشان می‌دهد */
+  must_change_password: boolean;
 }
 
 export type RangeId = "24h" | "7d" | "30d" | "90d";

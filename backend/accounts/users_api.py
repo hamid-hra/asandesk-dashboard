@@ -1,5 +1,6 @@
 """مدیریت کاربران پنل: /api/settings/users (بخش «users»)."""
 
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
@@ -29,6 +30,7 @@ def user_row(u: User, me: User) -> dict:
         "perms": effective(u.role, u.perms),
         "me": u.pk == me.pk,
         "locked": u.role == Role.OWNER,
+        "must_change_password": u.must_change_password,
     }
 
 
@@ -59,6 +61,19 @@ def perms_for(role: str, incoming, existing, previous_role=None) -> dict:
     return clean_perms(incoming) if role == Role.CUSTOM else clean_extras(incoming)
 
 
+class AccessInfoView(APIView):
+    """What a new user needs besides the username and password: the secret entry key of the panel.
+
+    Empty when PANEL_KEY is off. Only people who can create users get it, since giving someone an
+    account means telling them how to open the panel.
+    """
+
+    def get(self, request):
+        if request.user.level("users") != "edit":
+            return Response({"detail": "دسترسی کافی ندارید."}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"entry_key": settings.PANEL_KEY})
+
+
 class UserListView(APIView):
     def get(self, request):
         users = User.objects.order_by("date_joined", "pk")
@@ -85,7 +100,8 @@ class UserListView(APIView):
         perms = perms_for(role, d.get("perms"), {})
         if exceeds(request.user, effective(role, perms)):
             return Response({"detail": "نمی‌توانید دسترسی بیشتر از دسترسی خودتان بدهید."}, status=status.HTTP_403_FORBIDDEN)
-        user = User(username=username, first_name=name, role=role, perms=perms, is_active=d.get("active", True) is not False)
+        # رمز را مالک گذاشته؛ کاربر در اولین ورود باید رمز خودش را بگذارد
+        user = User(username=username, first_name=name, role=role, perms=perms, is_active=d.get("active", True) is not False, must_change_password=True)
         try:
             validate_password(password, user)
         except ValidationError as e:
@@ -136,6 +152,8 @@ class UserDetailView(APIView):
             except ValidationError as e:
                 return Response({"password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
             user.set_password(d["password"])
+            if user.pk != actor.pk:  # رمز کاربر دیگر را کس دیگری گذاشته، پس خودش باید عوضش کند
+                user.must_change_password = True
         user.save()
         changed = []
         if d.get("password"):

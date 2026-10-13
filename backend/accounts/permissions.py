@@ -1,3 +1,4 @@
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from .models import Role
@@ -37,6 +38,9 @@ class SectionPermission(BasePermission):
         user = request.user
         if not (user and user.is_authenticated and user.is_active):
             return False
+        if user.must_change_password:
+            # فقط خود نشانی‌های /api/auth/ (ورود، خروج، me، تغییر رمز) کلاس دسترسی جدا دارند و این‌جا نمی‌رسند
+            raise PermissionDenied("ابتدا رمز عبور تازهٔ خودتان را بگذارید.", code="password_change_required")
         safe = request.method in SAFE_METHODS
         section = section_for(request, view)
         if section is None:

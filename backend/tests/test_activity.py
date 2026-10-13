@@ -147,6 +147,7 @@ def test_owner_can_give_one_manager_access_to_the_log():
     assert r.json()["perms"]["activity"] == "view"
     assert r.json()["perms"]["users"] == "none"  # فقط «لاگ فعالیت» جدا داده می‌شود، نه بخش‌های دیگر
     assert User.objects.get(pk=uid).perms == {"activity": "view"}
+    User.objects.filter(pk=uid).update(must_change_password=False)  # a new user changes the temporary password first (test_first_login)
 
     mgr = APIClient()
     mgr.force_authenticate(User.objects.get(pk=uid))

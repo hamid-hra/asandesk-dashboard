@@ -68,6 +68,8 @@
 .dialog { width: 100%; max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); }
 .dlgHead { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--divider); font-size: 15px; font-weight: 700; }
 .dlgBody { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+/* در ستون flex، بخش‌هایی که overflow دارند (مثل ماتریس دسترسی) به‌جای اسکرول فشرده و بریده می‌شدند */
+.dlgBody > * { flex-shrink: 0; }
 .dlgFoot { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--divider); justify-content: flex-end; }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }

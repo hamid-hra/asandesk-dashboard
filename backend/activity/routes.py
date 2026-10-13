@@ -28,6 +28,7 @@ ROUTES: dict[tuple[str, str], tuple[str, Label] | None] = {
     ("accounts.LogoutView", "POST"): None,
     ("accounts.SetupView", "POST"): None,
     ("accounts.RecoveryResetView", "POST"): None,  # خود ویو می‌نویسد (کاربر هنوز وارد نشده است)
+    ("accounts.PasswordChangeView", "POST"): None,  # خود ویو می‌نویسد
     ("accounts.RecoveryGenerateView", "POST"): ("auth.recovery_codes", "کدهای بازیابی تازه ساخت"),
     # نسخه‌ها
     ("releases.ReleaseListView", "POST"): ("release.create", "نسخهٔ {d[version]} را منتشر کرد"),

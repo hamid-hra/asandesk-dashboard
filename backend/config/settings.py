@@ -141,6 +141,9 @@ X_ACCEL_PREFIX = "/_protected/releases/"
 BACKUPS_ROOT = Path(env("BACKUPS_ROOT", BASE_DIR / "data" / "backups"))
 BACKUP_MAX_UPLOAD = 4 * 1024 ** 3
 
+# آدرس مخفی پنل (فقط nginx آن را اجرا می‌کند؛ این‌جا برای ساختن فایل «اطلاعات ورود» کاربر تازه است)
+PANEL_KEY = env("PANEL_KEY", "")
+
 # سرویس control (به‌روزرسانی پنل و لاگ داکر): فقط backend با این توکن با آن حرف می‌زند
 CONTROL_URL = env("CONTROL_URL", "http://control:8100")
 CONTROL_TOKEN_FILE = Path(env("CONTROL_TOKEN_FILE", BASE_DIR / "data" / "control" / "token"))
@@ -184,7 +187,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["accounts.permissions.ReadOnlyForViewer"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "setup": "10/min", "recovery": "5/min"},
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "setup": "10/min", "recovery": "5/min", "password": "10/min"},
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
 }
 

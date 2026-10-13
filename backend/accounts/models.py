@@ -71,6 +71,8 @@ class User(AbstractUser):
     role = models.CharField("نقش", max_length=16, choices=Role.choices, default=Role.VIEWER)
     # نقش «سفارشی»: {بخش: none|view|edit}. مدیر/ناظر: فقط دسترسی‌های اضافه، مثل {"activity": "view"}
     perms = models.JSONField("دسترسی بخش‌ها", default=dict, blank=True)
+    # رمز را کس دیگری گذاشته (ساخت حساب یا «تغییر رمز» توسط مالک)؛ تا خود کاربر رمز تازه نگذارد پنل کار نمی‌کند
+    must_change_password = models.BooleanField("باید رمز را عوض کند", default=False)
 
     objects = UserManager()
 

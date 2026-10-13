@@ -7,7 +7,7 @@ import { Icon } from "@/components/Icon";
 import { api, fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { avatarOf, initialOf } from "@/lib/people";
-import { agoText, jDate, LEVELS, PRESET, randomPassword, RO_TIP, ROLE_CARDS, ROLE_TONE, SECTION_LEVELS, SECTIONS, copyText, strength, STRENGTH, type UserRow } from "@/lib/settings";
+import { agoText, downloadTextFile, jDate, LEVELS, loginFileText, PRESET, randomPassword, RO_TIP, ROLE_CARDS, ROLE_TONE, SECTION_LEVELS, SECTIONS, copyText, strength, STRENGTH, type UserRow } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 import type { Level, Perms } from "@/lib/types";
 
@@ -153,6 +153,7 @@ function UserLine({ u, canEdit, onEdit, onPassword, onToggle, onDelete }: { u: U
             <span>{u.display_name}</span>
             {u.locked && <span title="حساب مالک قفل است: حذف و تغییر نقش ندارد" style={{ color: "var(--faint)", display: "inline-flex" }}><Icon d={I.lock} size={14} /></span>}
             {u.me && <span className={`${s.badge} ${s.me}`}>شما</span>}
+            {u.must_change_password && <span className={s.badge} style={{ background: "var(--warn-soft)", color: "var(--warn-text)" }} title="هنوز رمز خودش را نگذاشته؛ در اولین ورود باید بگذارد">رمز موقت</span>}
           </div>
           <span dir="ltr" className={`${s.sub} mono`}>{u.username}</span>
         </div>
@@ -189,6 +190,11 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
   const [busy, setBusy] = useState(false);
   const flash = useToast();
   const showPw = creating || mode === "password";
+  // فایل «اطلاعات ورود»: برای حساب تازه یا وقتی مالک برای کس دیگری رمز می‌گذارد (نه رمز خودش)
+  const loginFile = showPw && !user?.me;
+  const { data: access } = useSWR<{ entry_key: string }>(loginFile ? "/api/settings/users/access" : null, fetcher);
+  const [urlEdit, setUrlEdit] = useState<string | null>(null);
+  const loginUrl = urlEdit ?? (access ? `${window.location.origin}${access.entry_key ? `/${access.entry_key}` : ""}` : "");
   const showIdentity = mode !== "password";
   const showRoles = mode !== "password" && !owner;
   const showMatrix = showRoles;
@@ -198,7 +204,7 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
   // مدیر غیرمالک نمی‌تواند بیش از دسترسی خودش بدهد
   const myRank = (sec: string) => (me.role === "owner" ? 2 : LEVELS.findIndex(([l]) => l === (me.perms[sec] ?? "none")));
 
-  const submit = async () => {
+  const submit = async (withFile = false) => {
     const e: Record<string, string> = {};
     if (showIdentity && !name.trim()) e.display_name = "نام نمایشی را وارد کنید.";
     if (creating && !/^[\w.@+-]+$/.test(username)) e.username = "نام کاربری فقط شامل حروف انگلیسی، عدد و @/./+/-/_ باشد.";
@@ -208,15 +214,26 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
       if (pw !== pw2) e.password2 = "تکرار رمز با رمز بالا یکسان نیست.";
     }
     setErrs(e);
+    if (withFile && !loginUrl.trim()) e.url = "آدرس پنل را وارد کنید.";
+    setErrs(e);
     if (Object.keys(e).length) return;
     setBusy(true);
+    const who = creating ? { username, name: name.trim() } : { username: user?.username ?? "", name: user?.display_name ?? "" };
+    const saveFile = () =>
+      withFile &&
+      downloadTextFile(
+        `asandesk-login-${who.username}.txt`,
+        loginFileText({ url: loginUrl.trim(), username: who.username, password: pw, name: who.name, hasKey: !!access?.entry_key && loginUrl.includes(access.entry_key) }),
+      );
     try {
       if (creating) {
         await api("/api/settings/users", { method: "POST", body: { display_name: name.trim(), username, password: pw, role, perms: extraPerms, active } });
-        onSaved(`کاربر ${name.trim()} اضافه شد`);
+        saveFile();
+        onSaved(`کاربر ${name.trim()} اضافه شد${withFile ? "؛ فایل ورود دانلود شد" : ""}`);
       } else if (mode === "password") {
         await api(`/api/settings/users/${user!.id}`, { method: "PATCH", body: { password: pw } });
-        onSaved("رمز عبور تغییر کرد");
+        saveFile();
+        onSaved(`رمز عبور تغییر کرد${withFile ? "؛ فایل ورود دانلود شد" : ""}`);
       } else {
         const body: Record<string, unknown> = { display_name: name.trim() };
         if (!owner) Object.assign(body, { role, active, perms: extraPerms });
@@ -242,7 +259,12 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
       footer={
         <>
           <button className={s.btnGhost} onClick={onClose} disabled={busy}>انصراف</button>
-          <button className={`${s.btnPrimary} primary`} onClick={submit} disabled={busy}>{busy ? "در حال ذخیره…" : "ذخیره"}</button>
+          {loginFile && (
+            <button className={s.btnGhost} onClick={() => submit(true)} disabled={busy || !access} title="کاربر را می‌سازد و یک فایل متنی با آدرس پنل، نام کاربری و رمز موقت می‌دهد تا برایش بفرستید">
+              <Icon d={I.download} size={16} /> ذخیره و دانلود فایل ورود
+            </button>
+          )}
+          <button className={`${s.btnPrimary} primary`} onClick={() => submit(false)} disabled={busy}>{busy ? "در حال ذخیره…" : "ذخیره"}</button>
         </>
       }
     >
@@ -284,6 +306,22 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
             {errs.password2 && <span className={s.err}>{errs.password2}</span>}
             {!errs.password2 && pw2 && pw === pw2 && <span className={s.ok}>✓ رمزها یکسان‌اند</span>}
           </label>
+          {loginFile && (
+            <>
+              <div className={s.note} data-tone="info">
+                <Icon d={I.info} size={18} />
+                <span>
+                  <b>این رمز موقت است</b>
+                  کاربر در اولین ورود باید رمز خودش را بگذارد و بعد کدهای بازیابی‌اش را می‌بیند و می‌تواند دانلود کند. با «ذخیره و دانلود فایل ورود» یک فایل متنی با آدرس پنل، نام کاربری و همین رمز می‌گیرید تا برایش بفرستید.
+                </span>
+              </div>
+              <label className={s.field}>
+                <span>آدرس پنل در فایل <small>(آدرسی که کاربر باید باز کند)</small></span>
+                <input className={s.input} dir="ltr" value={loginUrl} onChange={(e) => setUrlEdit(e.target.value)} placeholder={access ? "https://panel.example.com" : "در حال خواندن…"} />
+                {errs.url && <span className={s.err}>{errs.url}</span>}
+              </label>
+            </>
+          )}
         </>
       )}
       {mode !== "password" && !owner && (

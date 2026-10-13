@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
@@ -53,6 +53,40 @@ class LogoutView(APIView):
     def post(self, request):
         logout(request)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordChangeView(APIView):
+    """The signed-in user sets a new password (needs the current one).
+
+    This is also the first-login step: it clears `must_change_password`. With `generate_codes` the
+    response carries a fresh set of recovery codes, shown once.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password"
+
+    def post(self, request):
+        user = request.user
+        current = request.data.get("current_password") or ""
+        new = request.data.get("new_password") or ""
+        if not user.check_password(current):
+            return Response({"current_password": ["رمز عبور فعلی درست نیست."]}, status=status.HTTP_400_BAD_REQUEST)
+        if new == current:
+            return Response({"new_password": ["رمز تازه باید با رمز فعلی فرق داشته باشد."]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new, user)
+        except ValidationError as e:
+            return Response({"new_password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new)
+        user.must_change_password = False
+        user.save(update_fields=["password", "must_change_password"])
+        update_session_auth_hash(request, user)  # this browser stays signed in; other sessions end
+        record("auth.password_change", "رمز عبور خود را عوض کرد", request=request, user=user)
+        body = {"ok": True}
+        if request.data.get("generate_codes"):
+            body.update(codes=recovery.generate_for(user), total=recovery.COUNT)
+        return Response(body)
 
 
 class MeView(APIView):
@@ -116,7 +150,8 @@ class RecoveryResetView(APIView):
             if not recovery.consume(user, code):
                 return Response({"detail": self.BAD}, status=status.HTTP_400_BAD_REQUEST)
             user.set_password(password)
-            user.save(update_fields=["password"])
+            user.must_change_password = False  # this password is their own choice
+            user.save(update_fields=["password", "must_change_password"])
         record("auth.password_reset", "رمز را با کد بازیابی عوض کرد", request=request, user=user)
         # Django ties every session to the password hash, so old sessions of this user end here
         return Response({"ok": True, "remaining": recovery.remaining(user)})
