@@ -185,6 +185,7 @@ def update_manifest(release: Release) -> dict:
             "downloads": downloads,
             "release_notes": "\n".join(release.notes_list),
             "message": release.message,
+            "notice_title": release.notice_title,
             "maintenance": release.maintenance,
             "enabled": release.enabled,
             "support": {"bale_url": release.bale_url, "bale_id": release.bale_id},

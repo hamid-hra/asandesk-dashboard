@@ -35,6 +35,7 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
   // فیلدهای update.json
   const [build, setBuild] = useState("");
   const [message, setMessage] = useState("");
+  const [noticeTitle, setNoticeTitle] = useState("");
   const [baleUrl, setBaleUrl] = useState(DEFAULT_BALE_URL);
   const [baleId, setBaleId] = useState("");
   const [maintenance, setMaintenance] = useState(false);
@@ -51,6 +52,7 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
     setMandatory(false);
     setBuild("");
     setMessage("");
+    setNoticeTitle("");
     setBaleUrl(DEFAULT_BALE_URL);
     setBaleId("");
     setMaintenance(false);
@@ -108,6 +110,7 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
     form.append("rollout", String(rollout));
     form.append("build", build.trim() || "0");
     form.append("message", message.trim());
+    form.append("notice_title", noticeTitle.trim());
     form.append("bale_url", baleUrl.trim());
     form.append("bale_id", baleId.trim());
     form.append("maintenance", String(maintenance));
@@ -271,6 +274,13 @@ export function ReleaseForm({ existing, onPublished }: { existing: string[]; onP
           <label className={s.field}>
             <span className={s.label}>پیام به کاربران</span>
             <input className={s.input} value={message} maxLength={500} placeholder="اختیاری" onChange={(e) => setMessage(e.target.value)} />
+          </label>
+        </div>
+        <div className={s.two}>
+          <label className={s.field}>
+            <span className={s.label}>عنوان چیپ نارنجی</span>
+            <input className={s.input} value={noticeTitle} maxLength={60} placeholder="خالی: سرویس در حال تعمیر است" onChange={(e) => setNoticeTitle(e.target.value)} />
+            <span className={s.hint}>متنی که روی خود چیپ نارنجی نوار عنوان نشان داده می‌شود؛ پیام بالا بعد از کلیک دیده می‌شود</span>
           </label>
         </div>
         <div className={s.two}>

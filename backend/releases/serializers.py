@@ -28,8 +28,8 @@ class ReleaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Release
         fields = ("id", "version", "channel", "date", "published_on", "platforms", "notes", "mandatory",
-                  "rollout", "downloads", "build", "message", "maintenance", "enabled", "bale_url", "bale_id",
-                  "update_warnings",
+                  "rollout", "downloads", "build", "message", "notice_title", "maintenance", "enabled", "bale_url",
+                  "bale_id", "update_warnings",
                   "assets", "created_at")
 
     def get_date(self, obj):
@@ -64,6 +64,7 @@ class ReleaseUpdateSerializer(serializers.Serializer):
     build = serializers.IntegerField(min_value=0, max_value=2**31 - 1, required=False)
     mandatory = serializers.BooleanField(required=False)
     message = serializers.CharField(max_length=500, allow_blank=True, required=False)
+    notice_title = serializers.CharField(max_length=60, allow_blank=True, required=False)
     maintenance = serializers.BooleanField(required=False)
     enabled = serializers.BooleanField(required=False)
     notes = serializers.CharField(required=False)
@@ -81,6 +82,10 @@ class ReleaseUpdateSerializer(serializers.Serializer):
 
     def validate_message(self, v):
         return v.strip()
+
+    def validate_notice_title(self, v):
+        # یک خط: عنوان روی چیپ اپلیکیشن می‌نشیند
+        return " ".join(v.split())
 
 
 def platform_for(filename: str):
@@ -105,6 +110,7 @@ class ReleaseCreateSerializer(serializers.Serializer):
     # فیلدهای update.json
     build = serializers.IntegerField(min_value=0, max_value=2**31 - 1, required=False, default=0)
     message = serializers.CharField(max_length=500, allow_blank=True, required=False, default="")
+    notice_title = serializers.CharField(max_length=60, allow_blank=True, required=False, default="")
     maintenance = serializers.BooleanField(default=False)
     enabled = serializers.BooleanField(default=True)
     bale_url = serializers.CharField(max_length=200, allow_blank=True, required=False, default=DEFAULT_BALE_URL)
@@ -142,6 +148,10 @@ class ReleaseCreateSerializer(serializers.Serializer):
 
     def validate_message(self, v):
         return v.strip()
+
+    def validate_notice_title(self, v):
+        # یک خط: عنوان روی چیپ اپلیکیشن می‌نشیند
+        return " ".join(v.split())
 
     def validate(self, attrs):
         links = {}

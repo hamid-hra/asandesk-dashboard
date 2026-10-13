@@ -97,6 +97,7 @@ def test_publish_from_links_stores_files_and_generates_update_json(links, releas
         "downloads": {"windows": WIN_URL, "linux": DEB_URL},
         "release_notes": "رفع صفحهٔ طوسی\nاعلان به‌روزرسانی",
         "message": "سرویس تا ساعت ۲۳ در دسترس است",
+        "notice_title": "",
         "maintenance": False,
         "enabled": True,
         "support": {"bale_url": "https://ble.ir/join/AqZGNkLToJ", "bale_id": ""},
@@ -161,11 +162,19 @@ def test_patch_update_fields_and_permissions(links):
     admin = client_for(Role.ADMIN)
     admin.post("/api/releases", link_form(), format="multipart")
     r = admin.patch("/api/releases/1.4.9.4", {"message": "  تعمیر شبانه ", "maintenance": True, "enabled": False,
-                                              "mandatory": True, "build": 1500}, format="json")
+                                              "mandatory": True, "build": 1500,
+                                              "notice_title": "  به‌روزرسانی   سرور  "}, format="json")
     assert r.status_code == 200 and r.json()["message"] == "تعمیر شبانه"
+    # عنوان چیپ نارنجی: یک خط و بدون فاصلهٔ اضافه
+    assert r.json()["notice_title"] == "به‌روزرسانی سرور"
     data = json.loads(admin.get("/api/releases/1.4.9.4/update.json").content)
     assert data["maintenance"] is True and data["enabled"] is False
     assert data["force_update"] is True and data["build"] == 1500
+    assert data["notice_title"] == "به‌روزرسانی سرور"
+    assert admin.patch("/api/releases/1.4.9.4", {"notice_title": "x" * 61}, format="json").status_code == 400
+    # خالی کردن عنوان یعنی متن پیش‌فرض اپلیکیشن
+    admin.patch("/api/releases/1.4.9.4", {"notice_title": ""}, format="json")
+    assert json.loads(admin.get("/api/releases/1.4.9.4/update.json").content)["notice_title"] == ""
     assert admin.patch("/api/releases/1.4.9.4", {"build": -1}, format="json").status_code == 400
     assert admin.patch("/api/releases/9.9.9", {"build": 1}, format="json").status_code == 404
     viewer = client_for(Role.VIEWER)

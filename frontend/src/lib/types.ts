@@ -112,6 +112,8 @@ export interface Release {
   /** فیلدهای فایل update.json که اپلیکیشن می‌خواند */
   build: number;
   message: string;
+  /** متن روی چیپ نارنجی اپلیکیشن در حالت تعمیر؛ خالی یعنی متن پیش‌فرض */
+  notice_title: string;
   maintenance: boolean;
   enabled: boolean;
   /** کانال پشتیبانی در بله (بخش support در update.json) */

@@ -30,6 +30,7 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
   const flash = useToast();
   const [build, setBuild] = useState(String(release.build || ""));
   const [message, setMessage] = useState(release.message);
+  const [noticeTitle, setNoticeTitle] = useState(release.notice_title);
   const [mandatory, setMandatory] = useState(release.mandatory);
   const [maintenance, setMaintenance] = useState(release.maintenance);
   const [enabled, setEnabled] = useState(release.enabled);
@@ -49,7 +50,7 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
     try {
       await api<Release>(`/api/releases/${encodeURIComponent(release.version)}`, {
         method: "PATCH",
-        body: { build: Number(build.trim() || 0), message: message.trim(), mandatory, maintenance, enabled, bale_url: baleUrl.trim(), bale_id: baleId.trim() },
+        body: { build: Number(build.trim() || 0), message: message.trim(), notice_title: noticeTitle.trim(), mandatory, maintenance, enabled, bale_url: baleUrl.trim(), bale_id: baleId.trim() },
       });
       await mutate();
       onSaved();
@@ -81,6 +82,13 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
         <label className={s.field}>
           <span className={s.label}>پیام به کاربران</span>
           <input className={s.input} value={message} maxLength={500} disabled={!canEdit} placeholder="خالی یعنی بدون پیام" onChange={(e) => setMessage(e.target.value)} />
+        </label>
+      </div>
+      <div className={s.two}>
+        <label className={s.field}>
+          <span className={s.label}>عنوان چیپ نارنجی</span>
+          <input className={s.input} value={noticeTitle} maxLength={60} disabled={!canEdit} placeholder="خالی: سرویس در حال تعمیر است" onChange={(e) => setNoticeTitle(e.target.value)} />
+          <span className={s.hint}>متن روی خود چیپ نوار عنوان اپلیکیشن؛ پیام بالا بعد از کلیک نشان داده می‌شود</span>
         </label>
       </div>
       <div className={s.two}>

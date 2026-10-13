@@ -58,6 +58,8 @@ class Release(models.Model):
     # فیلدهای فایل update.json که اپلیکیشن می‌خواند (mandatory همان force_update است)
     build = models.PositiveIntegerField("شمارهٔ بیلد", default=0)
     message = models.CharField("پیام به کاربران", max_length=500, blank=True)
+    # متن روی چیپ نارنجی (حالت تعمیر) در اپلیکیشن؛ خالی یعنی متن پیش‌فرض «سرویس در حال تعمیر است»
+    notice_title = models.CharField("عنوان اعلان", max_length=60, blank=True)
     maintenance = models.BooleanField("حالت تعمیر", default=False)
     enabled = models.BooleanField("فعال", default=True)
     # بخش support در update.json: کانالی که اپلیکیشن در «ارتباط با ما» نشان می‌دهد
