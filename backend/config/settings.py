@@ -157,7 +157,6 @@ SERVER_OFFLINE_AFTER_SECONDS = int(env("SERVER_OFFLINE_AFTER_SECONDS", "120"))
 
 # کلاینت‌ها: heartbeat هر ۱۵ ثانیه است؛ بعد از این مدت بدون تماس «آفلاین» حساب می‌شوند
 CLIENT_OFFLINE_AFTER_SECONDS = int(env("CLIENT_OFFLINE_AFTER_SECONDS", "60"))
-CLIENT_TICKETS_PER_HOUR = int(env("CLIENT_TICKETS_PER_HOUR", "5"))
 # «ارسال بازخورد» اپلیکیشن: متن + لاگ فشرده (gzip+base64) در یک درخواست JSON
 CLIENT_FEEDBACK_PER_HOUR = int(env("CLIENT_FEEDBACK_PER_HOUR", "5"))
 # بدنه: متن + لاگ (تا ~۲ مگابایت base64) + حداکثر ۳ تصویر (اپ هرکدام را زیر ~۰٫۶ مگابایت نگه می‌دارد)

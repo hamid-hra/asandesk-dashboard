@@ -175,7 +175,7 @@ export interface ClientStats {
   platforms: [string, number][];
 }
 
-export type TicketStatus = "open" | "pending" | "closed";
+export type TicketStatus = "open" | "closed";
 export type Priority = "urgent" | "high" | "normal" | "low";
 
 export interface ClientDetail {
@@ -188,6 +188,8 @@ export interface ClientDetail {
   plan: Plan;
   online: boolean;
   blocked: boolean;
+  /** اولین باری که دستگاهِ مسدود گزارش داد اطلاعات سرور را از روی خودش برداشته است؛ null = هنوز گزارش نداده */
+  revoked_at: string | null;
   last_seen: string | null;
   first_seen: string;
   os: string;
@@ -223,6 +225,8 @@ export interface TicketRow {
   status: TicketStatus;
   created_at: string;
   updated_at: string;
+  /** راه تماسی که کاربر نوشته (معمولاً شماره موبایل)؛ خالی = نخواسته تماس بگیریم */
+  contact: string;
   /** لاگ برنامه همراه این بازخورد فرستاده شده */
   has_log: boolean;
   /** تعداد تصویرهای پیوست (حداکثر ۳) */
@@ -232,22 +236,18 @@ export interface TicketRow {
 
 export interface TicketDetail extends TicketRow {
   diag: string;
-  contact: string;
   log: { size: number; files: string[] } | null;
   /** تصویرها از /api/tickets/{id}/images/{image.id} نمایش داده می‌شوند */
   images: { id: number; mime: string; size: number }[];
-  messages: { id: number; from_client: boolean; author: string; text: string; created_at: string }[];
+  messages: { id: number; from_client: boolean; text: string; created_at: string }[];
 }
 
 export interface TicketStats {
   open: number;
-  pending: number;
   closed: number;
-  first_response_min: number | null;
-  first_response_prev_min: number | null;
-  resolved_7d: number;
-  resolved_fast_share: number | null;
-  satisfaction: number | null;
+  /** جدیدهایی که شماره تماس دارند؛ باید با آن‌ها تماس گرفت */
+  open_with_contact: number;
+  last_7d: number;
 }
 
 export interface ChangelogItem {

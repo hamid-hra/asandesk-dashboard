@@ -121,6 +121,48 @@ def test_blocked_client_gets_disconnect():
 
 
 @pytest.mark.django_db
+def test_heartbeat_always_says_whether_the_device_is_blocked():
+    # the app removes the server info only on blocked=true and restores it only on an explicit false
+    assert app_post("/api/heartbeat", {**DEV, "modified_at": 0}).json()["blocked"] is False
+    Client.objects.update(blocked=True)
+    assert app_post("/api/heartbeat", DEV).json()["blocked"] is True
+    # a wrong uuid gets no "blocked" field at all, so it can never lift a block on the device
+    r = app_post("/api/heartbeat", {**DEV, "uuid": "other"})
+    assert r.status_code == 401 and "blocked" not in r.json()
+
+
+@pytest.mark.django_db
+def test_block_wipe_is_confirmed_by_the_device_and_reset_on_unblock():
+    register()
+    admin = panel()
+    assert admin.post(f"/api/clients/{DEV['id']}/block", {"blocked": True}, format="json").json()["blocked"]
+    d = admin.get(f"/api/clients/{DEV['id']}").json()
+    assert d["blocked"] is True and d["revoked_at"] is None  # waiting for the device
+
+    # an ordinary heartbeat does not confirm anything; the blocked device's check does
+    app_post("/api/heartbeat", DEV)
+    assert admin.get(f"/api/clients/{DEV['id']}").json()["revoked_at"] is None
+    assert app_post("/api/heartbeat", {**DEV, "revoked": True}).json()["blocked"] is True
+    first = admin.get(f"/api/clients/{DEV['id']}").json()["revoked_at"]
+    assert first
+    app_post("/api/heartbeat", {**DEV, "revoked": True})
+    assert admin.get(f"/api/clients/{DEV['id']}").json()["revoked_at"] == first
+
+    # unblocking tells the device (blocked=false) and clears the confirmation
+    assert admin.post(f"/api/clients/{DEV['id']}/block", {"blocked": False}, format="json").json()["blocked"] is False
+    assert app_post("/api/heartbeat", {**DEV, "revoked": True}).json()["blocked"] is False
+    d = admin.get(f"/api/clients/{DEV['id']}").json()
+    assert d["blocked"] is False and d["revoked_at"] is None
+
+
+@pytest.mark.django_db
+def test_a_device_that_says_revoked_while_not_blocked_is_not_marked():
+    register()
+    app_post("/api/heartbeat", {**DEV, "revoked": True})
+    assert Client.objects.get().revoked_at is None
+
+
+@pytest.mark.django_db
 def test_login_current_user_and_forced_logout():
     acc = Account(email="sara@example.com", name="سارا", plan="pro")
     acc.set_password("pass-12345")
@@ -145,57 +187,51 @@ def test_login_current_user_and_forced_logout():
 
 
 @pytest.mark.django_db
-def test_client_ticket_flow():
-    register()
-    r = app_post("/api/client/tickets/new", {**DEV, "subject": "قطع اتصال", "text": "بعد از ۵ دقیقه قطع می‌شود",
-                                             "category": "اتصال", "priority": "high"})
-    assert r.status_code == 201
-    t = Ticket.objects.get()
-    assert t.code == f"T-{1000 + t.pk}" and t.diag == "v1.4.9 · windows / Windows 11 Pro - 22631"
-
-    admin = panel()
-    assert admin.get("/api/monitoring/status").json()["open_tickets"] == 1
-    assert admin.get(f"/api/tickets?q={t.code}").json()[0]["id"] == t.pk
-    r = admin.post(f"/api/tickets/{t.pk}/reply", {"text": "لاگ بفرستید"}, format="json")
-    assert r.json()["status"] == "pending" and r.json()["messages"][-1]["from_client"] is False
-    t.refresh_from_db()
-    assert t.first_response_at is not None
-
-    # پاسخ کاربر تیکت را باز می‌کند
-    app_post(f"/api/client/tickets/{t.pk}/reply", {**DEV, "text": "فرستادم"})
-    assert Ticket.objects.get().status == TicketStatus.OPEN
-    listed = app_post("/api/client/tickets/list", DEV).json()["tickets"]
-    assert len(listed[0]["messages"]) == 3
-
-    r = admin.post(f"/api/tickets/{t.pk}/reply", {"text": "رفع شد", "close": True}, format="json")
-    assert r.json()["status"] == "closed"
-    st = admin.get("/api/tickets/stats").json()
-    assert st["resolved_7d"] == 1 and st["resolved_fast_share"] == 100 and st["open"] == 0
-
-    assert admin.patch(f"/api/tickets/{t.pk}", {"status": "bogus"}, format="json").status_code == 400
-    assert admin.patch(f"/api/tickets/{t.pk}", {"status": "open"}, format="json").json()["status"] == "open"
-
-
-@pytest.mark.django_db
-def test_other_device_cannot_read_tickets():
-    register()
-    register(dev={"id": "999", "uuid": "z"})
-    app_post("/api/client/tickets/new", {**DEV, "subject": "s", "text": "t"})
-    t = Ticket.objects.get()
-    assert app_post("/api/client/tickets/list", {"id": "999", "uuid": "z"}).json()["tickets"] == []
-    assert app_post(f"/api/client/tickets/{t.pk}/reply", {"id": "999", "uuid": "z", "text": "x"}).status_code == 404
-
-
-@pytest.mark.django_db
-def test_block_and_message_from_panel():
+def test_blocked_device_cannot_send_feedback_but_panel_stats_work():
     register()
     admin = panel()
     assert admin.post(f"/api/clients/{DEV['id']}/block", {"blocked": True}, format="json").json()["blocked"]
-    assert app_post("/api/client/tickets/new", {**DEV, "subject": "s", "text": "t"}).status_code == 403
-    r = admin.post(f"/api/clients/{DEV['id']}/message", {"subject": "اطلاعیه", "text": "سلام"}, format="json")
-    assert r.status_code == 201 and r.json()["status"] == "pending"
+    assert feedback().status_code == 403
     stats = admin.get("/api/clients/stats").json()
     assert stats["total"] == 1 and stats["online"] == 1 and stats["platforms"][0][0] == "Windows"
+
+
+@pytest.mark.django_db
+def test_no_reply_or_message_channel_to_the_user_exists():
+    register()
+    assert feedback().status_code == 201
+    t = Ticket.objects.get()
+    admin = panel()
+    # the panel cannot write to the user and the app has no ticket list or reply
+    assert admin.post(f"/api/tickets/{t.pk}/reply", {"text": "x"}, format="json").status_code == 404
+    assert admin.post(f"/api/clients/{DEV['id']}/message", {"subject": "s", "text": "x"}, format="json").status_code == 404
+    for path in ("/api/client/tickets/list", "/api/client/tickets/new", f"/api/client/tickets/{t.pk}/reply"):
+        assert app_post(path, {**DEV, "subject": "s", "text": "t"}).status_code == 404
+    assert t.messages.count() == 1
+
+
+@pytest.mark.django_db
+def test_feedback_has_two_states_and_contacts_come_first():
+    register()
+    feedback(contact="")
+    feedback(contact="09121234567", message="شماره دارم، لطفاً تماس بگیرید")
+    admin = panel()
+    rows = admin.get("/api/tickets").json()
+    assert [bool(r["contact"]) for r in rows] == [True, False]  # the one with a number is on top
+    assert admin.get("/api/tickets?contact=1").json()[0]["contact"] == "09121234567"
+    assert len(admin.get("/api/tickets?contact=1").json()) == 1
+    assert admin.get("/api/tickets?q=0912").json()[0]["contact"] == "09121234567"
+
+    st = admin.get("/api/tickets/stats").json()
+    assert st == {"open": 2, "closed": 0, "open_with_contact": 1, "last_7d": 2}
+
+    t = Ticket.objects.get(contact="09121234567")
+    assert admin.patch(f"/api/tickets/{t.pk}", {"status": "closed"}, format="json").json()["status"] == "closed"
+    assert admin.patch(f"/api/tickets/{t.pk}", {"status": "pending"}, format="json").status_code == 400
+    assert admin.patch(f"/api/tickets/{t.pk}", {"status": "bogus"}, format="json").status_code == 400
+    st = admin.get("/api/tickets/stats").json()
+    assert st["open"] == 1 and st["closed"] == 1 and st["open_with_contact"] == 0
+    assert admin.get("/api/monitoring/status").json()["open_tickets"] == 1
 
 
 @pytest.mark.django_db

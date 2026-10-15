@@ -4,7 +4,7 @@ export const ICONS = {
   clients:
     "M16 20v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM21 20v-1a4 4 0 00-3-3.87M16 4.13a3.5 3.5 0 010 6.75",
   ads: "M3 11v2a1 1 0 001 1h2l5 4V6L6 10H4a1 1 0 00-1 1zM15 8.5a5 5 0 010 7M18 6a8.5 8.5 0 010 12",
-  announce: "M4 5h16v11H8l-4 4zM8 9h8M8 12h5",
+  ha: "M3 5h8v6H3zM13 13h8v6h-8zM6 11v4h7M18 13V9h-7",
   ticket:
     "M4 7a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 4v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-4zM14 5v2M14 11v2M14 17v2",
   settings:
@@ -25,19 +25,13 @@ export const TABS: Tab[] = [
   { href: "/releases", label: "نسخه‌ها", icon: ICONS.release, sections: ["release"] },
   { href: "/clients", label: "کلاینت‌ها", icon: ICONS.clients, sections: ["clients"] },
   { href: "/tickets", label: "بازخوردها", icon: ICONS.ticket, sections: ["tickets"] },
+  { href: "/ha", label: "سرورهای HA", icon: ICONS.ha, sections: ["ha"] },
   {
     href: "/ads",
     label: "تبلیغات",
     icon: ICONS.ads,
     sections: ["ads"],
     soon: "تعریف کمپین و بنر برای نمایش در صفحه اصلی اپلیکیشن، زمان‌بندی و گزارش کلیک.",
-  },
-  {
-    href: "/announcements",
-    label: "اطلاعیه‌ها",
-    icon: ICONS.announce,
-    sections: ["announce"],
-    soon: "ارسال پیام و اطلاعیه به همه کاربران یا گروه‌های مشخص، درون اپ و از طریق اعلان.",
   },
   { href: "/settings", label: "تنظیمات", icon: ICONS.settings, sections: [] },
 ];

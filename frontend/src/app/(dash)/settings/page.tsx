@@ -7,7 +7,6 @@ import { AccountTab } from "@/components/settings/AccountTab";
 import { ActivityTab } from "@/components/settings/ActivityTab";
 import { BackupTab } from "@/components/settings/BackupTab";
 import { DockerLogsTab } from "@/components/settings/DockerLogsTab";
-import { HATab } from "@/components/settings/HATab";
 import s from "@/components/settings/settings.module.css";
 import { I } from "@/components/settings/ui";
 import { UpdateTab } from "@/components/settings/UpdateTab";
@@ -21,7 +20,6 @@ import { RO_TIP } from "@/lib/settings";
 const SUB = [
   { id: "users", section: "users", label: "کاربران و دسترسی‌ها", icon: I.users },
   { id: "backup", section: "backup", label: "پشتیبان‌گیری", icon: I.db },
-  { id: "ha", section: "ha", label: "سرورهای HA", icon: I.ha },
   { id: "activity", section: "activity", label: "لاگ فعالیت‌ها", icon: I.activity, readOnlyTab: true },
   { id: "update", section: "system", label: "به‌روزرسانی پنل", icon: I.cloud, readOnlyTab: true },
   { id: "logs", section: "system", label: "لاگ داکر", icon: I.terminal, readOnlyTab: true },
@@ -44,7 +42,7 @@ function SettingsInner() {
     <div className={s.page}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <div className={s.title}>تنظیمات</div>
-        <div className={s.subtitle}>کاربران پنل، پشتیبان‌گیری، افزونگی سرور، لاگ فعالیت‌ها، به‌روزرسانی پنل و حساب خودتان</div>
+        <div className={s.subtitle}>کاربران پنل، پشتیبان‌گیری، لاگ فعالیت‌ها، به‌روزرسانی پنل و حساب خودتان</div>
       </div>
       <div className={s.subtabs} role="tablist">
         {tabs.map((t) => (
@@ -62,7 +60,6 @@ function SettingsInner() {
       )}
       {current === "users" && <UsersTab canEdit={canEdit} />}
       {current === "backup" && <BackupTab canEdit={canEdit} />}
-      {current === "ha" && <HATab canEdit={canEdit} />}
       {current === "activity" && <ActivityTab />}
       {current === "update" && <UpdateTab />}
       {current === "logs" && <DockerLogsTab />}

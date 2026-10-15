@@ -22,10 +22,9 @@ export const SECTIONS: [string, string][] = [
   ["clients", "کلاینت‌ها"],
   ["tickets", "بازخوردها"],
   ["ads", "تبلیغات"],
-  ["announce", "اطلاعیه‌ها"],
   ["users", "تنظیمات ← کاربران"],
   ["backup", "تنظیمات ← پشتیبان‌گیری"],
-  ["ha", "تنظیمات ← HA"],
+  ["ha", "سرورهای HA"],
   ["activity", "تنظیمات ← لاگ فعالیت"],
 ];
 
@@ -46,9 +45,9 @@ export const LEVELS: [Level, string][] = [
 
 /** باید با PRESETS در backend/accounts/models.py یکی باشد */
 export const PRESET: Record<"owner" | "admin" | "viewer", Perms> = {
-  owner: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "edit", backup: "edit", ha: "edit", activity: "edit", system: "edit" },
-  admin: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", announce: "edit", users: "none", backup: "none", ha: "none", activity: "none", system: "none" },
-  viewer: { server: "view", release: "view", clients: "view", tickets: "view", ads: "view", announce: "view", users: "none", backup: "view", ha: "view", activity: "none", system: "none" },
+  owner: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", users: "edit", backup: "edit", ha: "edit", activity: "edit", system: "edit" },
+  admin: { server: "edit", release: "edit", clients: "edit", tickets: "edit", ads: "edit", users: "none", backup: "none", ha: "none", activity: "none", system: "none" },
+  viewer: { server: "view", release: "view", clients: "view", tickets: "view", ads: "view", users: "none", backup: "none", ha: "none", activity: "none", system: "none" },
 };
 
 export const ROLE_CARDS: { id: "admin" | "viewer" | "custom"; label: string; desc: string }[] = [

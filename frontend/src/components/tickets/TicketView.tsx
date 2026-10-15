@@ -9,55 +9,38 @@ import s from "@/components/clients/clients.module.css";
 import { Seg } from "@/components/clients/SearchBox";
 import { api, ApiError, fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { agoText, bytesText, categoryText, PRIORITY, TICKET_STATUS, timeOnly, whenText } from "@/lib/people";
+import { agoText, bytesText, categoryText, TICKET_STATUS, timeOnly, whenText } from "@/lib/people";
 import { toFa } from "@/lib/fa";
+import { copyText } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 import type { TicketDetail, TicketStatus } from "@/lib/types";
 
-function quickReplies(latest: string | null): [string, string][] {
-  return [
-    ["تشکر", "ممنون از بازخوردتان؛ بررسی می‌کنیم و نتیجه را اطلاع می‌دهیم."],
-    [
-      "به‌روزرسانی",
-      `لطفاً برنامه را به آخرین نسخه${latest ? ` (${latest})` : ""} به‌روزرسانی کنید و دوباره امتحان کنید.`,
-    ],
-    ["رفع شد", "مشکل بررسی و برطرف شد. لطفاً دوباره امتحان کنید و نتیجه را اطلاع دهید."],
-  ];
-}
+const STATUSES: [TicketStatus, string][] = (["open", "closed"] as TicketStatus[]).map((k) => [k, TICKET_STATUS[k][0]]);
 
-const STATUSES: [TicketStatus, string][] = (["open", "pending", "closed"] as TicketStatus[]).map((k) => [k, TICKET_STATUS[k][0]]);
+/** شماره‌ای که می‌شود با آن تماس گرفت (۷ تا ۱۵ رقم، با + و فاصله و خط تیره)؛ ایمیل و آیدی نه */
+const phoneOf = (contact: string) => {
+  const digits = contact.replace(/[\s\-()]/g, "");
+  return /^\+?\d{7,15}$/.test(digits) ? digits : null;
+};
 
-export function TicketView({ id, latest, onChanged }: { id: number; latest: string | null; onChanged: () => void }) {
+export function TicketView({ id, onChanged }: { id: number; onChanged: () => void }) {
   const { user } = useAuth();
   const flash = useToast();
   const { data: t, error, mutate } = useSWR<TicketDetail>(`/api/tickets/${id}`, fetcher, { refreshInterval: 20000 });
-  const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const run = async (fn: () => Promise<TicketDetail>, msg: string) => {
+  const setStatus = async (st: TicketStatus) => {
     setBusy(true);
     try {
-      const next = await fn();
+      const next = await api<TicketDetail>(`/api/tickets/${id}`, { method: "PATCH", body: { status: st } });
       mutate(next, { revalidate: false });
       onChanged();
-      flash(msg);
-      return true;
+      flash(`وضعیت: ${TICKET_STATUS[st][0]}`);
     } catch (e) {
       flash(e instanceof ApiError ? e.message : "انجام نشد.");
-      return false;
     } finally {
       setBusy(false);
     }
-  };
-
-  const send = async (close: boolean) => {
-    const text = reply.trim();
-    if (!text) return;
-    const ok = await run(
-      () => api<TicketDetail>(`/api/tickets/${id}/reply`, { method: "POST", body: { text, close } }),
-      close ? "پاسخ ارسال و بازخورد بسته شد" : "پاسخ ارسال شد",
-    );
-    if (ok) setReply("");
   };
 
   if (error) {
@@ -75,8 +58,8 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
     );
   }
 
-  const [prLabel, prBg, prColor] = PRIORITY[t.priority];
   const c = t.client;
+  const phone = phoneOf(t.contact);
   return (
     <div className={`card ${s.tDetail}`}>
       <div className={s.tHead}>
@@ -89,9 +72,6 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
               </span>
               <span>·</span>
               <span style={{ whiteSpace: "nowrap" }}>{whenText(t.created_at)}</span>
-              <span className={s.chip} style={{ fontWeight: 600, background: prBg, color: prColor }}>
-                {prLabel}
-              </span>
               {t.category && (
                 <span className={s.chip} style={{ background: "var(--seg-track)", color: "var(--muted)" }}>
                   {categoryText(t.category)}
@@ -100,20 +80,39 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
             </div>
           </div>
           {user.can_manage ? (
-            <Seg
-              options={STATUSES}
-              value={t.status}
-              onChange={(st) =>
-                st !== t.status &&
-                run(() => api<TicketDetail>(`/api/tickets/${id}`, { method: "PATCH", body: { status: st } }), `وضعیت: ${TICKET_STATUS[st][0]}`)
-              }
-            />
+            <Seg options={STATUSES} value={t.status} onChange={(st) => st !== t.status && !busy && setStatus(st)} />
           ) : (
             <span className={s.chip} style={{ background: "var(--seg-track)", color: "var(--text-2)", fontSize: 12.5 }}>
               {TICKET_STATUS[t.status][0]}
             </span>
           )}
         </div>
+
+        {t.contact ? (
+          <div className={s.callCard}>
+            <div className={s.callText}>
+              <span>کاربر راه تماس گذاشته است؛ با او تماس بگیرید</span>
+              <b dir="ltr" className="mono">
+                {t.contact}
+              </b>
+            </div>
+            {phone && (
+              <a className={s.btnGhost} style={{ height: 34, padding: "0 14px", fontSize: 12.5, display: "inline-flex", alignItems: "center" }} href={`tel:${phone}`}>
+                تماس
+              </a>
+            )}
+            <button
+              className={s.btnGhost}
+              style={{ height: 34, padding: "0 14px", fontSize: 12.5 }}
+              onClick={async () => flash((await copyText(t.contact)) ? "کپی شد" : "کپی نشد")}
+            >
+              کپی
+            </button>
+          </div>
+        ) : (
+          <div className={s.noCall}>کاربر راه تماس نگذاشته است؛ پاسخی به او فرستاده نمی‌شود.</div>
+        )}
+
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link href={`/clients?id=${encodeURIComponent(c.id)}`} className={s.linkRow} style={{ flex: "1 1 240px", padding: "10px 12px", borderRadius: 11 }}>
             <Avatar id={c.id} name={c.display} />
@@ -133,27 +132,15 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
               {t.diag || "—"}
             </span>
           </div>
-          {(t.contact || t.log) && (
+          {t.log && (
             <div className={s.diag}>
-              {t.contact && (
-                <>
-                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>راه تماس</span>
-                  <span dir="auto" style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)", textAlign: "right" }}>
-                    {t.contact}
-                  </span>
-                </>
-              )}
-              {t.log && (
-                <>
-                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                    لاگ برنامه · {bytesText(t.log.size)}
-                    {t.log.files.length ? ` · ${toFa(t.log.files.length)} فایل` : ""}
-                  </span>
-                  <a className={s.btnGhost} style={{ height: 34, padding: "0 14px", fontSize: 12.5, display: "inline-flex", alignItems: "center" }} href={`/api/tickets/${id}/log`} download>
-                    دانلود لاگ
-                  </a>
-                </>
-              )}
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                لاگ برنامه · {bytesText(t.log.size)}
+                {t.log.files.length ? ` · ${toFa(t.log.files.length)} فایل` : ""}
+              </span>
+              <a className={s.btnGhost} style={{ height: 34, padding: "0 14px", fontSize: 12.5, display: "inline-flex", alignItems: "center" }} href={`/api/tickets/${id}/log`} download>
+                دانلود لاگ
+              </a>
             </div>
           )}
         </div>
@@ -174,37 +161,16 @@ export function TicketView({ id, latest, onChanged }: { id: number; latest: stri
 
       <div className={s.msgs}>
         {t.messages.map((m) => (
-          <div key={m.id} className={s.msg} style={{ alignSelf: m.from_client ? "flex-start" : "flex-end" }}>
+          <div key={m.id} className={s.msg}>
             <span>
-              {m.from_client ? c.display : m.author ? `پشتیبانی · ${m.author}` : "پشتیبانی آسان‌دسک"} · {timeOnly(m.created_at)}
+              {c.display} · {timeOnly(m.created_at)}
             </span>
-            <div dir="auto" style={{ background: m.from_client ? "var(--subtle)" : "var(--accent-soft)" }}>
+            <div dir="auto" style={{ background: "var(--subtle)" }}>
               {m.text}
             </div>
           </div>
         ))}
       </div>
-
-      {user.can_manage && (
-        <div className={s.reply}>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {quickReplies(latest).map(([label, text]) => (
-              <button key={label} className={s.quick} onClick={() => setReply(text)}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <textarea className={s.textarea} rows={3} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="پاسخ به کاربر…" />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className={s.btnPrimary} style={{ height: 40, padding: "0 20px", fontSize: 13.5, fontWeight: 700 }} disabled={busy || !reply.trim()} onClick={() => send(false)}>
-              ارسال پاسخ
-            </button>
-            <button className={s.btnGhost} style={{ height: 40, padding: "0 16px", fontSize: 13.5 }} disabled={busy || !reply.trim()} onClick={() => send(true)}>
-              ارسال و بستن
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

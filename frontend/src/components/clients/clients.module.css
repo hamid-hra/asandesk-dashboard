@@ -478,13 +478,32 @@
   color: var(--danger-text);
 }
 
-.composer {
+.blockedNote {
+  margin: 0 20px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--danger-soft);
+  color: var(--danger-text);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 100%;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.8;
 }
 
+.blockedNote b {
+  font-size: 13.5px;
+}
+
+.confirmBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--text-2);
+}
 .input,
 .textarea {
   border: 1px solid var(--input-border);
@@ -673,26 +692,39 @@
   overflow-wrap: anywhere;
 }
 
-.reply {
-  padding: 14px 22px 18px;
-  border-top: 1px solid var(--divider);
+/* کاربر راه تماس گذاشته: باید با او تماس گرفت */
+.callCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+}
+
+.callText {
+  flex: 1 1 220px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.quick {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text-2);
+  gap: 3px;
   font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
+  color: var(--text-2);
 }
 
-.quick:hover {
+.callText b {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.noCall {
+  padding: 9px 12px;
+  border-radius: 11px;
   background: var(--subtle);
+  color: var(--muted);
+  font-size: 12.5px;
 }

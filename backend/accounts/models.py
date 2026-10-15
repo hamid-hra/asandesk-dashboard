@@ -10,7 +10,7 @@ class Role(models.TextChoices):
 
 
 # بخش‌های پنل که دسترسی هر کدام جدا تعیین می‌شود
-SECTIONS = ("server", "release", "clients", "tickets", "ads", "announce", "users", "backup", "ha", "activity", "system")
+SECTIONS = ("server", "release", "clients", "tickets", "ads", "users", "backup", "ha", "activity", "system")
 LEVELS = ("none", "view", "edit")
 
 # «system» (به‌روزرسانی پنل و لاگ داکر) فقط مال مالک است و به هیچ نقش یا کاربری داده نمی‌شود.
@@ -27,13 +27,11 @@ PRESETS = {
     Role.OWNER: dict.fromkeys(SECTIONS, "edit"),
     Role.ADMIN: {
         "server": "edit", "release": "edit", "clients": "edit", "tickets": "edit", "ads": "edit",
-        "announce": "edit", "users": "none", "backup": "none", "ha": "none",
-        "activity": "none", "system": "none",
+        "users": "none", "backup": "none", "ha": "none", "activity": "none", "system": "none",
     },
     Role.VIEWER: {
         "server": "view", "release": "view", "clients": "view", "tickets": "view", "ads": "view",
-        "announce": "view", "users": "none", "backup": "none", "ha": "none",
-        "activity": "none", "system": "none",
+        "users": "none", "backup": "none", "ha": "none", "activity": "none", "system": "none",
     },
 }
 

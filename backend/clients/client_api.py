@@ -3,7 +3,7 @@
 کلاینت وقتی `api-server` تنظیم شده باشد این مسیرها را صدا می‌زند:
   /api/heartbeat، /api/sysinfo، /api/sysinfo_ver، /api/audit/conn،
   /api/login، /api/currentUser، /api/logout، /api/login-options
-به‌علاوه مسیرهای تیکت آسان‌دسک زیر /api/client/tickets.
+به‌علاوه /api/client/feedback (ارسال بازخورد از داخل اپلیکیشن؛ پاسخی به کاربر برنمی‌گردد).
 
 بدنه درخواست‌ها JSON است ولی کلاینت همیشه Content-Type نمی‌فرستد، پس بدنه دستی خوانده می‌شود.
 احراز هویت دستگاه: جفت (id, uuid). uuid در اولین تماس ثبت می‌شود (TOFU).
@@ -26,8 +26,7 @@ from django.utils.decorators import method_decorator
 from rest_framework.throttling import SimpleRateThrottle
 
 from .models import (
-    AccessToken, Account, Client, ConnSession, FeedbackCategory, Priority, Ticket, TicketImage, TicketMessage,
-    TicketStatus, sha256,
+    AccessToken, Account, Client, ConnSession, FeedbackCategory, Priority, Ticket, TicketImage, TicketMessage, sha256,
 )
 
 log = logging.getLogger(__name__)
@@ -126,11 +125,26 @@ class HeartbeatView(ClientView):
 
         modified_at = data.get("modified_at")
         rsp = {"modified_at": modified_at if isinstance(modified_at, int) else 0}
+        # اپلیکیشن فقط با «blocked: true» اطلاعات سرور را از دستگاه برمی‌دارد و فقط با «blocked: false»
+        # (صریح) آن را برمی‌گرداند؛ پس این فیلد همیشه فرستاده می‌شود.
+        rsp["blocked"] = client.blocked
+        self.track_wipe(client, data)
         if created or client.sysinfo_at is None:
             rsp["sysinfo"] = True
         if client.blocked and conns:
             rsp["disconnect"] = conns
         return JsonResponse(rsp)
+
+    @staticmethod
+    def track_wipe(client: Client, data: dict):
+        """revoked_at = اولین باری که دستگاهِ مسدود گزارش داد اطلاعات سرور را از روی خودش برداشته است."""
+        wiped = client.blocked and data.get("revoked") is True
+        if wiped and client.revoked_at is None:
+            client.revoked_at = timezone.now()
+            client.save(update_fields=["revoked_at"])
+        elif not client.blocked and client.revoked_at is not None:
+            client.revoked_at = None
+            client.save(update_fields=["revoked_at"])
 
 
 class SysinfoView(ClientView):
@@ -284,66 +298,7 @@ def login_options(request):
     return JsonResponse([], safe=False)
 
 
-# ---------- تیکت‌ها از داخل اپلیکیشن ----------
-
-def ticket_json(t: Ticket) -> dict:
-    return {
-        "id": t.pk,
-        "code": t.code,
-        "subject": t.subject,
-        "category": t.category,
-        "status": t.status,
-        "created_at": t.created_at.isoformat(),
-        "messages": [
-            {"from_client": m.from_client, "text": m.text, "created_at": m.created_at.isoformat()}
-            for m in t.messages.all()
-        ],
-    }
-
-
-def auth_device(request):
-    data = read_json(request)
-    client, _ = device(data, request, create=False)
-    if client is not None:
-        touch(client, request)
-    return data, client
-
-
-class ClientTicketListView(ClientView):
-    def post(self, request):
-        _, client = auth_device(request)
-        if client is None:
-            return JsonResponse({"error": "invalid id/uuid"}, status=401)
-        qs = client.tickets.prefetch_related("messages")[:50]
-        return JsonResponse({"tickets": [ticket_json(t) for t in qs]})
-
-
-class ClientTicketCreateView(ClientView):
-    def post(self, request):
-        data, client = auth_device(request)
-        if client is None:
-            return JsonResponse({"error": "invalid id/uuid"}, status=401)
-        if client.blocked:
-            return JsonResponse({"error": "این دستگاه مسدود شده است."}, status=403)
-        subject = s(data, "subject", 200)
-        body = s(data, "text", 5000)
-        if not subject or not body:
-            return JsonResponse({"error": "موضوع و متن را وارد کنید."}, status=400)
-        if client.tickets.filter(created_at__gte=timezone.now() - timedelta(hours=1)).count() >= settings.CLIENT_TICKETS_PER_HOUR:
-            return JsonResponse({"error": "تعداد تیکت‌ها بیش از حد مجاز است."}, status=429)
-        priority = s(data, "priority", 8)
-        diag = s(data, "diag", 300) or " · ".join(x for x in (f"v{client.version}" if client.version else "", client.os) if x)
-        with transaction.atomic():
-            t = Ticket.objects.create(
-                client=client,
-                subject=subject,
-                category=s(data, "category", 64),
-                priority=priority if priority in Priority.values else Priority.NORMAL,
-                diag=diag,
-            )
-            TicketMessage.objects.create(ticket=t, from_client=True, text=body)
-        return JsonResponse(ticket_json(t), status=201)
-
+# ---------- بازخورد از داخل اپلیکیشن ----------
 
 FEEDBACK_PRIORITY = {
     FeedbackCategory.BUG: Priority.NORMAL,
@@ -515,22 +470,3 @@ class ClientFeedbackView(ClientView):
                 shot.file.save(f"{t.code}-{n}.{ext}", ContentFile(raw), save=False)
                 shot.save()
         return JsonResponse({"ok": True, "id": t.code, "code": t.code, "images": len(images)}, status=201)
-
-
-class ClientTicketReplyView(ClientView):
-    def post(self, request, pk):
-        data, client = auth_device(request)
-        if client is None:
-            return JsonResponse({"error": "invalid id/uuid"}, status=401)
-        t = client.tickets.filter(pk=pk).first()
-        if t is None:
-            return JsonResponse({"error": "not found"}, status=404)
-        body = s(data, "text", 5000)
-        if not body:
-            return JsonResponse({"error": "متن را وارد کنید."}, status=400)
-        with transaction.atomic():
-            TicketMessage.objects.create(ticket=t, from_client=True, text=body)
-            # پاسخ کاربر تیکت را دوباره به صف «باز» برمی‌گرداند
-            t.set_status(TicketStatus.OPEN)
-            t.save(update_fields=["status", "closed_at", "updated_at"])
-        return JsonResponse(ticket_json(t))

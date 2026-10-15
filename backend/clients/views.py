@@ -1,8 +1,7 @@
-"""API پنل برای تب‌های «کلاینت‌ها» و «تیکت‌ها» (نشست Django، نقش ناظر فقط خواندن)."""
+"""API پنل برای تب‌های «کلاینت‌ها» و «بازخوردها» (نشست Django، نقش ناظر فقط خواندن)."""
 
 from datetime import timedelta
 
-from django.db import transaction
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
@@ -12,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import stats
-from .models import AccessToken, Client, Priority, Ticket, TicketImage, TicketMessage, TicketStatus
+from .models import AccessToken, Client, Priority, Ticket, TicketImage, TicketStatus
 
 
 def client_brief(c: Client) -> dict:
@@ -36,6 +35,7 @@ def ticket_row(t: Ticket) -> dict:
         "status": t.status,
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
+        "contact": t.contact,
         "has_log": bool(t.log_file),
         # در فهرست از annotate(n_images) می‌آید؛ جزئیات خودش دوباره می‌شمارد
         "image_count": getattr(t, "n_images", 0),
@@ -49,18 +49,11 @@ def ticket_detail(t: Ticket) -> dict:
         **ticket_row(t),
         "image_count": len(images),
         "diag": t.diag,
-        "contact": t.contact,
         "log": {"size": t.log_size, "files": t.log_files} if t.log_file else None,
         "images": [{"id": im.pk, "mime": im.mime, "size": im.size} for im in images],
         "messages": [
-            {
-                "id": m.pk,
-                "from_client": m.from_client,
-                "author": (m.author.display_name if m.author else "") if not m.from_client else "",
-                "text": m.text,
-                "created_at": m.created_at.isoformat(),
-            }
-            for m in t.messages.select_related("author")
+            {"id": m.pk, "from_client": m.from_client, "text": m.text, "created_at": m.created_at.isoformat()}
+            for m in t.messages.all()
         ],
     }
 
@@ -115,6 +108,7 @@ class ClientDetailView(APIView):
             "plan": c.account.plan if c.account_id else "free",
             "online": c.online,
             "blocked": c.blocked,
+            "revoked_at": c.revoked_at.isoformat() if c.revoked_at else None,
             "last_seen": c.last_seen.isoformat() if c.last_seen else None,
             "first_seen": c.first_seen.isoformat(),
             "os": c.os,
@@ -137,7 +131,10 @@ class ClientBlockView(APIView):
     def post(self, request, rd_id):
         c = get_object_or_404(Client, rd_id=rd_id)
         c.blocked = bool(request.data.get("blocked", True))
-        c.save(update_fields=["blocked"])
+        # مسدودسازی: heartbeat بعدی دستگاه «blocked: true» می‌گیرد و اپلیکیشن اطلاعات سرور را از روی
+        # دستگاه برمی‌دارد. رفع مسدودی: دستگاه در بررسی بعدی «blocked: false» می‌گیرد و اطلاعات برمی‌گردد.
+        c.revoked_at = None
+        c.save(update_fields=["blocked", "revoked_at"])
         if c.blocked:
             # دستگاه مسدود از حساب هم خارج می‌شود
             AccessToken.objects.filter(client=c).delete()
@@ -156,25 +153,6 @@ class ClientLogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ClientMessageView(APIView):
-    """پیام پشتیبانی به کلاینت = تیکتی که پشتیبانی شروع می‌کند (در اپلیکیشن در فهرست تیکت‌ها دیده می‌شود)."""
-
-    def post(self, request, rd_id):
-        c = get_object_or_404(Client, rd_id=rd_id)
-        subject = str(request.data.get("subject") or "").strip()[:200]
-        text = str(request.data.get("text") or "").strip()[:5000]
-        if not subject or not text:
-            return Response({"detail": "موضوع و متن پیام را وارد کنید."}, status=status.HTTP_400_BAD_REQUEST)
-        now = timezone.now()
-        with transaction.atomic():
-            t = Ticket.objects.create(
-                client=c, subject=subject, category="پیام پشتیبانی", status=TicketStatus.PENDING,
-                created_at=now, first_response_at=now,
-            )
-            TicketMessage.objects.create(ticket=t, from_client=False, author=request.user, text=text, created_at=now)
-        return Response(ticket_detail(t), status=status.HTTP_201_CREATED)
-
-
 # ---------- تیکت‌ها ----------
 
 class TicketListView(APIView):
@@ -184,20 +162,23 @@ class TicketListView(APIView):
         st = p.get("status", "open")
         if st in TicketStatus.values:
             qs = qs.filter(status=st)
+        if p.get("contact") == "1":
+            # فقط بازخوردهایی که کاربر راه تماس (شماره) گذاشته است
+            qs = qs.exclude(contact="")
         q = p.get("q", "").strip()[:100]
         if q:
-            cond = (Q(subject__icontains=q) | Q(client__rd_id__icontains=q.replace(" ", ""))
+            cond = (Q(subject__icontains=q) | Q(contact__icontains=q) | Q(client__rd_id__icontains=q.replace(" ", ""))
                     | Q(client__hostname__icontains=q) | Q(client__account__name__icontains=q)
                     | Q(client__account__email__icontains=q))
             code = q.upper().removeprefix("T-")
             if code.isdigit() and int(code) > 1000:
                 cond |= Q(pk=int(code) - 1000)
             qs = qs.filter(cond)
-        # فوری‌ها بالاتر، بعد جدیدترها
+        # جدیدها: اول آن‌هایی که شماره تماس دارند (باید با آن‌ها تماس گرفت)، بعد فوری‌ها، بعد جدیدترها
         order = {Priority.URGENT: 0, Priority.HIGH: 1, Priority.NORMAL: 2, Priority.LOW: 3}
         rows = list(qs[:300])
-        if st in (TicketStatus.OPEN, TicketStatus.PENDING):
-            rows.sort(key=lambda t: (order.get(t.priority, 2), -t.created_at.timestamp()))
+        if st == TicketStatus.OPEN:
+            rows.sort(key=lambda t: (not t.contact, order.get(t.priority, 2), -t.created_at.timestamp()))
         return Response([ticket_row(t) for t in rows])
 
 
@@ -248,22 +229,6 @@ class TicketImageView(APIView):
         resp["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; sandbox"
         resp["Cache-Control"] = "private, max-age=86400"
         return resp
-
-
-class TicketReplyView(APIView):
-    def post(self, request, pk):
-        t = get_object_or_404(Ticket.objects.select_related("client__account"), pk=pk)
-        text = str(request.data.get("text") or "").strip()[:5000]
-        if not text:
-            return Response({"text": ["متن پاسخ را وارد کنید."]}, status=status.HTTP_400_BAD_REQUEST)
-        now = timezone.now()
-        with transaction.atomic():
-            TicketMessage.objects.create(ticket=t, from_client=False, author=request.user, text=text, created_at=now)
-            if t.first_response_at is None:
-                t.first_response_at = now
-            t.set_status(TicketStatus.CLOSED if request.data.get("close") else TicketStatus.PENDING)
-            t.save(update_fields=["status", "closed_at", "first_response_at", "updated_at"])
-        return Response(ticket_detail(t))
 
 
 def open_ticket_count() -> int:

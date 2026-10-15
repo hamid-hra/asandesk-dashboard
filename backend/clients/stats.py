@@ -138,7 +138,7 @@ def clients_summary():
         # میانگین دقیقه اتصال در روز برای هر کلاینت فعال
         "avg_daily_minutes": round(total_secs / 60 / active_n / 30, 1) if active_n else None,
         "sessions_30d": ConnSession.objects.filter(authorized_at__gte=since).count(),
-        "with_open_tickets": Client.objects.filter(tickets__status__in=[TicketStatus.OPEN, TicketStatus.PENDING])
+        "with_open_tickets": Client.objects.filter(tickets__status=TicketStatus.OPEN)
         .distinct().count(),
         "platforms": [[p, n / active_n] for p, n in platforms.most_common()] if active_n else [],
     }
@@ -167,28 +167,13 @@ def daily_minutes(client: Client, days: int = 14) -> list[float]:
 
 
 def tickets_summary():
-    now = timezone.now()
-    week, prev = now - timedelta(days=7), now - timedelta(days=14)
-
-    def avg_first_response(a, b):
-        qs = Ticket.objects.filter(created_at__gte=a, created_at__lt=b, first_response_at__isnull=False)
-        vals = [(t.first_response_at - t.created_at).total_seconds() / 60 for t in qs.only("created_at", "first_response_at")]
-        return round(sum(vals) / len(vals), 1) if vals else None
-
-    resolved = Ticket.objects.filter(status=TicketStatus.CLOSED, closed_at__gte=week)
-    resolved_n = resolved.count()
-    fast = sum(1 for t in resolved.only("created_at", "closed_at") if (t.closed_at - t.created_at) <= timedelta(hours=24))
+    """شمارش بازخوردها: جدید، بررسی‌شده، و جدیدهایی که شماره تماس دارند (باید با آن‌ها تماس گرفت)."""
     counts = dict(Ticket.objects.values_list("status").annotate(n=Count("id")))
     return {
         "open": counts.get(TicketStatus.OPEN, 0),
-        "pending": counts.get(TicketStatus.PENDING, 0),
         "closed": counts.get(TicketStatus.CLOSED, 0),
-        "first_response_min": avg_first_response(week, now),
-        "first_response_prev_min": avg_first_response(prev, week),
-        "resolved_7d": resolved_n,
-        "resolved_fast_share": round(fast / resolved_n * 100) if resolved_n else None,
-        # نظرسنجی رضایت هنوز در اپلیکیشن پیاده نشده
-        "satisfaction": None,
+        "open_with_contact": Ticket.objects.filter(status=TicketStatus.OPEN).exclude(contact="").count(),
+        "last_7d": Ticket.objects.filter(created_at__gte=timezone.now() - timedelta(days=7)).count(),
     }
 
 

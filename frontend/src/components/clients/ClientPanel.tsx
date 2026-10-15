@@ -51,46 +51,11 @@ function Daily({ daily }: { daily: number[] }) {
   );
 }
 
-function MessageComposer({ id, onSent, onCancel }: { id: string; onSent: (ticketId: number) => void; onCancel: () => void }) {
-  const [subject, setSubject] = useState("");
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const send = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const t = await api<{ id: number }>(`/api/clients/${id}/message`, { method: "POST", body: { subject, text } });
-      onSent(t.id);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "ارسال نشد.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className={s.composer}>
-      <input className={s.input} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="موضوع" />
-      <textarea className={s.textarea} rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="متن پیام…" />
-      {error && <div style={{ fontSize: 12.5, color: "var(--danger-text)" }}>{error}</div>}
-      <div style={{ display: "flex", gap: 8 }}>
-        <button className={s.btnPrimary} style={{ flex: 1 }} disabled={busy || !subject.trim() || !text.trim()} onClick={send}>
-          ارسال پیام
-        </button>
-        <button className={s.btnGhost} onClick={onCancel}>
-          انصراف
-        </button>
-      </div>
-      <div style={{ fontSize: 11.5, color: "var(--faint)", lineHeight: 1.8 }}>پیام برای کاربر ثبت می‌شود و در بخش بازخوردها پیگیری می‌شود.</div>
-    </div>
-  );
-}
-
 export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
   const { user } = useAuth();
   const flash = useToast();
   const { data: c, error, mutate } = useSWR<ClientDetail>(`/api/clients/${encodeURIComponent(id)}`, fetcher, { refreshInterval: 30000 });
-  const [composing, setComposing] = useState(false);
+  const [confirmBlock, setConfirmBlock] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const act = async (path: string, body: unknown, msg: string) => {
@@ -151,6 +116,16 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
         </button>
       </div>
       <Badges c={c} />
+      {c.blocked && (
+        <div className={s.blockedNote}>
+          <b>این دستگاه مسدود است</b>
+          <span>
+            {c.revoked_at
+              ? `اطلاعات سرور آسان‌دسک از روی دستگاه برداشته شد (${whenText(c.revoked_at)}) و دیگر نمی‌تواند از سرویس استفاده کند.`
+              : "اطلاعات سرور در اولین ارتباط بعدی دستگاه از روی آن برداشته می‌شود؛ دستگاهی که روشن نباشد یا «ارسال اطلاعات برای پشتیبانی» را خاموش کرده باشد تا آن موقع پیام را نمی‌گیرد."}
+          </span>
+        </div>
+      )}
       <div className={s.miniStats}>
         <div className={s.miniStat}>
           <span>مدت اتصال</span>
@@ -234,34 +209,44 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
 
       {user.can_manage && (
         <div className={s.actions}>
-          {composing ? (
-            <MessageComposer
-              id={c.id}
-              onCancel={() => setComposing(false)}
-              onSent={() => {
-                setComposing(false);
-                mutate();
-                onChanged();
-                flash(`پیام برای ${c.display} ارسال شد`);
-              }}
-            />
+          {confirmBlock ? (
+            <div className={s.confirmBlock}>
+              <span>
+                با مسدودسازی، اطلاعات سرور آسان‌دسک (سرور شناسه، رله و کلید) در اولین ارتباط بعدی از روی این دستگاه برداشته می‌شود و دیگر نمی‌تواند از سرویس ما استفاده کند. با «رفع مسدودیت» برمی‌گردد. ادامه می‌دهید؟
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className={`${s.btnGhost} ${s.btnDanger}`}
+                  style={{ flex: 1 }}
+                  disabled={busy}
+                  onClick={async () => {
+                    await act("block", { blocked: true }, "کلاینت مسدود شد؛ اطلاعات سرور در اولین ارتباط بعدی برداشته می‌شود");
+                    setConfirmBlock(false);
+                  }}
+                >
+                  مسدود کن
+                </button>
+                <button className={s.btnGhost} disabled={busy} onClick={() => setConfirmBlock(false)}>
+                  انصراف
+                </button>
+              </div>
+            </div>
           ) : (
             <>
-              <button className={s.btnPrimary} style={{ flex: "1 1 auto" }} onClick={() => setComposing(true)}>
-                ارسال پیام
-              </button>
               {c.logged && (
                 <button className={s.btnGhost} disabled={busy} onClick={() => act("logout", undefined, "کاربر از حساب خارج شد")}>
                   خروج اجباری
                 </button>
               )}
-              <button
-                className={`${s.btnGhost} ${c.blocked ? "" : s.btnDanger}`}
-                disabled={busy}
-                onClick={() => act("block", { blocked: !c.blocked }, c.blocked ? "مسدودیت برداشته شد" : "کلاینت مسدود شد")}
-              >
-                {c.blocked ? "رفع مسدودیت" : "مسدودسازی"}
-              </button>
+              {c.blocked ? (
+                <button className={s.btnPrimary} style={{ flex: "1 1 auto" }} disabled={busy} onClick={() => act("block", { blocked: false }, "مسدودیت برداشته شد؛ اطلاعات سرور به دستگاه برمی‌گردد")}>
+                  رفع مسدودیت
+                </button>
+              ) : (
+                <button className={`${s.btnGhost} ${s.btnDanger}`} style={{ flex: "1 1 auto" }} disabled={busy} onClick={() => setConfirmBlock(true)}>
+                  مسدودسازی
+                </button>
+              )}
             </>
           )}
         </div>

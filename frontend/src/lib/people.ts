@@ -1,6 +1,6 @@
 // قالب‌بندی مشترک تب‌های «کلاینت‌ها» و «بازخوردها»
 import { dfDay, toFa } from "./fa";
-import type { Priority, TicketStatus } from "./types";
+import type { TicketStatus } from "./types";
 
 /** «482913557» → «482 913 557» (شناسه‌های عددی RustDesk) */
 export const formatId = (id: string) => (/^\d{7,}$/.test(id) ? id.replace(/\B(?=(\d{3})+$)/g, " ") : id);
@@ -61,18 +61,10 @@ export const timeOnly = (iso: string) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export const PRIORITY: Record<Priority, [string, string, string]> = {
-  urgent: ["فوری", "var(--danger-soft)", "var(--danger-strong)"],
-  high: ["بالا", "var(--warn-soft)", "var(--warn-text)"],
-  normal: ["عادی", "var(--info-soft)", "var(--info-text)"],
-  low: ["کم", "var(--subtle)", "var(--muted)"],
-};
-
-// بازخوردهای اپلیکیشن هم‌ساختار تیکت‌اند؛ فقط نام‌ها «بازخورد» است
+// بازخورد فقط دو حالت دارد؛ به کاربر پاسخی داده نمی‌شود (اگر شماره گذاشته باشد، تلفنی تماس می‌گیریم)
 export const TICKET_STATUS: Record<TicketStatus, [string, string]> = {
   open: ["جدید", "var(--danger)"],
-  pending: ["پاسخ داده شد", "var(--warn)"],
-  closed: ["بسته", "var(--older)"],
+  closed: ["بررسی‌شده", "var(--older)"],
 };
 
 /** دستهٔ بازخورد اپلیکیشن (bug|idea|other)؛ تیکت‌های قدیمی دسته‌شان متن آزاد است */

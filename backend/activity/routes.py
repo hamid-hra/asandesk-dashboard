@@ -37,13 +37,11 @@ ROUTES: dict[tuple[str, str], tuple[str, Label] | None] = {
     # کلاینت‌ها
     ("clients.ClientBlockView", "POST"): ("clients.block", _blocked),
     ("clients.ClientLogoutView", "POST"): ("clients.logout", "دستگاه {kw[rd_id]} را از حساب خارج کرد"),
-    ("clients.ClientMessageView", "POST"): ("clients.message", "برای دستگاه {kw[rd_id]} پیام پشتیبانی فرستاد"),
     # بازخوردها
     ("clients.TicketDetailView", "PATCH"): (
         "tickets.status",
         lambda kw, d: f"وضعیت بازخورد {_ticket(kw, d)} را به «{d.get('status', '')}» تغییر داد",
     ),
-    ("clients.TicketReplyView", "POST"): ("tickets.reply", lambda kw, d: f"به بازخورد {_ticket(kw, d)} پاسخ داد"),
     ("clients.TicketLogView", "GET"): ("tickets.log", "لاگ بازخورد {kw[pk]} را دانلود کرد"),
     # پشتیبان‌گیری
     ("backups.RunView", "POST"): ("backup.run", "پشتیبان‌گیری دستی را شروع کرد"),

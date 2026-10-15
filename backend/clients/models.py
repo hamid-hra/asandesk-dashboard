@@ -85,6 +85,8 @@ class Client(models.Model):
         Account, verbose_name="حساب واردشده", null=True, blank=True, on_delete=models.SET_NULL, related_name="clients"
     )
     blocked = models.BooleanField("مسدود", default=False)
+    # اولین باری که دستگاهِ مسدود گزارش داد اطلاعات سرور را از روی خودش برداشته است (heartbeat با revoked=true)
+    revoked_at = models.DateTimeField("زمان پاک شدن اطلاعات سرور", null=True, blank=True, editable=False)
     first_seen = models.DateTimeField("اولین تماس", default=timezone.now)
     last_seen = models.DateTimeField("آخرین تماس", null=True, blank=True)
     sysinfo_at = models.DateTimeField(null=True, blank=True, editable=False)
@@ -168,9 +170,10 @@ class ConnSession(models.Model):
 
 
 class TicketStatus(models.TextChoices):
-    OPEN = "open", "باز"
-    PENDING = "pending", "در انتظار کاربر"
-    CLOSED = "closed", "بسته"
+    """بازخورد فقط «جدید» یا «بررسی‌شده» است؛ به کاربر پاسخی داده نمی‌شود."""
+
+    OPEN = "open", "جدید"
+    CLOSED = "closed", "بررسی‌شده"
 
 
 class Priority(models.TextChoices):
@@ -201,7 +204,6 @@ class Ticket(models.Model):
     diag = models.CharField("اطلاعات پیوست", max_length=300, blank=True)
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
-    first_response_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     # «ارسال بازخورد» از داخل اپلیکیشن: راه تماس اختیاری و لاگ برنامه از لحظهٔ باز شدن
     contact = models.CharField("راه تماس", max_length=120, blank=True)
