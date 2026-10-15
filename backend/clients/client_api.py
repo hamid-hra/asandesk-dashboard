@@ -18,12 +18,15 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
+from django.db.models import Sum
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework.throttling import SimpleRateThrottle
+
+from accounts.throttles import request_ip, within_limit
 
 from .models import (
     AccessToken, Account, Client, ConnSession, FeedbackCategory, Priority, Ticket, TicketImage, TicketMessage, sha256,
@@ -51,7 +54,7 @@ def s(data: dict, key: str, limit: int) -> str:
 
 def client_ip(request) -> str:
     # nginx آدرس واقعی را در X-Real-IP می‌گذارد
-    return (request.META.get("HTTP_X_REAL_IP") or request.META.get("REMOTE_ADDR") or "")[:64]
+    return request_ip(request)
 
 
 def device(data: dict, request, create: bool) -> tuple[Client | None, bool]:
@@ -64,10 +67,16 @@ def device(data: dict, request, create: bool) -> tuple[Client | None, bool]:
     if client is None:
         if not create:
             return None, False
+        # هر کسی می‌تواند شناسهٔ ساختگی بفرستد؛ ساخت دستگاه تازه به‌ازای هر IP سقف دارد
+        if not within_limit("newdev", request, settings.CLIENT_NEW_DEVICES_PER_IP_HOUR, 3600):
+            log.warning("new-device limit reached for %s", client_ip(request))
+            return None, False
         try:
             with transaction.atomic():
                 client = Client.objects.create(
-                    rd_id=rd_id, uuid_hash=sha256(uuid), last_seen=timezone.now()
+                    rd_id=rd_id, uuid_hash=sha256(uuid), last_seen=timezone.now(),
+                    # uuid همان شناسهٔ ماشین است و بعد از نصب دوباره عوض نمی‌شود: ماشین مسدودشده با شناسهٔ تازه هم مسدود است
+                    blocked=machine_is_blocked(sha256(uuid)),
                 )
             return client, True
         except IntegrityError:  # درخواست همزمان همین دستگاه
@@ -75,11 +84,17 @@ def device(data: dict, request, create: bool) -> tuple[Client | None, bool]:
     if not client.uuid_hash:
         # مالک «بازنشانی کلید دستگاه» را زده؛ اولین تماس بعدی uuid جدید را ثبت می‌کند
         client.uuid_hash = sha256(uuid)
-        client.save(update_fields=["uuid_hash"])
+        client.blocked = client.blocked or machine_is_blocked(client.uuid_hash)
+        client.save(update_fields=["uuid_hash", "blocked"])
     elif not client.check_uuid(uuid):
         log.warning("client %s: uuid mismatch from %s", rd_id, client_ip(request))
         return None, False
     return client, False
+
+
+def machine_is_blocked(uuid_hash: str) -> bool:
+    """Is any known device with this machine uuid blocked?"""
+    return bool(uuid_hash) and Client.objects.filter(uuid_hash=uuid_hash, blocked=True).exists()
 
 
 def touch(client: Client, request, now=None):
@@ -391,6 +406,13 @@ def decode_feedback_images(data: dict) -> list[tuple[bytes, str, str]]:
     return out
 
 
+def feedback_storage_used() -> int:
+    """Bytes of attached logs and images (from the database, no disk scan)."""
+    logs = Ticket.objects.aggregate(n=Sum("log_size"))["n"] or 0
+    shots = TicketImage.objects.aggregate(n=Sum("size"))["n"] or 0
+    return logs + shots
+
+
 class ClientFeedbackView(ClientView):
     """«ارسال بازخورد» از داخل اپلیکیشن: متن کاربر + لاگ برنامه از لحظهٔ باز شدن + حداکثر ۳ تصویر.
 
@@ -424,9 +446,18 @@ class ClientFeedbackView(ClientView):
         message = s(data, "message", 4000)
         if len(message) < 5:
             return JsonResponse({"error": "متن بازخورد را بنویسید."}, status=400)
+        if not within_limit("feedback", request, settings.CLIENT_FEEDBACK_PER_IP_HOUR, 3600):
+            return JsonResponse({"error": "تعداد بازخوردها بیش از حد مجاز است."}, status=429)
         recent = client.tickets.filter(created_at__gte=timezone.now() - timedelta(hours=1)).count()
         if recent >= settings.CLIENT_FEEDBACK_PER_HOUR:
             return JsonResponse({"error": "تعداد بازخوردها بیش از حد مجاز است."}, status=429)
+        # فضای کل لاگ و تصویر پر شده: بازخورد فقط با متن ذخیره می‌شود (جلوی پر کردن دیسک)
+        full = feedback_storage_used() >= settings.FEEDBACK_MAX_TOTAL_BYTES
+        if full:
+            dropped = bool(data.get("log")) or bool(data.get("images"))
+            data = {**data, "log": None, "images": None}
+        else:
+            dropped = False
         try:
             raw = decode_feedback_log(data)
         except ValueError as e:
@@ -469,4 +500,7 @@ class ClientFeedbackView(ClientView):
                 shot = TicketImage(ticket=t, mime=mime, size=len(raw))
                 shot.file.save(f"{t.code}-{n}.{ext}", ContentFile(raw), save=False)
                 shot.save()
-        return JsonResponse({"ok": True, "id": t.code, "code": t.code, "images": len(images)}, status=201)
+        rsp = {"ok": True, "id": t.code, "code": t.code, "images": len(images)}
+        if dropped:
+            rsp["attachments_dropped"] = True
+        return JsonResponse(rsp, status=201)

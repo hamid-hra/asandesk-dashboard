@@ -49,6 +49,12 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       SECURE_COOKIES: ${SECURE_COOKIES:-0}
       RELEASE_MAX_FILE_MB: ${RELEASE_MAX_FILE_MB:-500}
+      # ظرفیت وب‌سرور و سقف سوءاستفاده (README: «محدودیت‌ها و حفاظت در برابر سوءاستفاده»)
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      CLIENT_NEW_DEVICES_PER_IP_HOUR: ${CLIENT_NEW_DEVICES_PER_IP_HOUR:-100}
+      CLIENT_FEEDBACK_PER_IP_HOUR: ${CLIENT_FEEDBACK_PER_IP_HOUR:-30}
+      FEEDBACK_MAX_TOTAL_MB: ${FEEDBACK_MAX_TOTAL_MB:-2048}
       LOCAL_SERVER_NAME: ${LOCAL_SERVER_NAME:-dashboard-local}
       LOCAL_SERVER_REGION: ${LOCAL_SERVER_REGION:-محلی}
       # آدرس مخفی پنل؛ backend فقط برای فایل «اطلاعات ورود» کاربر تازه به آن نیاز دارد
@@ -115,6 +121,8 @@ services:
       - "${HTTP_PORT:-8080}:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # شبکه‌های CDN برای خواندن آدرس واقعی بازدیدکننده (scripts/update-cdn-ips.sh)
+      - ./nginx/cdn-ips.conf:/etc/nginx/cdn-ips.conf:ro
       - ./nginx/gate:/gate:ro
       # صفحه‌های خطای برندشده (scripts/gen-error-pages.py)
       - ./nginx/errors:/usr/share/nginx/errors:ro

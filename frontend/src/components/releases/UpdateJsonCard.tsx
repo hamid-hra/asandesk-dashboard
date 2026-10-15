@@ -41,6 +41,7 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
 
   const url = `/api/releases/${encodeURIComponent(release.version)}/update.json`;
   const { data: preview, mutate } = useSWR<unknown>(url, fetcher);
+  const { data: keyInfo } = useSWR<{ public_key: string }>("/api/releases/update-key", fetcher);
   const text = preview ? JSON.stringify(preview, null, 2) : "";
 
   const save = async () => {
@@ -127,6 +128,9 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
         <a className={s.primary} style={{ width: "auto", padding: "0 22px", display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }} href={url} download="update.json">
           دانلود update.json
         </a>
+        <a className={s.secondary} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none", padding: "0 18px" }} href={`${url}.sig`} download="update.json.sig">
+          دانلود update.json.sig
+        </a>
         <button type="button" className={s.secondary} onClick={copy} disabled={!text}>
           کپی متن
         </button>
@@ -138,6 +142,13 @@ function Editor({ release, onSaved }: { release: Release; onSaved: () => void })
       </div>
       <span className={s.hint}>
         فایل را روی CDN بگذارید، آدرس update.asandesk.ir/update.json. اول فایل‌های نصب را بالا بگذارید و آخر update.json را.
+      </span>
+      <span className={s.hint} style={{ lineHeight: 1.9 }}>
+        امضا: کنار update.json حتماً update.json.sig را هم با همان نام روی CDN بگذارید (هر بار که update.json عوض شد، امضای تازه بگیرید). اپلیکیشنی که کلید امضا را داخل خودش دارد فایلِ بدون امضای درست را نادیده می‌گیرد.
+        کلید عمومی امضا، برای UPDATE_SIGNING_KEYS در src/asandesk.rs:{" "}
+        <b dir="ltr" className="mono" style={{ userSelect: "all", wordBreak: "break-all" }}>
+          {keyInfo?.public_key ?? "…"}
+        </b>
       </span>
     </div>
   );

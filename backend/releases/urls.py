@@ -4,8 +4,10 @@ from . import views
 
 urlpatterns = [
     path("stats", views.ReleaseStatsView.as_view()),
+    path("update-key", views.UpdateKeyView.as_view()),
     path("<str:version>", views.ReleaseDetailView.as_view()),
     path("<str:version>/update.json", views.UpdateJsonView.as_view()),
+    path("<str:version>/update.json.sig", views.UpdateJsonSigView.as_view()),
     path("<str:version>/download/<str:platform>", views.download),
     # نام فایل انتهای مسیر (برای آپدیت خودکار کلاینت)؛ در ویو نادیده گرفته می‌شود
     path("<str:version>/download/<str:platform>/<path:filename>", views.download),

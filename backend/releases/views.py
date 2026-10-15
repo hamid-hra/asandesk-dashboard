@@ -19,6 +19,7 @@ from clients.stats import version_distribution
 from .links import LinkError, fetch_installer, platform_of_name
 from .models import DEFAULT_BALE_URL, Channel, DownloadEvent, Release, ReleaseAsset
 from .serializers import ReleaseCreateSerializer, ReleaseSerializer, ReleaseUpdateSerializer
+from . import signing
 from .services import (
     delete_release,
     file_sha256,
@@ -158,6 +159,25 @@ class UpdateJsonView(APIView):
         resp["Content-Disposition"] = 'attachment; filename="update.json"'
         resp["Cache-Control"] = "private, no-store"
         return resp
+
+
+class UpdateJsonSigView(APIView):
+    """امضای جداشدهٔ update.json (همان بایت‌هایی که UpdateJsonView می‌دهد)؛ کنار آن روی CDN بگذارید."""
+
+    def get(self, request, version):
+        release = get_object_or_404(Release.objects.prefetch_related("assets"), version=version)
+        remember_base_url(request)
+        resp = HttpResponse(signing.sign_b64(update_json_bytes(release)) + "\n", content_type="text/plain; charset=utf-8")
+        resp["Content-Disposition"] = 'attachment; filename="update.json.sig"'
+        resp["Cache-Control"] = "private, no-store"
+        return resp
+
+
+class UpdateKeyView(APIView):
+    """کلید عمومی امضای update.json؛ در اپلیکیشن (UPDATE_SIGNING_KEYS) گذاشته می‌شود."""
+
+    def get(self, request):
+        return Response({"public_key": signing.public_key_b64()})
 
 
 class ReleaseStatsView(APIView):

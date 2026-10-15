@@ -159,6 +159,11 @@ SERVER_OFFLINE_AFTER_SECONDS = int(env("SERVER_OFFLINE_AFTER_SECONDS", "120"))
 CLIENT_OFFLINE_AFTER_SECONDS = int(env("CLIENT_OFFLINE_AFTER_SECONDS", "60"))
 # «ارسال بازخورد» اپلیکیشن: متن + لاگ فشرده (gzip+base64) در یک درخواست JSON
 CLIENT_FEEDBACK_PER_HOUR = int(env("CLIENT_FEEDBACK_PER_HOUR", "5"))
+# سقف به‌ازای هر آدرس IP (دستگاه را مهاجم می‌سازد، پس سقف هر دستگاه کافی نیست): دستگاه تازه و بازخورد در ساعت
+CLIENT_NEW_DEVICES_PER_IP_HOUR = int(env("CLIENT_NEW_DEVICES_PER_IP_HOUR", "100"))
+CLIENT_FEEDBACK_PER_IP_HOUR = int(env("CLIENT_FEEDBACK_PER_IP_HOUR", "30"))
+# سقف کل فضای لاگ و تصویر بازخوردها؛ بعد از آن فقط متن بازخورد ذخیره می‌شود
+FEEDBACK_MAX_TOTAL_BYTES = int(env("FEEDBACK_MAX_TOTAL_MB", "2048")) * 1024 * 1024
 # بدنه: متن + لاگ (تا ~۲ مگابایت base64) + حداکثر ۳ تصویر (اپ هرکدام را زیر ~۰٫۶ مگابایت نگه می‌دارد)
 FEEDBACK_MAX_BODY = 8 * 1024 * 1024
 # سقف حجم لاگِ بازشده؛ جلوی فایل فشردهٔ مخرب (zip bomb) را می‌گیرد

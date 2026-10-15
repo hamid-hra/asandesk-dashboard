@@ -130,16 +130,19 @@ class ClientDetailView(APIView):
 class ClientBlockView(APIView):
     def post(self, request, rd_id):
         c = get_object_or_404(Client, rd_id=rd_id)
-        c.blocked = bool(request.data.get("blocked", True))
+        blocked = bool(request.data.get("blocked", True))
         # مسدودسازی: heartbeat بعدی دستگاه «blocked: true» می‌گیرد و اپلیکیشن اطلاعات سرور را از روی
         # دستگاه برمی‌دارد. رفع مسدودی: دستگاه در بررسی بعدی «blocked: false» می‌گیرد و اطلاعات برمی‌گردد.
-        c.revoked_at = None
-        c.save(update_fields=["blocked", "revoked_at"])
-        if c.blocked:
+        # حکم برای «ماشین» است: همهٔ شناسه‌هایی که uuid (شناسهٔ ماشین) یکسان دارند، چون با نصب دوباره
+        # شناسهٔ تازه گرفته می‌شود ولی uuid همان می‌ماند.
+        machine = Client.objects.filter(uuid_hash=c.uuid_hash) if c.uuid_hash else Client.objects.filter(pk=c.pk)
+        machine.update(blocked=blocked, revoked_at=None)
+        if blocked:
             # دستگاه مسدود از حساب هم خارج می‌شود
-            AccessToken.objects.filter(client=c).delete()
-            Client.objects.filter(pk=c.pk).update(account=None)
-        return Response({"blocked": c.blocked})
+            AccessToken.objects.filter(client__in=machine).delete()
+            machine.update(account=None)
+        c.refresh_from_db()
+        return Response({"blocked": c.blocked, "machines": machine.count()})
 
 
 class ClientLogoutView(APIView):

@@ -8,7 +8,6 @@ from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from activity.service import record
@@ -16,6 +15,7 @@ from activity.service import record
 from . import recovery, setup
 from .models import Role, User
 from .serializers import UserSerializer
+from .throttles import RealIPScopedRateThrottle
 
 
 @method_decorator(ensure_csrf_cookie, name="get")
@@ -29,7 +29,7 @@ class CsrfView(APIView):
 @method_decorator(csrf_protect, name="post")
 class LoginView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [RealIPScopedRateThrottle]
     throttle_scope = "login"
 
     def post(self, request):
@@ -63,7 +63,7 @@ class PasswordChangeView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [RealIPScopedRateThrottle]
     throttle_scope = "password"
 
     def post(self, request):
@@ -109,7 +109,7 @@ class RecoveryGenerateView(APIView):
     """New set of recovery codes (the old ones stop working). Needs the current password."""
 
     permission_classes = [IsAuthenticated]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [RealIPScopedRateThrottle]
     throttle_scope = "recovery"
 
     def post(self, request):
@@ -123,7 +123,7 @@ class RecoveryResetView(APIView):
     """Forgot password: username + one recovery code + new password (signed out)."""
 
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [RealIPScopedRateThrottle]
     throttle_scope = "recovery"
 
     # The same text for an unknown user, a wrong code and a used code: nothing to enumerate
@@ -162,7 +162,7 @@ class SetupView(APIView):
     """ساخت حساب مالک در اولین ورود (فقط وقتی هیچ کاربری وجود ندارد)."""
 
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [RealIPScopedRateThrottle]
     throttle_scope = "setup"
 
     def get_throttles(self):
