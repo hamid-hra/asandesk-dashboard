@@ -239,6 +239,9 @@ def job_script(branch: str, info: dict) -> str:
         f"echo '[1/2] git pull --ff-only origin '{shlex.quote(branch)}",
         f"su-exec {shlex.quote(info['owner'])} env HOME=/tmp GIT_TERMINAL_PROMPT=0 {g} pull --ff-only origin {shlex.quote(branch)} || {{ echo 'FAILED: git pull'; exit 11; }}",
         "echo '[2/2] docker compose up -d --build'",
+        # without the buildx plugin compose falls back to the classic builder, which cannot run the
+        # Dockerfiles' `RUN --mount=type=cache` steps; say so up front instead of failing cryptically
+        "docker buildx version > /dev/null 2>&1 || echo 'WARNING: the buildx plugin is missing in the control image, so the build may fail on RUN --mount. Fix once on the server: docker compose up -d --build'",
         f"docker compose -p {shlex.quote(info['project'])} --ansi never up -d --build || {{ rc=$?; echo \"FAILED: docker compose (exit $rc)\"; exit $rc; }}",
         "echo DONE",
     ])

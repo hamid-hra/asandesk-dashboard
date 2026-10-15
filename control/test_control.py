@@ -9,6 +9,7 @@ import threading
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
@@ -144,6 +145,14 @@ def test_the_job_script_quotes_everything_it_is_given():
     assert "-p 'p; reboot'" in script
     assert script.index("git") < script.index("docker compose")  # pull first, then build
     assert "su-exec 1000:1000" in script  # git runs as the owner of the folder
+
+
+def test_the_job_warns_when_the_buildx_plugin_is_missing():
+    # without buildx compose builds with the classic builder and fails on `RUN --mount`
+    script = control.job_script("main", INFO)
+    assert "docker buildx version" in script and "WARNING" in script
+    assert script.index("docker buildx version") < script.index("docker compose -p")
+    assert "docker-cli-buildx" in (Path(control.__file__).parent / "Dockerfile").read_text()
 
 
 def test_job_states(docker):
