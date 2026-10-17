@@ -9,37 +9,47 @@
 }
 
 /* ---------- سایدبار ---------- */
+/* قاب چسبان سایدبار؛ دکمهٔ باز/بسته روی لبه‌اش می‌نشیند و با overflow سایدبار بریده نمی‌شود */
+.asideWrap {
+  position: sticky;
+  top: 12px;
+  height: calc(100vh - 24px);
+  flex: none;
+  z-index: 6;
+}
+
 .aside {
   width: 236px;
-  flex: none;
+  height: 100%;
   background: var(--chrome);
   border: 1px solid var(--border);
   border-radius: 20px;
   box-shadow: var(--shell-shadow);
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 12px;
-  height: calc(100vh - 24px);
   padding: 14px 12px;
   overflow-x: hidden;
   overflow-y: auto;
-  transition: width 0.2s ease;
+  transition: width 0.2s ease, padding 0.2s ease;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 6px 16px;
+  padding: 6px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.15s;
 }
-
-.brandText {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
+.brand:hover {
+  background: var(--subtle);
+}
+.brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .brandName {
@@ -48,29 +58,33 @@
   white-space: nowrap;
 }
 
-.brandSub {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
+.collapseTip {
+  position: absolute;
+  top: 26px;
+  inset-inline-end: -12px;
+  z-index: 7;
 }
 
 .collapseBtn {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 9px;
-  background: transparent;
+  border-radius: 50%;
+  background: var(--chrome);
   color: var(--muted);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  flex: none;
+  box-shadow: 0 1px 4px rgba(15, 31, 30, 0.12);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-
-.collapseBtn:hover {
-  background: var(--subtle);
-  color: var(--text);
+.collapseBtn:hover,
+.collapseBtn:focus-visible {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
 }
 
 .section {
@@ -144,8 +158,18 @@
   padding: 1px 7px;
 }
 
-.status {
+.asideFoot {
   margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.statusTip {
+  display: block;
+}
+
+.status {
   border: 1px solid var(--accent-border);
   background: var(--accent-softer);
   border-radius: 14px;
@@ -153,6 +177,12 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+.status:hover {
+  border-color: var(--accent);
 }
 
 .statusLabel {
@@ -226,22 +256,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-}
-
-.search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--faint);
-  font-size: 13px;
-  flex: 0 1 220px;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
 .themeToggle {
@@ -369,11 +383,23 @@
 }
 
 .menuHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 12px;
   color: var(--faint);
   padding: 8px 10px;
   border-bottom: 1px solid var(--divider);
   margin-bottom: 4px;
+}
+.menuHead b {
+  font-size: 13px;
+  color: var(--text);
+}
+.menuHead span {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .menuItem {
@@ -422,11 +448,10 @@
     padding-inline: 10px;
   }
   .aside[data-collapsed="true"] .brand {
-    flex-direction: column;
-    gap: 12px;
+    justify-content: center;
     padding-inline: 0;
   }
-  .aside[data-collapsed="true"] .brandText,
+  .aside[data-collapsed="true"] .brandName,
   .aside[data-collapsed="true"] .navLabel,
   .aside[data-collapsed="true"] .soonBadge,
   .aside[data-collapsed="true"] .sectionText,
@@ -457,6 +482,9 @@
   .aside[data-collapsed="true"] .status {
     padding: 12px 0;
     align-items: center;
+  }
+  .aside[data-collapsed="true"] .statusLabel {
+    justify-content: center;
   }
   .aside[data-collapsed="true"] .versionBtn {
     justify-content: center;
@@ -510,7 +538,10 @@
     cursor: pointer;
     flex: none;
   }
-  .collapseBtn {
+  .asideWrap {
+    display: contents;
+  }
+  .collapseTip {
     display: none;
   }
   .header {
@@ -520,7 +551,6 @@
     border-radius: 14px;
   }
   .today,
-  .search,
   .userText {
     display: none;
   }
@@ -682,4 +712,55 @@
   border-radius: 50%;
   background: var(--danger);
   margin-inline-start: 8px;
+}
+
+/* ---------- جزئیات وضعیت (سایدبار جمع‌شده) ---------- */
+.statusPop {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.statusPopHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--accent-strong);
+}
+.statusPop[data-tone="bad"] .statusPopHead {
+  color: var(--danger-strong);
+}
+.statusPop[data-tone="bad"] .statusDot {
+  background: var(--danger);
+  animation: none;
+}
+.statusPop dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.statusPop dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12.5px;
+}
+.statusPop dt {
+  color: var(--muted);
+}
+.statusPop dd {
+  margin: 0;
+  font-weight: 600;
+}
+.statusPopLink {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  border-top: 1px solid var(--divider);
+  padding-top: 8px;
+}
+.statusPopLink:hover {
+  text-decoration: underline;
 }

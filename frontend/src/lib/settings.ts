@@ -14,6 +14,9 @@ export interface UserRow {
   me: boolean;
   locked: boolean;
   must_change_password: boolean;
+  email: string;
+  phone: string;
+  needs_contact: boolean;
 }
 
 export const SECTIONS: [string, string][] = [
@@ -267,6 +270,7 @@ export const ACTIVITY_CATEGORY: Record<string, [string, string, string]> = {
   ha: ["HA", "var(--beta-soft)", "var(--beta-text)"],
   server: ["سرور", "var(--subtle)", "var(--text-2)"],
   system: ["سیستم", "var(--danger-soft)", "var(--danger-text)"],
+  notices: ["اعلان‌ها", "var(--accent-soft)", "var(--accent-strong)"],
   other: ["سایر", "var(--subtle)", "var(--muted)"],
 };
 
@@ -314,12 +318,16 @@ export interface DockerLogLine {
   ts: string;
   stream: "out" | "err";
   text: string;
+  /** فقط در نمای «همهٔ سرویس‌ها» */
+  service?: string;
 }
 export interface DockerLogs {
   service: string;
   container: string;
   state: string;
   lines: DockerLogLine[];
+  /** نمای «همه»: سرویس‌هایی که لاگشان خوانده نشد */
+  failed?: string[];
 }
 
 // ---------- فایل «اطلاعات ورود» کاربر تازه ----------

@@ -7,6 +7,7 @@ import useSWR from "swr";
 import { ClientChartsView } from "@/components/clients/charts/ClientCharts";
 import { ClientPanel } from "@/components/clients/ClientPanel";
 import { ClientTable } from "@/components/clients/ClientTable";
+import { activeCount, type ClientFilters, FilterBar, filterParams, NO_FILTERS } from "@/components/clients/FilterBar";
 import s from "@/components/clients/clients.module.css";
 import { KpiStrip } from "@/components/clients/KpiStrip";
 import { SearchBox, Seg } from "@/components/clients/SearchBox";
@@ -48,8 +49,10 @@ function ClientsInner() {
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("recent");
   const [q, setQ] = useState("");
+  const [extra, setExtra] = useState<ClientFilters>(NO_FILTERS);
 
   const query = new URLSearchParams({ filter, sort, q });
+  filterParams(extra, query);
   const { data: list, mutate } = useSWR<ClientList>(view === "list" ? `/api/clients?${query}` : null, fetcher, { refreshInterval: 30000, keepPreviousData: true });
   const { data: charts, error: chartsError, mutate: reloadCharts } = useSWR<ClientCharts>(view === "charts" ? "/api/clients/charts" : null, fetcher, { refreshInterval: 60000 });
   const { data: st, mutate: mutateStats } = useSWR<ClientStats>("/api/clients/stats", fetcher, { refreshInterval: 30000 });
@@ -99,11 +102,12 @@ function ClientsInner() {
               <Seg options={SORTS} value={sort} onChange={setSort} />
             </div>
           </div>
+          <FilterBar value={extra} onChange={setExtra} facets={list?.facets} />
           <ClientTable
             rows={rows}
             selected={selected}
             onSelect={(id) => select(id === selected ? null : id)}
-            empty={st?.total === 0 ? "هنوز کلاینتی به پنل گزارش نداده است (راهنما: README، بخش «اتصال کلاینت‌ها»)." : "کلاینتی با این فیلتر پیدا نشد"}
+            empty={st?.total === 0 ? "هنوز کلاینتی به پنل گزارش نداده است (راهنما: README، بخش «اتصال کلاینت‌ها»)." : activeCount(extra) ? "کلاینتی با این فیلترها پیدا نشد؛ یکی از فیلترها را بردارید." : "کلاینتی با این فیلتر پیدا نشد"}
           />
           <div className={s.footer}>
             {list

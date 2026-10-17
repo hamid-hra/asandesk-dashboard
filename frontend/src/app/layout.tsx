@@ -12,7 +12,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 
 export const metadata: Metadata = {
-  title: "آسان‌دسک — پنل مالک",
+  title: "آسان‌دسک — داشبورد",
   description: "داشبورد مدیریتی آسان‌دسک",
 };
 

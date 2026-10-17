@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 
 from activity.service import record
 
-from . import recovery, setup
+from . import contact, recovery, setup
 from .models import Role, User
 from .serializers import UserSerializer
 from .throttles import RealIPScopedRateThrottle
@@ -96,6 +96,30 @@ class MeView(APIView):
         return Response(UserSerializer(request.user).data)
 
 
+class ProfileView(APIView):
+    """The signed-in user sets their own mobile number and email (both required here).
+
+    Works before the temporary password is changed too, so the first-login steps can run in any order.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [RealIPScopedRateThrottle]
+    throttle_scope = "password"
+
+    def patch(self, request):
+        user = request.user
+        data = {k: request.data.get(k) for k in ("email", "phone")}
+        values, errors = contact.clean(user, data, required=True)
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        changed = [label for key, label in (("email", "ایمیل"), ("phone", "موبایل")) if getattr(user, key) != values[key]]
+        user.email, user.phone = values["email"], values["phone"]
+        user.save(update_fields=["email", "phone"])
+        if changed:
+            record("auth.profile", f"اطلاعات تماس خود را به‌روز کرد ({'، '.join(changed)})", request=request, user=user)
+        return Response(UserSerializer(user).data)
+
+
 class RecoveryStatusView(APIView):
     """How many unused recovery codes the signed-in user has left."""
 
@@ -116,6 +140,30 @@ class RecoveryGenerateView(APIView):
         if not request.user.check_password(request.data.get("password") or ""):
             return Response({"password": ["رمز عبور فعلی درست نیست."]}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"codes": recovery.generate_for(request.user), "total": recovery.COUNT})
+
+
+@method_decorator(csrf_protect, name="post")
+class RecoveryVerifyView(APIView):
+    """Forgot password, step 1: is this username + recovery code pair right? The code is not used up.
+
+    The login page shows the new-password form only after this says yes; step 2 (RecoveryResetView)
+    checks the pair again and only then spends the code.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [RealIPScopedRateThrottle]
+    throttle_scope = "recovery"
+
+    def post(self, request):
+        username = (request.data.get("username") or "").strip()
+        code = request.data.get("code") or ""
+        user = User.objects.filter(username=username, is_active=True).first()
+        if user is None:
+            recovery.digest(0, code)  # similar work, so timing does not tell the user exists
+            return Response({"detail": RecoveryResetView.BAD}, status=status.HTTP_400_BAD_REQUEST)
+        if not recovery.is_valid(user, code):
+            return Response({"detail": RecoveryResetView.BAD}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"ok": True})
 
 
 @method_decorator(csrf_protect, name="post")

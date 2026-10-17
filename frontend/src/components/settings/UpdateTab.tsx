@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { Icon } from "@/components/Icon";
@@ -13,6 +13,7 @@ import { useToast } from "@/lib/toast";
 
 import s from "./settings.module.css";
 import { ErrorState, errText, I, Modal, Skeleton } from "./ui";
+import { UpdateBottle } from "./UpdateBottle";
 
 const KIND: Record<string, string> = { new: "جدید", change: "تغییر", fix: "رفع اشکال" };
 const JOB_TEXT: Record<string, string> = { running: "در حال به‌روزرسانی…", ok: "به‌روزرسانی انجام شد", failed: "به‌روزرسانی ناموفق بود" };
@@ -20,6 +21,34 @@ const JOB_TEXT: Record<string, string> = { running: "در حال به‌روزر
 /** شمارهٔ نسخه همیشه لاتین و چپ‌به‌راست (ارقام فارسی «۱٫۷٫۰» خوانا نیست) */
 function Ver({ v }: { v: string }) {
   return <span dir="ltr" className="mono">{v}</span>;
+}
+
+// مراحل کار به‌روزرسانی از روی لاگ (control/control.py → job_script): [کف، سقف درصد، متن]
+const STAGES: [number, number, string][] = [
+  [2, 8, "آماده‌سازی…"],
+  [8, 15, "گرفتن کد جدید از GitHub…"],
+  [15, 72, "ساختن سرویس‌ها (build)…"],
+  [72, 86, "جایگزینی سرویس‌ها با نسخهٔ تازه…"],
+  [86, 97, "راه‌اندازی دوباره و بررسی سلامت سرویس‌ها…"],
+];
+
+/**
+ * درصد تقریبی پیشرفت. مرحله از روی لاگ معلوم است؛ داخل هر مرحله زمان سپری‌شده جلو می‌برد
+ * (به‌روزرسانی معمولاً ۳ تا ۶ دقیقه طول می‌کشد) ولی از سقف همان مرحله رد نمی‌شود.
+ */
+function progressOf(job: UpdateJob, restarting: boolean): { pct: number; stage: string } {
+  if (job.state === "ok") return { pct: 100, stage: "به‌روزرسانی تمام شد" };
+  const log = job.log ?? "";
+  let i = 0;
+  if (log.includes("[1/2]")) i = 1;
+  if (log.includes("[2/2]")) i = 2;
+  if (/\b(Built|Recreate|Recreated|Creating|Created)\b/.test(log)) i = 3;
+  if (/\bStart(ing|ed)\b/.test(log) || restarting) i = 4;
+  const [floor, ceil, stage] = STAGES[i];
+  const sec = job.started_at ? Math.max(0, (Date.now() - new Date(job.started_at).getTime()) / 1000) : 0;
+  const byTime = 100 * (1 - Math.exp(-sec / 140));
+  const pct = Math.max(floor, Math.min(ceil, byTime));
+  return { pct: job.state === "failed" ? Math.max(pct, 30) : pct, stage: job.state === "failed" ? "به‌روزرسانی ناموفق بود" : stage };
 }
 
 function elapsed(job: UpdateJob): string {
@@ -39,12 +68,13 @@ export function UpdateTab() {
   const [startedFrom, setStartedFrom] = useState<string | null>(null);
   const autoChecked = useRef(false);
   const logEnd = useRef<HTMLDivElement>(null);
+  // لاگ کار به‌روزرسانی فقط با دکمهٔ «مشاهدهٔ لاگ‌ها»؛ اگر خطا داد خودش باز می‌شود
+  const [showLog, setShowLog] = useState<boolean | null>(null);
 
   // هنگام به‌روزرسانی هر ۲ ثانیه؛ وگرنه هر ۳۰ ثانیه. وقتی سرویس‌ها دوباره بالا می‌آیند درخواست‌ها چند بار شکست می‌خورد و SWR دوباره تلاش می‌کند
-  const { data, error, mutate } = useSWR<UpdateInfo>("/api/settings/system/update", fetcher, {
-    refreshInterval: (latest) => (latest?.job?.state === "running" || startedFrom !== null ? 2000 : 30000),
-    keepPreviousData: true,
-  });
+  // تابع ثابت: SWR با هر تابع تازه تایمرش را از نو می‌سازد، پس با هر رندر نظرسنجی عقب می‌افتاد
+  const refreshInterval = useCallback((latest?: UpdateInfo) => (latest?.job?.state === "running" || startedFrom !== null ? 2000 : 30000), [startedFrom]);
+  const { data, error, mutate } = useSWR<UpdateInfo>("/api/settings/system/update", fetcher, { refreshInterval, keepPreviousData: true });
 
   const runCheck = async () => {
     setChecking(true);
@@ -75,7 +105,8 @@ export function UpdateTab() {
   }, [finishedHere]);
   useEffect(() => {
     logEnd.current?.scrollIntoView({ block: "nearest" });
-  }, [job?.log]);
+  }, [job?.log, showLog]);
+
 
   if (!data) return error ? <ErrorState onRetry={() => mutate()} /> : <Skeleton rows={3} />;
 
@@ -214,40 +245,32 @@ export function UpdateTab() {
         </div>
       )}
 
-      {job && (
-        <div className={`card ${s.cardPad}`}>
-          <div className={s.cardHead}>
-            <div>
-              <b>{JOB_TEXT[job.state]}</b>
-              <small>
-                {job.started_at && <>شروع: {jStamp(job.started_at)} · </>}
-                مدت: {elapsed(job)}
-              </small>
-            </div>
-            <span className={s.status}>
-              <span className="dot" style={{ background: job.state === "ok" ? "var(--ok)" : job.state === "failed" ? "var(--danger)" : "var(--warn)" }} />
-              {job.state === "running" ? "در جریان" : job.state === "ok" ? "موفق" : "ناموفق"}
-            </span>
+      {job && (() => {
+        const logOpen = showLog ?? job.state === "failed";
+        return (
+          <div className={`card ${s.cardPad}`}>
+            <JobHero job={job} restarting={restarting} logOpen={logOpen} onToggleLog={() => setShowLog(!logOpen)} finishedHere={finishedHere} />
+            {finishedHere && (
+              <div className={s.note} data-tone="ok">
+                <Icon d={I.check} size={18} />
+                <span><b>پنل به‌روز شد</b>چند ثانیهٔ دیگر صفحه دوباره بارگذاری می‌شود تا نسخهٔ تازه را ببینید.</span>
+              </div>
+            )}
+            {job.state === "failed" && (
+              <div className={s.note} data-tone="danger">
+                <Icon d={I.alert} size={18} />
+                <span><b>مرحله‌ای خطا داد</b>لاگ زیر علتش را نشان می‌دهد. اگر خطا در بیلد بوده، سرویس‌های فعلی معمولاً همان‌طور که بودند کار می‌کنند. بعد از رفع علت، دوباره «بررسی» و «به‌روزرسانی» را بزنید.</span>
+              </div>
+            )}
+            {logOpen && (
+              <div className={s.jobLog} dir="ltr" role="log" aria-label="لاگ به‌روزرسانی">
+                <pre>{job.log || "…"}</pre>
+                <div ref={logEnd} />
+              </div>
+            )}
           </div>
-          {finishedHere && (
-            <div className={s.note} data-tone="ok">
-              <Icon d={I.check} size={18} />
-              <span><b>پنل به‌روز شد</b>چند ثانیهٔ دیگر صفحه دوباره بارگذاری می‌شود تا نسخهٔ تازه را ببینید.</span>
-              <button className={s.btnGhost} style={{ marginInlineStart: "auto" }} onClick={() => window.location.reload()}>همین حالا</button>
-            </div>
-          )}
-          {job.state === "failed" && (
-            <div className={s.note} data-tone="danger">
-              <Icon d={I.alert} size={18} />
-              <span><b>مرحله‌ای خطا داد</b>لاگ زیر علتش را نشان می‌دهد. اگر خطا در بیلد بوده، سرویس‌های فعلی معمولاً همان‌طور که بودند کار می‌کنند. بعد از رفع علت، دوباره «بررسی» و «به‌روزرسانی» را بزنید.</span>
-            </div>
-          )}
-          <div className={s.jobLog} dir="ltr" role="log" aria-label="لاگ به‌روزرسانی">
-            <pre>{job.log || "…"}</pre>
-            <div ref={logEnd} />
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {confirm && (
         <Modal
@@ -276,5 +299,43 @@ export function UpdateTab() {
         </Modal>
       )}
     </>
+  );
+}
+
+/** بطری و درصد کار به‌روزرسانی؛ هر ثانیه خودش دوباره رندر می‌شود تا درصد زمان‌محور جلو برود (نه کل صفحه) */
+function JobHero({ job, restarting, logOpen, onToggleLog, finishedHere }: { job: UpdateJob; restarting: boolean; logOpen: boolean; onToggleLog: () => void; finishedHere: boolean }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (job.state !== "running") return;
+    const t = setInterval(() => tick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [job.state]);
+  const { pct, stage } = progressOf(job, restarting);
+  const tone = job.state === "running" ? "running" : job.state === "ok" ? "ok" : "failed";
+  return (
+    <div className={s.jobHero} data-state={job.state}>
+      <UpdateBottle pct={pct} tone={tone} size={job.state === "running" ? 168 : 112} />
+      <div className={s.jobInfo}>
+        <span className={s.status}>
+          <span className="dot" style={{ background: job.state === "ok" ? "var(--ok)" : job.state === "failed" ? "var(--danger)" : "var(--warn)" }} />
+          {job.state === "running" ? "در جریان" : job.state === "ok" ? "موفق" : "ناموفق"}
+        </span>
+        <b className={s.jobTitle}>{JOB_TEXT[job.state]}</b>
+        {job.state === "running" && <span className={s.jobPct}>{toFa(Math.round(pct))}٪</span>}
+        <span className={s.jobStage}>{stage}</span>
+        <small className={s.sub}>
+          {job.started_at && <>شروع: {jStamp(job.started_at)} · </>}
+          مدت: {elapsed(job)}
+        </small>
+        <div className={s.jobActions}>
+          <button className={s.btnGhost} onClick={onToggleLog} aria-expanded={logOpen} data-active={logOpen}>
+            <Icon d={I.terminal} size={16} /> {logOpen ? "بستن لاگ‌ها" : "مشاهدهٔ لاگ‌ها"}
+          </button>
+          {finishedHere && (
+            <button className={s.btnPrimary} onClick={() => window.location.reload()}>بارگذاری نسخهٔ تازه</button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

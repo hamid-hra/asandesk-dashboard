@@ -328,3 +328,42 @@
 .dline[data-lvl="stderr"] { color: #b9c9c4; }
 .dlogEmpty { padding: 24px 14px; color: #5d7a73; text-align: center; font-family: inherit; }
 .dfoot { display: flex; justify-content: space-between; gap: 12px; padding: 8px 18px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--divider); }
+
+.gridNote { grid-column: 1 / -1; color: var(--faint); font-size: 12px; margin-top: -6px; }
+
+/* ---------- اعلان‌ها ---------- */
+.noticeRow { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--divider); }
+.noticeRow:last-child { border-bottom: 0; }
+.noticeRow[data-off="true"] { opacity: 0.6; }
+.noticeIcon { width: 36px; height: 36px; flex: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.noticeMain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: right; cursor: pointer; padding: 0; }
+.noticeMain:hover .name > span:first-child { color: var(--accent); }
+.readMeter { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 76px; font-size: 12px; color: var(--muted); }
+.readMeter i { display: block; width: 76px; height: 5px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.readMeter b { display: block; height: 100%; background: var(--brand); border-radius: 5px; }
+.textarea { height: auto; padding: 10px 12px; line-height: 1.8; resize: vertical; font-family: inherit; }
+.pickList { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; padding: 6px; }
+.pick { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+.pick:hover { background: var(--subtle); }
+.pick input { width: 16px; height: 16px; accent-color: var(--brand); margin: 0; }
+.pick small { margin-inline-start: auto; color: var(--faint); font-family: "JetBrains Mono", monospace; }
+@media (max-width: 560px) { .readMeter { display: none; } }
+
+/* ---------- بطری به‌روزرسانی پنل ---------- */
+.jobHero { display: flex; align-items: center; gap: 28px; padding: 8px 4px; }
+.jobHero[data-state="running"] { padding: 18px 8px; }
+.jobInfo { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.jobTitle { font-size: 16px; }
+.jobPct { font-size: 34px; font-weight: 800; color: var(--accent); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.jobStage { font-size: 13.5px; color: var(--text-2); }
+.jobActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+@media (max-width: 560px) { .jobHero { flex-direction: column; align-items: center; text-align: center; } .jobInfo { align-items: center; } }
+
+/* ---------- لاگ داکر: همهٔ سرویس‌ها ---------- */
+.svcFilter { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--divider); }
+.svcChip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-family: "JetBrains Mono", monospace; font-size: 11.5px; cursor: pointer; }
+.svcChip i { width: 8px; height: 8px; border-radius: 50%; background: var(--svc); opacity: 0.35; }
+.svcChip[aria-pressed="true"] { color: var(--text); border-color: var(--input-border); }
+.svcChip[aria-pressed="true"] i { opacity: 1; }
+.svcChip[aria-pressed="false"] { text-decoration: line-through; }
+.svcTag { flex: none; min-width: 72px; font-weight: 600; }

@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "ha",
     "activity",
     "ops",
+    "notices",
 ]
 
 MIDDLEWARE = [

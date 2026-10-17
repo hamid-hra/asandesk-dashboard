@@ -73,6 +73,9 @@ class User(AbstractUser):
     perms = models.JSONField("دسترسی بخش‌ها", default=dict, blank=True)
     # رمز را کس دیگری گذاشته (ساخت حساب یا «تغییر رمز» توسط مالک)؛ تا خود کاربر رمز تازه نگذارد پنل کار نمی‌کند
     must_change_password = models.BooleanField("باید رمز را عوض کند", default=False)
+    # موبایل (09xxxxxxxxx یا +کد کشور). ایمیل همان فیلد email خود Django است. هر دو هنگام ساخت حساب
+    # اختیاری‌اند ولی کاربر در ورود بعدی باید پرشان کند (accounts/contact.py)
+    phone = models.CharField("موبایل", max_length=16, blank=True, default="")
 
     objects = UserManager()
 
@@ -109,6 +112,11 @@ class User(AbstractUser):
     @property
     def display_name(self):
         return self.get_full_name() or self.username
+
+    @property
+    def needs_contact(self) -> bool:
+        """ایمیل یا موبایل ندارد؛ پنل تا پرشدنشان فرم «اطلاعات تماس» را نشان می‌دهد."""
+        return not (self.email and self.phone)
 
 
 class RecoveryCode(models.Model):

@@ -13,6 +13,8 @@ PATH_SECTIONS = (
     ("/api/settings/backups", "backup"),
     ("/api/settings/ha", "ha"),
     ("/api/settings/activity", "activity"),
+    # اعلان به کاربران پنل: هر کس کاربران را مدیریت می‌کند
+    ("/api/settings/notices", "users"),
 )
 
 

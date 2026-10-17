@@ -5,24 +5,15 @@ import { Suspense, useState } from "react";
 import useSWR, { mutate } from "swr";
 
 import { AsanLoader } from "@/components/AsanLoader";
-import { Logo } from "@/components/Logo";
+import { Brand, Label, Title } from "@/components/shell/AuthBits";
+import { InfoTip } from "@/components/Tip";
 import { api, ApiError, fetcher } from "@/lib/api";
 import { INTRO_KEY, INTRO_MS } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
 import s from "./login.module.css";
 
-function Brand() {
-  return (
-    <div className={s.brand}>
-      <Logo size={40} />
-      <div>
-        <div className={s.brandName}>آسان‌دسک</div>
-        <div className={s.brandSub}>پنل مالک</div>
-      </div>
-    </div>
-  );
-}
+const tooMany = "تعداد تلاش‌ها زیاد است؛ یک دقیقه دیگر دوباره امتحان کنید.";
 
 /** اولین ورود: ساخت حساب مالک با کد راه‌اندازی که در لاگ backend چاپ شده */
 function SetupForm({ onDone }: { onDone: () => void }) {
@@ -49,7 +40,7 @@ function SetupForm({ onDone }: { onDone: () => void }) {
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 429
-          ? "تعداد تلاش‌ها زیاد است؛ یک دقیقه دیگر دوباره امتحان کنید."
+          ? tooMany
           : err instanceof Error
             ? err.message
             : "ساخت حساب ناموفق بود.",
@@ -62,27 +53,21 @@ function SetupForm({ onDone }: { onDone: () => void }) {
   return (
     <form className={s.card} onSubmit={submit}>
       <Brand />
-      <div>
-        <div className={s.title}>راه‌اندازی اولیه</div>
-        <div className={s.sub}>نام کاربری و رمز عبور حساب مالک را تعیین کنید. این صفحه فقط یک بار نمایش داده می‌شود.</div>
-      </div>
+      <Title tip="نام کاربری و رمز عبور حساب مالک را تعیین کنید. این صفحه فقط یک بار نمایش داده می‌شود.">راه‌اندازی اولیه</Title>
       <label className={s.field}>
-        <span>کد راه‌اندازی</span>
+        <Label tip={'کد در لاگ سرویس backend چاپ شده است؛ روی سرور: docker compose logs backend | grep "SETUP CODE"'}>کد راه‌اندازی</Label>
         <input dir="ltr" className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX" autoFocus autoComplete="off" />
-        <small className={s.hint}>
-          روی سرور اجرا کنید: <code dir="ltr">{"docker compose logs backend | grep \"SETUP CODE\""}</code>
-        </small>
       </label>
       <label className={s.field}>
-        <span>نام کاربری مالک</span>
+        <Label>نام کاربری مالک</Label>
         <input dir="ltr" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
       </label>
       <label className={s.field}>
-        <span>رمز عبور</span>
+        <Label tip="حداقل ۸ نویسه">رمز عبور</Label>
         <input dir="ltr" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       </label>
       <label className={s.field}>
-        <span>تکرار رمز عبور</span>
+        <Label>تکرار رمز عبور</Label>
         <input dir="ltr" type="password" autoComplete="new-password" value={password2} onChange={(e) => setPassword2(e.target.value)} />
       </label>
       {error && <div className={s.error}>{error}</div>}
@@ -93,19 +78,41 @@ function SetupForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** رمز را فراموش کرده‌ام: نام کاربری + یکی از کدهای بازیابی + رمز تازه (بدون ایمیل) */
+/**
+ * رمز را فراموش کرده‌ام، دو مرحله (بدون ایمیل):
+ * ۱) نام کاربری + یکی از کدهای بازیابی؛ سرور فقط درستی‌اش را می‌گوید و کد را مصرف نمی‌کند
+ * ۲) فقط اگر درست بود: رمز تازه؛ همین‌جا کد مصرف می‌شود
+ */
 function ResetForm({ onBack, onDone }: { onBack: () => void; onDone: (username: string) => void }) {
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
+  const [verified, setVerified] = useState(false);
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
+  const fail = (err: unknown, fallback: string) =>
+    setError(err instanceof ApiError && err.status === 429 ? tooMany : err instanceof Error ? err.message : fallback);
+
+  const verify = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) return setError("نام کاربری را وارد کنید.");
     if (!code.trim()) return setError("کد بازیابی را وارد کنید.");
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/auth/recovery/verify", { method: "POST", body: { username: username.trim(), code } });
+      setVerified(true);
+    } catch (err) {
+      fail(err, "بررسی کد ناموفق بود.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (password.length < 8) return setError("رمز عبور باید حداقل ۸ کاراکتر باشد.");
     if (password !== password2) return setError("تکرار رمز عبور با رمز عبور یکسان نیست.");
     setBusy(true);
@@ -114,40 +121,56 @@ function ResetForm({ onBack, onDone }: { onBack: () => void; onDone: (username: 
       await api("/api/auth/recovery/reset", { method: "POST", body: { username: username.trim(), code, password } });
       onDone(username.trim());
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 429
-          ? "تعداد تلاش‌ها زیاد است؛ یک دقیقه دیگر دوباره امتحان کنید."
-          : err instanceof Error
-            ? err.message
-            : "تغییر رمز ناموفق بود.",
-      );
+      // کد در این فاصله مصرف یا باطل شده: از اول
+      if (err instanceof ApiError && err.status === 400 && !(err.data as Record<string, unknown> | null)?.password) setVerified(false);
+      fail(err, "تغییر رمز ناموفق بود.");
     } finally {
       setBusy(false);
     }
   };
 
+  if (!verified) {
+    return (
+      <form className={s.card} onSubmit={verify} method="post">
+        <Brand />
+        <Title tip="نام کاربری و یکی از کدهای بازیابی که قبلاً ذخیره کرده‌اید را وارد کنید. اگر درست باشد، رمز تازه را می‌گذارید.">بازیابی رمز عبور</Title>
+        <div className={s.steps} aria-label="مرحلهٔ ۱ از ۲"><i data-on="true" /><i /></div>
+        <label className={s.field}>
+          <Label>نام کاربری</Label>
+          <input name="username" dir="ltr" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        </label>
+        <label className={s.field}>
+          <Label tip="هر کد فقط یک بار کار می‌کند. کدها را بعد از ورود در تنظیمات ← حساب من می‌سازید. کد ندارید؟ از مالک پنل بخواهید رمزتان را عوض کند.">کد بازیابی</Label>
+          <input name="code" dir="ltr" className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX" autoComplete="off" spellCheck={false} />
+        </label>
+        {error && <div className={s.error}>{error}</div>}
+        <button className={s.submit} disabled={busy}>
+          {busy ? "در حال بررسی…" : "ادامه"}
+        </button>
+        <button type="button" className={s.link} onClick={onBack}>
+          بازگشت به ورود
+        </button>
+      </form>
+    );
+  }
+
   return (
-    <form className={s.card} onSubmit={submit} method="post">
+    <form className={s.card} onSubmit={reset} method="post">
       <Brand />
-      <div>
-        <div className={s.title}>بازیابی رمز عبور</div>
-        <div className={s.sub}>نام کاربری، یکی از کدهای بازیابی که قبلاً ذخیره کرده‌اید و رمز تازه را وارد کنید.</div>
-      </div>
-      <label className={s.field}>
+      <Title tip="کد درست بود. رمز تازه را دو بار وارد کنید؛ با ذخیره، کد مصرف می‌شود و ورودهای قبلی این حساب بسته می‌شوند.">رمز عبور تازه</Title>
+      <div className={s.steps} aria-label="مرحلهٔ ۲ از ۲"><i data-on="true" /><i data-on="true" /></div>
+      <div className={s.who}>
         <span>نام کاربری</span>
-        <input name="username" dir="ltr" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        <b dir="ltr">{username.trim()}</b>
+      </div>
+      {/* برای اینکه مدیر رمز مرورگر رمز تازه را برای همین نام کاربری ذخیره کند */}
+      <input type="text" name="username" autoComplete="username" value={username.trim()} readOnly hidden />
+      <label className={s.field}>
+        <Label tip="حداقل ۸ نویسه">رمز عبور تازه</Label>
+        <input name="new-password" dir="ltr" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
       </label>
       <label className={s.field}>
-        <span>کد بازیابی</span>
-        <input name="code" dir="ltr" className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXX-XXXX-XXXX" autoComplete="off" spellCheck={false} />
-        <small className={s.hint}>هر کد فقط یک بار کار می‌کند. کدها را بعد از ورود از منوی پروفایل، بخش کدهای بازیابی رمز، می‌سازید.</small>
-      </label>
-      <label className={s.field}>
-        <span>رمز عبور تازه</span>
-        <input name="new-password" dir="ltr" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      </label>
-      <label className={s.field}>
-        <span>تکرار رمز عبور تازه</span>
+        <Label>تکرار رمز عبور تازه</Label>
         <input name="new-password-confirm" dir="ltr" type="password" autoComplete="new-password" value={password2} onChange={(e) => setPassword2(e.target.value)} />
       </label>
       {error && <div className={s.error}>{error}</div>}
@@ -157,12 +180,6 @@ function ResetForm({ onBack, onDone }: { onBack: () => void; onDone: (username: 
       <button type="button" className={s.link} onClick={onBack}>
         بازگشت به ورود
       </button>
-      <small className={s.hint}>
-        کد ندارید؟ مالک پنل می‌تواند رمز شما را از تنظیمات، بخش کاربران، عوض کند. رمز مالک را روی سرور با این دستور عوض کنید:
-        <code dir="ltr" style={{ display: "block", marginTop: 6 }}>
-          docker compose exec backend python manage.py changepassword USERNAME
-        </code>
-      </small>
     </form>
   );
 }
@@ -195,7 +212,7 @@ function LoginForm({ onForgot, notice, initialUsername }: { onForgot: () => void
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 429
-          ? "تعداد تلاش‌ها زیاد است؛ یک دقیقه دیگر دوباره امتحان کنید."
+          ? tooMany
           : err instanceof Error
             ? err.message
             : "ورود ناموفق بود.",
@@ -209,23 +226,20 @@ function LoginForm({ onForgot, notice, initialUsername }: { onForgot: () => void
     <form className={s.card} onSubmit={submit} method="post">
       {entering && <AsanLoader full label="در حال ورود" />}
       <Brand />
-      <div>
-        <div className={s.title}>ورود به پنل</div>
-        <div className={s.sub}>برای مدیریت سرورها و نسخه‌ها وارد شوید.</div>
-      </div>
+      <Title tip="برای مدیریت سرورها، نسخه‌ها و کلاینت‌ها وارد شوید.">ورود به پنل</Title>
       {/* name و id لازم است تا مرورگر و مدیر رمز، رمز را ذخیره و خودکار پر کنند */}
       <label className={s.field}>
-        <span>نام کاربری</span>
+        <Label>نام کاربری</Label>
         <input id="username" name="username" dir="ltr" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
       </label>
       <label className={s.field}>
-        <span>رمز عبور</span>
+        <Label>رمز عبور</Label>
         <input id="password" name="password" dir="ltr" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       </label>
       <label className={s.remember}>
         <input type="checkbox" name="remember" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
         <span>مرا به خاطر بسپار</span>
-        <small>{remember ? "تا ۳۰ روز در همین مرورگر وارد می‌مانید" : "با بستن مرورگر خارج می‌شوید"}</small>
+        <InfoTip text={remember ? "تا ۳۰ روز در همین مرورگر وارد می‌مانید" : "با بستن مرورگر خارج می‌شوید"} />
       </label>
       {notice && <div className={s.notice}>{notice}</div>}
       {error && <div className={s.error}>{error}</div>}

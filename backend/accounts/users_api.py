@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from . import contact
 from .models import LEVELS, SECTIONS, Role, User, clean_extras, clean_perms
 
 from activity.service import note
@@ -31,6 +32,9 @@ def user_row(u: User, me: User) -> dict:
         "me": u.pk == me.pk,
         "locked": u.role == Role.OWNER,
         "must_change_password": u.must_change_password,
+        "email": u.email,
+        "phone": u.phone,
+        "needs_contact": u.needs_contact,
     }
 
 
@@ -102,6 +106,12 @@ class UserListView(APIView):
             return Response({"detail": "نمی‌توانید دسترسی بیشتر از دسترسی خودتان بدهید."}, status=status.HTTP_403_FORBIDDEN)
         # رمز را مالک گذاشته؛ کاربر در اولین ورود باید رمز خودش را بگذارد
         user = User(username=username, first_name=name, role=role, perms=perms, is_active=d.get("active", True) is not False, must_change_password=True)
+        # موبایل و ایمیل اختیاری‌اند؛ اگر داده شوند باید درست و تکراری‌نبوده باشند
+        values, errors = contact.clean(user, {k: d.get(k) for k in ("email", "phone") if k in d}, required=False)
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        for k, v in values.items():
+            setattr(user, k, v)
         try:
             validate_password(password, user)
         except ValidationError as e:
@@ -121,13 +131,19 @@ class UserDetailView(APIView):
             return Response({"detail": "فقط مالک می‌تواند حساب مالک را ویرایش کند."}, status=status.HTTP_403_FORBIDDEN)
         if user.role != Role.OWNER and exceeds(actor, effective(user.role, user.perms)):
             return Response({"detail": "این کاربر از شما دسترسی بیشتری دارد."}, status=status.HTTP_403_FORBIDDEN)
-        before = (user.role, dict(user.perms or {}), user.is_active, user.first_name)
+        before = (user.role, dict(user.perms or {}), user.is_active, user.first_name, user.email, user.phone)
 
         if "display_name" in d:
             name = (d.get("display_name") or "").strip()
             if not name or len(name) > 150:
                 return error("display_name", "نام نمایشی را وارد کنید.")
             user.first_name, user.last_name = name, ""
+
+        values, errors = contact.clean(user, {k: d.get(k) for k in ("email", "phone") if k in d}, required=False)
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        for k, v in values.items():
+            setattr(user, k, v)
 
         if user.role == Role.OWNER:
             # حساب مالک قفل است: نقش و فعال‌بودنش تغییر نمی‌کند
@@ -166,6 +182,10 @@ class UserDetailView(APIView):
             changed.append("فعال بودن حساب" if user.is_active else "غیرفعال کردن حساب")
         if before[3] != user.first_name:
             changed.append("نام")
+        if before[4] != user.email:
+            changed.append("ایمیل")
+        if before[5] != user.phone:
+            changed.append("موبایل")
         note(request, f"کاربر «{user.username}» را ویرایش کرد" + (f": {'، '.join(changed)}" if changed else ""), "users.update")
         return Response(user_row(user, actor))
 

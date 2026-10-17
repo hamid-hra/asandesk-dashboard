@@ -1,6 +1,7 @@
 """Settings → panel update and docker logs. Owner only: these reach the host's Docker."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from rest_framework import status
 from rest_framework.response import Response
@@ -106,10 +107,38 @@ class ServicesView(OwnerView):
             return Response({"detail": e.message, "offline": e.offline}, status=status.HTTP_503_SERVICE_UNAVAILABLE if e.offline else e.status)
 
 
+ALL = "all"
+ALL_MAX_LINES = 3000
+
+
+def merged_logs(tail: int, since: str) -> dict:
+    """Every service's log in one time-ordered list; each line carries its service name.
+
+    Asks `control` for each service in parallel (the old control service only knows single services).
+    """
+    services = [x for x in control.call("GET", "/services").get("services", []) if x.get("service") != "update-job"]
+
+    def one(svc: dict):
+        try:
+            return svc, control.call("GET", "/logs", params={"service": svc["service"], "tail": tail, "since": since}, timeout=40), ""
+        except ControlError as e:
+            return svc, None, e.message
+
+    lines, failed = [], []
+    with ThreadPoolExecutor(max_workers=min(8, len(services) or 1)) as pool:
+        for svc, data, err in pool.map(one, services):
+            if data is None:
+                failed.append(f"{svc['service']}: {err}")
+                continue
+            lines.extend({**line, "service": svc["service"]} for line in data.get("lines", []))
+    lines.sort(key=lambda line: line.get("ts") or "")
+    return {"service": ALL, "container": f"{len(services)} سرویس", "state": "running", "lines": lines[-ALL_MAX_LINES:], "failed": failed}
+
+
 class LogsView(OwnerView):
     def get(self, request):
         service = request.query_params.get("service", "")
-        if not SERVICE_RE.match(service):
+        if service != ALL and not SERVICE_RE.match(service):
             return Response({"service": ["سرویس نامعتبر است."]}, status=status.HTTP_400_BAD_REQUEST)
         try:
             tail = max(10, min(int(request.query_params.get("tail", 300)), 2000))
@@ -119,6 +148,8 @@ class LogsView(OwnerView):
         if since and not SINCE_RE.match(since):
             return Response({"since": ["بازهٔ زمانی نامعتبر است."]}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            if service == ALL:
+                return Response(merged_logs(tail, since))
             return Response(control.call("GET", "/logs", params={"service": service, "tail": tail, "since": since}, timeout=40))
         except ControlError as e:
             return Response({"detail": e.message}, status=status.HTTP_503_SERVICE_UNAVAILABLE if e.offline else e.status)

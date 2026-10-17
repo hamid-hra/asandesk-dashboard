@@ -7,12 +7,15 @@ import useSWR from "swr";
 
 import { Icon } from "@/components/Icon";
 import { Logo } from "@/components/Logo";
+import { Tip } from "@/components/Tip";
 import { fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { dfToday, pctText, toFa } from "@/lib/fa";
-import { canSee, TABS, tabFor } from "@/lib/nav";
+import { canSee, levelOf, TABS, tabFor } from "@/lib/nav";
 import type { RecoveryStatus, Status } from "@/lib/types";
 
+import { GlobalSearch } from "./GlobalSearch";
+import { NoticeBell, NoticePopup } from "./Notices";
 import { RECOVERY_KEY } from "./RecoveryDialog";
 import { ThemeToggle } from "./ThemeToggle";
 import { VersionBadge } from "./VersionBadge";
@@ -23,19 +26,21 @@ const ROLE_EN = { owner: "Owner", admin: "Admin", viewer: "Viewer", custom: "Cus
 /** منوی کناری جمع‌شده (فقط آیکون‌ها) در همین مرورگر یادآوری می‌شود */
 const COLLAPSE_KEY = "ad_nav_collapsed";
 
-function NavItem({ tab, active, onClick, badge }: { tab: (typeof TABS)[number]; active: boolean; onClick: () => void; badge?: number }) {
+function NavItem({ tab, active, onClick, badge, collapsed }: { tab: (typeof TABS)[number]; active: boolean; onClick: () => void; badge?: number; collapsed: boolean }) {
+  const tip = badge ? `${tab.label} — ${toFa(badge)} مورد جدید` : tab.label;
   return (
-    <Link href={tab.href} className={s.navItem} aria-current={active ? "page" : undefined} onClick={onClick} title={tab.label}>
-      <Icon d={tab.icon} />
-      <span className={s.navLabel}>{tab.label}</span>
-      {tab.soon && <span className={s.soonBadge}>به‌زودی</span>}
-      {!!badge && <span className={s.countBadge} title={`${toFa(badge)} مورد جدید`}>{toFa(badge)}</span>}
-    </Link>
+    <Tip content={tip} side="left" disabled={!collapsed} block>
+      <Link href={tab.href} className={s.navItem} aria-current={active ? "page" : undefined} onClick={onClick} aria-label={collapsed ? tip : undefined}>
+        <Icon d={tab.icon} />
+        <span className={s.navLabel}>{tab.label}</span>
+        {tab.soon && <span className={s.soonBadge}>به‌زودی</span>}
+        {!!badge && <span className={s.countBadge} title={`${toFa(badge)} مورد جدید`}>{toFa(badge)}</span>}
+      </Link>
+    </Tip>
   );
 }
 
-function StatusBox() {
-  const { data } = useSWR<Status>("/api/monitoring/status", fetcher, { refreshInterval: 30000 });
+function statusOf(data: Status | undefined) {
   let tone: "ok" | "bad" = "ok";
   let label = "همه سرویس‌ها عملیاتی";
   if (data) {
@@ -48,17 +53,38 @@ function StatusBox() {
       label = "هشدار بحرانی فعال";
     }
   }
+  return { tone, label: data ? label : "در حال بررسی…" };
+}
+
+/** وضعیت سرویس‌ها پایین سایدبار؛ در حالت جمع‌شده فقط یک نقطه که با بردن نشانگر جزئیات را نشان می‌دهد */
+function StatusBox({ data, collapsed }: { data: Status | undefined; collapsed: boolean }) {
+  const { tone, label } = statusOf(data);
   const uptime = data?.uptime_30d;
-  const text = data ? label : "در حال بررسی…";
   const sub = `آپتایم ۳۰ روز: ${uptime == null ? "—" : pctText(uptime, 2)}`;
-  return (
-    <div className={s.status} data-tone={tone} title={`${text} — ${sub}`}>
-      <div className={s.statusLabel}>
+  const details = (
+    <div className={s.statusPop} data-tone={tone}>
+      <div className={s.statusPopHead}>
         <span className={s.statusDot} />
-        <span className={s.statusText}>{text}</span>
+        <b>{label}</b>
       </div>
-      <div className={s.statusSub}>{sub}</div>
+      <dl>
+        <div><dt>سرورهای آنلاین</dt><dd>{data ? `${toFa(data.online)} از ${toFa(data.total)}` : "—"}</dd></div>
+        <div><dt>آپتایم ۳۰ روز</dt><dd>{uptime == null ? "—" : pctText(uptime, 2)}</dd></div>
+        <div><dt>هشدارهای تأییدنشده</dt><dd>{data ? toFa(data.unacked) : "—"}</dd></div>
+      </dl>
+      <Link href="/server" className={s.statusPopLink}>مشاهدهٔ سرور و منابع ←</Link>
     </div>
+  );
+  return (
+    <Tip content={details} side="left" disabled={!collapsed} interactive block className={s.statusTip}>
+      <Link href="/server" className={s.status} data-tone={tone} aria-label={`${label} — ${sub}`}>
+        <div className={s.statusLabel}>
+          <span className={s.statusDot} />
+          <span className={s.statusText}>{label}</span>
+        </div>
+        <div className={s.statusSub}>{sub}</div>
+      </Link>
+    </Tip>
   );
 }
 
@@ -90,6 +116,14 @@ function UserMenu() {
       </button>
       {open && (
         <div className={s.menu} role="menu">
+          <div className={s.menuHead}>
+            <b>{user.display_name}</b>
+            <span dir="ltr">{user.email || user.username}</span>
+          </div>
+          <Link href="/settings?tab=account" className={s.menuItem} role="menuitem" onClick={() => setOpen(false)}>
+            حساب من
+            {noCodes && <span className={s.menuDot} />}
+          </Link>
           <button className={s.menuItem} onClick={logout} role="menuitem">
             خروج
           </button>
@@ -120,49 +154,59 @@ export function Shell({ children }: { children: React.ReactNode }) {
       return !v;
     });
   const { user } = useAuth();
-  const { data: status } = useSWR<Status>("/api/monitoring/status", fetcher, { refreshInterval: 30000 });
+  const seesServer = levelOf(user.perms, "server") !== "none";
+  const { data: status } = useSWR<Status>(seesServer ? "/api/monitoring/status" : null, fetcher, { refreshInterval: 30000 });
   const visible = TABS.filter((t) => canSee(t, user.perms));
   const allowed = !tab || canSee(tab, user.perms);
+  // صفحهٔ اصلی = اولین بخشی که کاربر می‌بیند (برای مالک «سرور و منابع»)
+  const home = visible.find((t) => !t.soon)?.href ?? "/settings";
   // Shell فقط سمت کلاینت (بعد از احراز هویت) رندر می‌شود
   const today = dfToday.format(new Date());
 
   const close = () => setNavOpen(false);
+  const toggleLabel = collapsed ? "باز کردن منو" : "جمع کردن منو";
 
   return (
     <div className={s.root}>
-      <aside className={s.aside} data-open={navOpen} data-collapsed={collapsed}>
-        <div className={s.brand}>
-          <Logo size={36} />
-          <div className={s.brandText}>
-            <div className={s.brandName}>آسان‌دسک</div>
-            <div className={s.brandSub}>پنل مالک</div>
+      <div className={s.asideWrap} data-collapsed={collapsed}>
+        <aside className={s.aside} data-open={navOpen} data-collapsed={collapsed}>
+          <Tip content="صفحهٔ اصلی داشبورد" side="left" disabled={!collapsed} block>
+            <Link href={home} className={s.brand} onClick={close} aria-label="آسان‌دسک — صفحهٔ اصلی">
+              <Logo size={36} />
+              <span className={s.brandName}>آسان‌دسک</span>
+            </Link>
+          </Tip>
+          <div className={s.section}><span className={s.sectionText}>مدیریت</span></div>
+          <nav className={s.nav}>
+            {visible.filter((t) => !t.soon).map((t) => (
+              <NavItem key={t.href} tab={t} active={t === tab} onClick={close} badge={t.href === "/tickets" ? status?.open_tickets : 0} collapsed={collapsed} />
+            ))}
+          </nav>
+          {visible.some((t) => t.soon) && (
+            <>
+              <div className={s.section} style={{ padding: "18px 10px 6px", display: "flex", alignItems: "center", gap: 6 }}>
+                <span className={s.sectionText} style={{ whiteSpace: "nowrap" }}>فاز ۳</span>
+                <span className={s.rule} />
+              </div>
+              <nav className={s.nav}>
+                {visible.filter((t) => t.soon).map((t) => (
+                  <NavItem key={t.href} tab={t} active={t === tab} onClick={close} collapsed={collapsed} />
+                ))}
+              </nav>
+            </>
+          )}
+          <div className={s.asideFoot}>
+            {seesServer && <StatusBox data={status} collapsed={collapsed} />}
+            <VersionBadge collapsed={collapsed} />
           </div>
-          <button className={s.collapseBtn} onClick={toggleCollapsed} aria-label={collapsed ? "باز کردن منو" : "جمع کردن منو"} aria-expanded={!collapsed} title={collapsed ? "باز کردن منو" : "جمع کردن منو"}>
-            <Icon d={collapsed ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} size={16} />
+        </aside>
+        {/* دستهٔ باز و بسته کردن روی لبهٔ داخلی سایدبار؛ فلش به سمتی است که لبه حرکت می‌کند */}
+        <Tip content={toggleLabel} side="left" className={s.collapseTip}>
+          <button className={s.collapseBtn} onClick={toggleCollapsed} aria-label={toggleLabel} aria-expanded={!collapsed}>
+            <Icon d={collapsed ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"} size={14} stroke={2.2} />
           </button>
-        </div>
-        <div className={s.section}><span className={s.sectionText}>مدیریت</span></div>
-        <nav className={s.nav}>
-          {visible.filter((t) => !t.soon).map((t) => (
-            <NavItem key={t.href} tab={t} active={t === tab} onClick={close} badge={t.href === "/tickets" ? status?.open_tickets : 0} />
-          ))}
-        </nav>
-        {visible.some((t) => t.soon) && (
-          <>
-            <div className={s.section} style={{ padding: "18px 10px 6px", display: "flex", alignItems: "center", gap: 6 }}>
-              <span className={s.sectionText} style={{ whiteSpace: "nowrap" }}>فاز ۳</span>
-              <span className={s.rule} />
-            </div>
-            <nav className={s.nav}>
-              {visible.filter((t) => t.soon).map((t) => (
-                <NavItem key={t.href} tab={t} active={t === tab} onClick={close} />
-              ))}
-            </nav>
-          </>
-        )}
-        <StatusBox />
-        <VersionBadge />
-      </aside>
+        </Tip>
+      </div>
       {navOpen && <div className={s.backdrop} onClick={close} />}
 
       <main className={s.main}>
@@ -172,18 +216,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </button>
           <div className={s.today}>{today}</div>
           <div style={{ flex: 1 }} />
-          <div className={s.search} title="به‌زودی">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3.5-3.5" />
-            </svg>
-            جستجو…
-          </div>
+          <GlobalSearch />
           <ThemeToggle />
-          <Link href="/server#alerts" className={s.bell} aria-label="هشدارها">
-            <Icon d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" />
-            {!!status?.unacked && <span className={s.bellDot} />}
-          </Link>
+          <NoticeBell alerts={seesServer ? status?.unacked ?? 0 : 0} />
           <UserMenu />
         </header>
         <div className={s.content} key={pathname}>
@@ -194,6 +229,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </main>
+      <NoticePopup />
     </div>
   );
 }

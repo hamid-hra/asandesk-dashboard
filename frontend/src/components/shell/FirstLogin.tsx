@@ -3,12 +3,12 @@
 import { useState } from "react";
 
 import s from "@/app/login/login.module.css";
-import { Logo } from "@/components/Logo";
 import { PasswordPair } from "@/components/settings/PasswordTools";
 import st from "@/components/settings/settings.module.css";
 import { errText, fieldErrors } from "@/components/settings/ui";
 import { api } from "@/lib/api";
 
+import { Brand, Title } from "./AuthBits";
 import { RecoveryCodes } from "./RecoveryCodes";
 
 /**
@@ -48,25 +48,14 @@ export function FirstLogin({ username, displayName, logout, onDone }: { username
     }
   };
 
-  const brand = (
-    <div className={s.brand}>
-      <Logo size={40} />
-      <div>
-        <div className={s.brandName}>آسان‌دسک</div>
-        <div className={s.brandSub}>پنل مالک</div>
-      </div>
-    </div>
-  );
+  const brand = <Brand />;
 
   if (codes) {
     return (
       <div className={s.page}>
         <div className={s.card} style={{ maxWidth: 460 }}>
           {brand}
-          <div>
-            <div className={s.title}>رمز شما عوض شد</div>
-            <div className={s.sub}>این‌ها «کدهای بازیابی» شما هستند. اگر روزی رمز را فراموش کردید، فقط با یکی از این کدها می‌توانید رمز تازه بگذارید. همین حالا ذخیره‌شان کنید.</div>
-          </div>
+          <Title tip="این‌ها «کدهای بازیابی» شما هستند. اگر روزی رمز را فراموش کردید، فقط با یکی از این کدها می‌توانید رمز تازه بگذارید. همین حالا ذخیره‌شان کنید.">رمز شما عوض شد؛ کدهای بازیابی را ذخیره کنید</Title>
           <RecoveryCodes codes={codes} username={username} />
           <label className={s.remember}>
             <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
@@ -84,10 +73,7 @@ export function FirstLogin({ username, displayName, logout, onDone }: { username
     <div className={s.page}>
       <form className={s.card} onSubmit={submit} method="post" style={{ maxWidth: 460 }}>
         {brand}
-        <div>
-          <div className={s.title}>رمز عبور خودتان را بگذارید</div>
-          <div className={s.sub}>{displayName}، رمزی که برایتان ساخته‌اند موقت است. برای ادامه یک رمز تازه انتخاب کنید؛ بعد از آن کدهای بازیابی‌تان را می‌بینید.</div>
-        </div>
+        <Title tip={`${displayName}، رمزی که برایتان ساخته‌اند موقت است. برای ادامه یک رمز تازه انتخاب کنید؛ بعد از آن کدهای بازیابی‌تان را می‌بینید.`}>رمز عبور خودتان را بگذارید</Title>
         {/* برای اینکه مدیر رمز مرورگر رمز تازه را برای همین نام کاربری ذخیره کند */}
         <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
         <label className={st.field}>

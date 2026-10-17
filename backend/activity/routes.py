@@ -28,6 +28,8 @@ ROUTES: dict[tuple[str, str], tuple[str, Label] | None] = {
     ("accounts.LogoutView", "POST"): None,
     ("accounts.SetupView", "POST"): None,
     ("accounts.RecoveryResetView", "POST"): None,  # خود ویو می‌نویسد (کاربر هنوز وارد نشده است)
+    ("accounts.RecoveryVerifyView", "POST"): None,  # فقط بررسی کد است و چیزی عوض نمی‌کند
+    ("accounts.ProfileView", "PATCH"): None,  # خود ویو می‌نویسد
     ("accounts.PasswordChangeView", "POST"): None,  # خود ویو می‌نویسد
     ("accounts.RecoveryGenerateView", "POST"): ("auth.recovery_codes", "کدهای بازیابی تازه ساخت"),
     # نسخه‌ها
@@ -64,6 +66,11 @@ ROUTES: dict[tuple[str, str], tuple[str, Label] | None] = {
     # سرور و هشدارها
     ("monitoring.AlertAckView", "POST"): ("server.alert_ack", "یک هشدار را تأیید کرد"),
     ("monitoring.AlertAckAllView", "POST"): ("server.alert_ack", "همهٔ هشدارها را تأیید کرد"),
+    # اعلان‌های پنل
+    ("notices.ManageListView", "POST"): ("notices.send", "اعلان «{d[title]}» را فرستاد"),
+    ("notices.ManageDetailView", "DELETE"): ("notices.delete", "اعلان شمارهٔ {kw[pk]} را حذف کرد"),
+    ("notices.ReadView", "POST"): None,
+    ("notices.ReadAllView", "POST"): None,
     # تنظیمات ← به‌روزرسانی پنل: خود ویوها خط دقیق‌تری می‌نویسند (ops/views.py)
     ("ops.UpdateCheckView", "POST"): None,
     ("ops.UpdateStartView", "POST"): None,

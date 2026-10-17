@@ -1,0 +1,89 @@
+.wrap {
+  position: relative;
+  flex: none;
+  --liquid-top: #34c795;
+  --liquid-bottom: #1d7f5e;
+  --liquid-back: #8fdcbf;
+  --glass: var(--accent-softer);
+  --rim: var(--brand);
+  --mark-empty: var(--accent-border);
+  filter: drop-shadow(0 10px 24px rgba(38, 163, 121, 0.22));
+}
+:global(:root[data-theme="dark"]) .wrap {
+  --liquid-top: #3ccf98;
+  --liquid-bottom: #1d7f5e;
+  --liquid-back: #1f5a45;
+  --mark-empty: #24423a;
+}
+.wrap[data-tone="failed"] {
+  --liquid-top: #e2566b;
+  --liquid-bottom: #a32a3d;
+  --liquid-back: #f2a7b2;
+  --rim: var(--danger);
+  filter: drop-shadow(0 10px 24px rgba(208, 57, 79, 0.2));
+}
+
+.svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.glass {
+  fill: var(--glass);
+}
+.rim {
+  fill: none;
+  stroke: var(--rim);
+  stroke-width: 26;
+}
+.markEmpty {
+  fill: var(--mark-empty);
+}
+.liquidTop {
+  stop-color: var(--liquid-top);
+}
+.liquidBottom {
+  stop-color: var(--liquid-bottom);
+}
+.backWave {
+  fill: var(--liquid-back);
+  opacity: 0.7;
+}
+.level {
+  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bubbles {
+  fill: rgba(255, 255, 255, 0.55);
+}
+
+.badge {
+  position: absolute;
+  bottom: -6px;
+  left: -6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  border: 3px solid var(--surface);
+  animation: badgeIn 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+.badge[data-tone="ok"] {
+  background: var(--brand);
+}
+.badge[data-tone="failed"] {
+  background: var(--danger);
+}
+
+@keyframes badgeIn {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .level { transition: none; }
+  .badge { animation: none; }
+}

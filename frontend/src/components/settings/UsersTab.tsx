@@ -1,11 +1,13 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 
 import { Icon } from "@/components/Icon";
 import { api, fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { contactErrors, normalizePhone, phoneText } from "@/lib/contact";
 import { avatarOf, initialOf } from "@/lib/people";
 import { agoText, downloadTextFile, jDate, LEVELS, loginFileText, PRESET, randomPassword, RO_TIP, ROLE_CARDS, ROLE_TONE, SECTION_HINT, SECTION_LEVELS, SECTIONS, copyText, type UserRow } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
@@ -16,19 +18,27 @@ import s from "./settings.module.css";
 import { Empty, ErrorState, errText, fieldErrors, I, Menu, Modal, Skeleton, Switch } from "./ui";
 
 type Role = "admin" | "viewer" | "custom";
-const FILTERS: [string, string][] = [["all", "همه"], ["owner", "مالک"], ["admin", "مدیر"], ["viewer", "ناظر"], ["custom", "سفارشی"]];
+const FILTERS: [string, string][] = [["all", "همه"], ["owner", "مالک"], ["admin", "مدیر"], ["viewer", "ناظر"], ["custom", "سفارشی"], ["nocontact", "بدون اطلاعات تماس"]];
 
 export function UsersTab({ canEdit }: { canEdit: boolean }) {
   const { data, error, mutate } = useSWR<UserRow[]>("/api/settings/users", fetcher, { refreshInterval: 30000 });
   const flash = useToast();
-  const [q, setQ] = useState("");
+  // از جستجوی کلی با ?q=نام‌کاربری می‌آید
+  const urlQ = useSearchParams().get("q") ?? "";
+  const [q, setQ] = useState(urlQ);
+  const [lastUrlQ, setLastUrlQ] = useState(urlQ);
+  if (urlQ !== lastUrlQ) {
+    setLastUrlQ(urlQ);
+    setQ(urlQ);
+  }
   const [filter, setFilter] = useState("all");
   const [dlg, setDlg] = useState<{ mode: "create" | "edit" | "password"; user?: UserRow } | null>(null);
   const [del, setDel] = useState<UserRow | null>(null);
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return (data ?? []).filter((u) => (filter === "all" || u.role === filter) && (!t || u.display_name.toLowerCase().includes(t) || u.username.toLowerCase().includes(t)));
+    const hay = (u: UserRow) => `${u.display_name} ${u.username} ${u.email} ${u.phone}`.toLowerCase();
+    return (data ?? []).filter((u) => (filter === "all" || (filter === "nocontact" ? u.needs_contact : u.role === filter)) && (!t || hay(u).includes(t)));
   }, [data, q, filter]);
 
   if (error) return <ErrorState onRetry={() => mutate()} />;
@@ -51,7 +61,7 @@ export function UsersTab({ canEdit }: { canEdit: boolean }) {
         <div className={s.toolbar}>
           <label className={s.search}>
             <Icon d={I.search} size={15} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="نام یا نام کاربری…" aria-label="جست‌وجوی کاربر" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="نام، نام کاربری، ایمیل یا موبایل…" aria-label="جست‌وجوی کاربر" />
           </label>
           <div className="seg">
             {FILTERS.map(([id, label]) => (
@@ -155,8 +165,13 @@ function UserLine({ u, canEdit, onEdit, onPassword, onToggle, onDelete }: { u: U
             {u.locked && <span title="حساب مالک قفل است: حذف و تغییر نقش ندارد" style={{ color: "var(--faint)", display: "inline-flex" }}><Icon d={I.lock} size={14} /></span>}
             {u.me && <span className={`${s.badge} ${s.me}`}>شما</span>}
             {u.must_change_password && <span className={s.badge} style={{ background: "var(--warn-soft)", color: "var(--warn-text)" }} title="هنوز رمز خودش را نگذاشته؛ در اولین ورود باید بگذارد">رمز موقت</span>}
+            {u.needs_contact && <span className={s.badge} style={{ background: "var(--info-soft)", color: "var(--info-text)" }} title="موبایل یا ایمیل ندارد؛ در ورود بعدی باید وارد کند">بدون اطلاعات تماس</span>}
           </div>
-          <span dir="ltr" className={`${s.sub} mono`}>{u.username}</span>
+          <span className={s.sub} style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span dir="ltr" className="mono">{u.username}</span>
+            {u.phone && <> · <span dir="ltr">{phoneText(u.phone)}</span></>}
+            {u.email && <> · <span dir="ltr">{u.email}</span></>}
+          </span>
         </div>
       </div>
       <div><span className={s.badge} style={{ background: tone.bg, color: tone.color }}>{u.role_label}</span></div>
@@ -179,6 +194,8 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
   const owner = user?.role === "owner";
   const [name, setName] = useState(user?.display_name ?? "");
   const [username, setUsername] = useState(user?.username ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [phone, setPhone] = useState(user?.phone ?? "");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [show, setShow] = useState(false);
@@ -208,6 +225,7 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
     const e: Record<string, string> = {};
     if (showIdentity && !name.trim()) e.display_name = "نام نمایشی را وارد کنید.";
     if (creating && !/^[\w.@+-]+$/.test(username)) e.username = "نام کاربری فقط شامل حروف انگلیسی، عدد و @/./+/-/_ باشد.";
+    if (showIdentity) Object.assign(e, contactErrors(email, phone, false));
     if (showPw) {
       if (!pw) e.password = "رمز عبور را وارد کنید.";
       else if (pw.length < 8) e.password = "رمز عبور باید حداقل ۸ نویسه باشد.";
@@ -227,7 +245,7 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
       );
     try {
       if (creating) {
-        await api("/api/settings/users", { method: "POST", body: { display_name: name.trim(), username, password: pw, role, perms: extraPerms, active } });
+        await api("/api/settings/users", { method: "POST", body: { display_name: name.trim(), username, password: pw, role, perms: extraPerms, active, email: email.trim(), phone: normalizePhone(phone) } });
         saveFile();
         onSaved(`کاربر ${name.trim()} اضافه شد${withFile ? "؛ فایل ورود دانلود شد" : ""}`);
       } else if (mode === "password") {
@@ -235,14 +253,14 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
         saveFile();
         onSaved(`رمز عبور تغییر کرد${withFile ? "؛ فایل ورود دانلود شد" : ""}`);
       } else {
-        const body: Record<string, unknown> = { display_name: name.trim() };
+        const body: Record<string, unknown> = { display_name: name.trim(), email: email.trim(), phone: normalizePhone(phone) };
         if (!owner) Object.assign(body, { role, active, perms: extraPerms });
         await api(`/api/settings/users/${user!.id}`, { method: "PATCH", body });
         onSaved("تغییرات ذخیره شد");
       }
     } catch (err) {
       const fe = fieldErrors(err);
-      if (Object.keys(fe).length && !fe.detail) setErrs({ display_name: fe.display_name, username: fe.username, password: fe.password, role: fe.role });
+      if (Object.keys(fe).length && !fe.detail) setErrs({ display_name: fe.display_name, username: fe.username, password: fe.password, role: fe.role, email: fe.email, phone: fe.phone });
       else flash(errText(err));
     } finally {
       setBusy(false);
@@ -280,6 +298,19 @@ function UserDialog({ mode, user, onClose, onSaved }: { mode: "create" | "edit" 
             <input className={s.input} dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} disabled={!creating} placeholder="sara.ahmadi" autoComplete="off" />
             {errs.username && <span className={s.err}>{errs.username}</span>}
           </label>
+          <label className={s.field}>
+            <span>موبایل <small>(اختیاری)</small></span>
+            <input className={s.input} dir="ltr" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => phone.trim() && setPhone(normalizePhone(phone))} placeholder="0912 345 6789" autoComplete="off" />
+            {errs.phone && <span className={s.err}>{errs.phone}</span>}
+          </label>
+          <label className={s.field}>
+            <span>ایمیل <small>(اختیاری)</small></span>
+            <input className={s.input} dir="ltr" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="sara@example.com" autoComplete="off" />
+            {errs.email && <span className={s.err}>{errs.email}</span>}
+          </label>
+          {(!phone.trim() || !email.trim()) && (
+            <small className={s.gridNote}>اگر موبایل یا ایمیل خالی بماند، کاربر در ورود بعدی‌اش باید وارد کند.</small>
+          )}
         </div>
       )}
       {showPw && (

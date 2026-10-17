@@ -27,12 +27,21 @@ function clock(ts: string): string {
   return Number.isNaN(d.getTime()) ? ts.slice(11, 19) : d.toTimeString().slice(0, 8);
 }
 
+const ALL = "all";
+/** رنگ ثابت برچسب هر سرویس در نمای «همه» */
+const SERVICE_COLOR: Record<string, string> = {
+  backend: "#5fd6a9", frontend: "#7aa7ff", nginx: "#e6c06e", db: "#c99bff", scheduler: "#ff9f7a", agent: "#6fd3e8", control: "#f08a99",
+};
+const colorOf = (svc: string) => SERVICE_COLOR[svc] ?? "#9fb4ad";
+
 const stateColor = (state: string) => (state === "running" ? "var(--ok)" : state === "restarting" ? "var(--warn)" : "var(--danger)");
 
 /** تنظیمات ← لاگ داکر (فقط مالک): لاگ هر سرویس پنل، با جست‌وجو و نمایش زنده. */
 export function DockerLogsTab() {
   const flash = useToast();
-  const [service, setService] = useState("backend");
+  const [service, setService] = useState(ALL);
+  // نمای «همه»: پنهان‌کردن بعضی سرویس‌ها
+  const [hidden, setHidden] = useState<string[]>([]);
   const [tail, setTail] = useState(300);
   const [since, setSince] = useState("");
   const [live, setLive] = useState(false);
@@ -43,15 +52,19 @@ export function DockerLogsTab() {
 
   const services = useSWR<{ services: DockerService[] }>("/api/settings/system/logs/services", fetcher, { refreshInterval: 15000 });
   const list = services.data?.services ?? [];
-  const current = list.find((x) => x.service === service) ?? list[0];
+  const all = service === ALL;
+  const current = all ? undefined : list.find((x) => x.service === service) ?? list[0];
+  const target = all ? ALL : current?.service;
 
-  const url = current ? `/api/settings/system/logs?service=${current.service}&tail=${tail}${since ? `&since=${since}` : ""}` : null;
+  const url = target ? `/api/settings/system/logs?service=${target}&tail=${tail}${since ? `&since=${since}` : ""}` : null;
   const logs = useSWR<DockerLogs>(url, fetcher, { refreshInterval: live ? 3000 : 0, keepPreviousData: true });
 
   const lines = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (logs.data?.lines ?? []).filter((l) => (!q || l.text.toLowerCase().includes(q)) && (!onlyProblems || ERROR_RE.test(l.text) || WARN_RE.test(l.text)));
-  }, [logs.data, query, onlyProblems]);
+    return (logs.data?.lines ?? []).filter(
+      (l) => (!l.service || !hidden.includes(l.service)) && (!q || l.text.toLowerCase().includes(q) || !!l.service?.includes(q)) && (!onlyProblems || ERROR_RE.test(l.text) || WARN_RE.test(l.text)),
+    );
+  }, [logs.data, query, onlyProblems, hidden]);
 
   useEffect(() => {
     const el = box.current;
@@ -66,12 +79,12 @@ export function DockerLogsTab() {
     return <Empty icon={I.terminal} title="سرویسی پیدا نشد" text="سرویس control کانتینرهای این پروژه را پیدا نکرد. مطمئن شوید پنل با docker compose بالا آمده است." />;
   }
 
-  const plain = lines.map((l) => `${l.ts} ${l.text}`).join("\n");
+  const plain = lines.map((l) => `${l.ts}${l.service ? ` [${l.service}]` : ""} ${l.text}`).join("\n");
   const download = () => {
     const url = URL.createObjectURL(new Blob([plain], { type: "text/plain;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${current?.service ?? "log"}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.log`;
+    a.download = `${target ?? "log"}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.log`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -79,8 +92,12 @@ export function DockerLogsTab() {
   return (
     <div className="card" style={{ overflow: "visible" }}>
       <div className={s.people} role="tablist" aria-label="سرویس‌ها">
+        <button role="tab" className={s.person} aria-selected={all} onClick={() => setService(ALL)} title="لاگ همهٔ سرویس‌ها با هم، به ترتیب زمان">
+          <Icon d={I.layers} size={15} />
+          <span>همهٔ سرویس‌ها</span>
+        </button>
         {list.map((x) => (
-          <button key={x.service} role="tab" className={s.person} aria-selected={current?.service === x.service} onClick={() => setService(x.service)} title={`${x.container} — ${x.status}`}>
+          <button key={x.service} role="tab" className={s.person} aria-selected={!all && current?.service === x.service} onClick={() => setService(x.service)} title={`${x.container} — ${x.status}`}>
             <span className="dot" style={{ background: stateColor(x.state) }} />
             <span>{SERVICE_LABEL[x.service] ?? x.service}</span>
           </button>
@@ -111,6 +128,20 @@ export function DockerLogsTab() {
         <button className={s.iconBtn} onClick={download} title="دانلود" aria-label="دانلود" disabled={!lines.length}><Icon d={I.download} size={16} /></button>
       </div>
 
+      {all && (
+        <div className={s.svcFilter} role="group" aria-label="سرویس‌های نمایش داده‌شده">
+          {list.filter((x) => x.service !== "update-job").map((x) => {
+            const on = !hidden.includes(x.service);
+            return (
+              <button key={x.service} className={s.svcChip} aria-pressed={on} onClick={() => setHidden((h) => (on ? [...h, x.service] : h.filter((v) => v !== x.service)))} style={{ ["--svc" as string]: colorOf(x.service) }}>
+                <i />
+                {x.service}
+              </button>
+            );
+          })}
+          {logs.data?.failed && logs.data.failed.length > 0 && <span className={s.err}>خوانده نشد: {logs.data.failed.join("، ")}</span>}
+        </div>
+      )}
       {logs.error && !logs.data ? (
         <div style={{ padding: 18 }}>
           <div className={s.note} data-tone="danger"><Icon d={I.alert} size={18} /><span><b>لاگ خوانده نشد</b>{errText(logs.error)}</span></div>
@@ -121,7 +152,7 @@ export function DockerLogsTab() {
           ref={box}
           dir="ltr"
           role="log"
-          aria-label={`لاگ ${current?.service}`}
+          aria-label={`لاگ ${all ? "همهٔ سرویس‌ها" : current?.service}`}
           onScroll={(e) => {
             const el = e.currentTarget;
             stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -131,6 +162,7 @@ export function DockerLogsTab() {
           {lines.map((l, i) => (
             <div key={i} className={s.dline} data-lvl={ERROR_RE.test(l.text) ? "err" : WARN_RE.test(l.text) ? "warn" : l.stream === "err" ? "stderr" : undefined}>
               <span>{clock(l.ts)}</span>
+              {l.service && <span className={s.svcTag} style={{ color: colorOf(l.service) }}>{l.service}</span>}
               <span>{l.text}</span>
             </div>
           ))}

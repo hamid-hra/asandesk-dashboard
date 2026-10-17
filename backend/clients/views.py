@@ -63,7 +63,19 @@ def ticket_detail(t: Ticket) -> dict:
 class ClientListView(APIView):
     def get(self, request):
         p = request.query_params
-        return Response(stats.client_rows(p.get("filter", "all"), p.get("sort", "recent"), p.get("q", "").strip()[:100]))
+        return Response(
+            stats.client_rows(
+                p.get("filter", "all"),
+                p.get("sort", "recent"),
+                p.get("q", "").strip()[:100],
+                platform=p.get("platform", "")[:32],
+                os_name=p.get("os", "")[:200],
+                version=p.get("version", "")[:32],
+                seen=p.get("seen", ""),
+                old=p.get("old") == "1",
+                new=p.get("new") == "1",
+            )
+        )
 
 
 class ClientStatsView(APIView):

@@ -10,11 +10,11 @@ admin.site.index_title = "مدیریت کاربران و داده‌ها"
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ("username", "first_name", "last_name", "role", "is_active", "last_login")
+    list_display = ("username", "first_name", "last_name", "email", "phone", "role", "is_active", "last_login")
     list_filter = ("role", "is_active")
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        ("اطلاعات شخصی", {"fields": ("first_name", "last_name", "email")}),
+        ("اطلاعات شخصی", {"fields": ("first_name", "last_name", "email", "phone")}),
         ("دسترسی", {"fields": ("role", "is_active")}),
         ("تاریخ‌ها", {"fields": ("last_login", "date_joined")}),
     )

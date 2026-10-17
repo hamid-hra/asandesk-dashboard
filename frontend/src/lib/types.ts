@@ -12,6 +12,54 @@ export interface User {
   perms: Perms;
   /** رمز را کس دیگری گذاشته؛ پنل تا عوض‌کردنش فقط صفحهٔ «رمز تازه» را نشان می‌دهد */
   must_change_password: boolean;
+  email: string;
+  phone: string;
+  /** ایمیل یا موبایل ندارد؛ پنل تا پرشدنشان فرم «اطلاعات تماس» را نشان می‌دهد */
+  needs_contact: boolean;
+}
+
+export type NoticeKind = "info" | "update" | "warning";
+
+export interface Notice {
+  id: number;
+  title: string;
+  body: string;
+  kind: NoticeKind;
+  popup: boolean;
+  /** فقط اعلان خودکار «پنل به‌روز شد» */
+  version: string | null;
+  /** تغییرات همان نسخه: [نوع، متن] */
+  items: [ChangelogItem["type"], string][];
+  created_at: string;
+  expires_at: string | null;
+  by: string;
+  read: boolean;
+}
+
+export interface NoticeInbox {
+  unread: number;
+  results: Notice[];
+}
+
+export interface SentNotice extends Omit<Notice, "read"> {
+  recipients: number[];
+  recipient_names: string[];
+  audience: number;
+  reads: number;
+  expired: boolean;
+}
+
+export interface SearchItem {
+  id: string | number;
+  title: string;
+  sub: string;
+  href: string;
+  online?: boolean;
+}
+
+export interface SearchResult {
+  q: string;
+  groups: { id: string; label: string; items: SearchItem[] }[];
 }
 
 export type RangeId = "24h" | "7d" | "30d" | "90d";
@@ -161,6 +209,8 @@ export interface ClientRow {
 export interface ClientList {
   count: number;
   results: ClientRow[];
+  /** تعداد هر گزینهٔ فیلتر با فیلترهای دیگرِ فعلی: [نام، تعداد] */
+  facets?: { platforms: [string, number][]; os: [string, number][]; versions: [string, number][] };
 }
 
 export interface ClientStats {

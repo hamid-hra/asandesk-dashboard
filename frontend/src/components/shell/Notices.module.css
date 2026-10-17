@@ -1,0 +1,384 @@
+/* ---------- زنگوله و منوی اعلان‌ها ---------- */
+.bellWrap {
+  position: relative;
+  flex: none;
+}
+
+.bell {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+}
+.bell:hover,
+.bell[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--subtle);
+}
+
+.count {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--chrome);
+  box-sizing: content-box;
+}
+
+.dot {
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid var(--surface);
+  box-sizing: content-box;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: -60px;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--tip-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+  overflow: hidden;
+  animation: pop 0.14s ease-out;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--divider);
+  font-size: 14px;
+}
+
+.linkBtn {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.linkBtn:hover {
+  text-decoration: underline;
+}
+
+.alertRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 12px 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.alertRow:hover {
+  filter: brightness(0.97);
+}
+.arrow {
+  margin-inline-start: auto;
+}
+
+.list {
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.empty {
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.item {
+  border-radius: 12px;
+}
+.item[data-unread="true"] {
+  background: var(--accent-softer);
+}
+
+.itemHead {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+.itemHead:hover {
+  background: var(--subtle);
+}
+
+.itemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.itemText b {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.itemText small {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.itemBody {
+  padding: 0 46px 12px 12px;
+}
+
+.unreadDot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex: none;
+}
+
+/* ---------- آیکون نوع اعلان ---------- */
+.kindIcon {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--info-soft);
+  color: var(--info);
+}
+.kindIcon[data-small] {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.kindIcon[data-kind="update"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.kindIcon[data-kind="warning"] {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+
+/* ---------- متن اعلان ---------- */
+.body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text-notes);
+  white-space: pre-line;
+}
+
+.items {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.items li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--text-notes);
+}
+.itemKind {
+  flex: none;
+  min-width: 56px;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 1px 6px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+.itemKind[data-kind="change"] {
+  color: var(--warn-text);
+  background: var(--warn-soft);
+}
+.itemKind[data-kind="fix"] {
+  color: var(--danger-text);
+  background: var(--danger-soft);
+}
+.more {
+  color: var(--faint);
+}
+
+/* ---------- پنجرهٔ اعلان در ورود ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(8, 20, 18, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fade 0.2s ease-out;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.dialog::before {
+  content: "";
+  display: block;
+  height: 4px;
+  background: var(--info);
+}
+.dialog[data-kind="update"]::before {
+  background: var(--brand);
+}
+.dialog[data-kind="warning"]::before {
+  background: var(--warn);
+}
+
+.dlgHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 12px;
+}
+.dlgTitle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dlgTitle small {
+  font-size: 12px;
+  color: var(--faint);
+}
+.dlgTitle b {
+  font-size: 16px;
+  line-height: 1.6;
+}
+.counter {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--subtle);
+  border-radius: 8px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.dlgBody {
+  padding: 0 20px 8px;
+  overflow-y: auto;
+}
+
+.dlgFoot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 20px 18px;
+}
+
+.okBtn {
+  height: 40px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.okBtn:hover {
+  background: var(--brand-hover);
+}
+.okBtn:focus-visible {
+  outline: 3px solid var(--accent-border);
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel, .overlay, .dialog { animation: none; }
+}
+
+@media (max-width: 960px) {
+  .panel {
+    position: fixed;
+    top: 72px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+}

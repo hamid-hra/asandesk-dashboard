@@ -4,6 +4,7 @@ from django.urls import include, path
 from monitoring.views import IngestView
 from releases.views import ReleaseListView
 
+from .search import SearchView
 from .views import VersionView
 
 urlpatterns = [
@@ -19,5 +20,7 @@ urlpatterns = [
     path("api/agent/ingest", IngestView.as_view()),
     path("api/releases", ReleaseListView.as_view()),
     path("api/releases/", include("releases.urls")),
+    path("api/", include("notices.urls")),
+    path("api/search", SearchView.as_view()),
     path("api/", include("clients.urls")),
 ]

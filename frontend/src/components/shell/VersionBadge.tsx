@@ -5,6 +5,7 @@ import useSWR from "swr";
 
 import { Icon } from "@/components/Icon";
 import { I, Modal } from "@/components/settings/ui";
+import { Tip } from "@/components/Tip";
 import { fetcher } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toFa } from "@/lib/fa";
@@ -18,7 +19,7 @@ const dfDate = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", 
 const KIND: Record<ChangelogItem["type"], string> = { new: "جدید", change: "تغییر", fix: "رفع اشکال" };
 
 /** Panel version at the bottom of the sidebar; click opens the changelog. */
-export function VersionBadge() {
+export function VersionBadge({ collapsed = false }: { collapsed?: boolean }) {
   const { data } = useSWR<VersionInfo>("/api/version", fetcher);
   const { user } = useAuth();
   // فقط مالک: نتیجهٔ آخرین بررسی را می‌پرسد (خودش GitHub را صدا نمی‌زند) و اگر نسخهٔ جدید آماده باشد نقطه می‌گذارد
@@ -27,14 +28,20 @@ export function VersionBadge() {
   if (!data) return null;
   return (
     <>
-      <button className={s.versionBtn} onClick={() => setOpen(true)} title={update?.check?.available ? "نسخهٔ جدید پنل آماده است (تنظیمات ← به‌روزرسانی پنل)" : "تاریخچهٔ تغییرات پنل"}>
-        <Icon d={I.info} size={14} />
-        <span className={s.versionLabel}>نسخهٔ پنل</span>
-        {update?.check?.available && <span className={s.updateDot} aria-label="نسخهٔ جدید آماده است" />}
-        <span className={s.versionNum} dir="ltr">
-          {data.version}
-        </span>
-      </button>
+      <Tip
+        content={update?.check?.available ? `نسخهٔ پنل ${data.version} — نسخهٔ جدید آماده است (تنظیمات ← به‌روزرسانی پنل)` : `نسخهٔ پنل ${data.version} — تاریخچهٔ تغییرات`}
+        side={collapsed ? "left" : "top"}
+        block
+      >
+        <button className={s.versionBtn} onClick={() => setOpen(true)} aria-label={`نسخهٔ پنل ${data.version}`}>
+          <Icon d={I.info} size={14} />
+          <span className={s.versionLabel}>نسخهٔ پنل</span>
+          {update?.check?.available && <span className={s.updateDot} aria-label="نسخهٔ جدید آماده است" />}
+          <span className={s.versionNum} dir="ltr">
+            {data.version}
+          </span>
+        </button>
+      </Tip>
       {open && (
         <Modal title="تاریخچهٔ تغییرات پنل" onClose={() => setOpen(false)} width={620}>
           <div className={s.changelog}>

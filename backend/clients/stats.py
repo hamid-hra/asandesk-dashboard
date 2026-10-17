@@ -1,5 +1,6 @@
 """محاسبه آمار کلاینت‌ها و تیکت‌ها برای پنل."""
 
+import re
 from collections import Counter
 from datetime import datetime, time, timedelta
 
@@ -57,7 +58,16 @@ def version_old(version: str, latest: str | None) -> bool:
     return bool(latest and version and "-" not in version and version != latest)
 
 
-def client_rows(filter_: str, sort: str, q: str, limit: int = 300):
+SEEN_DAYS = {"24h": 1, "7d": 7, "30d": 30}
+
+
+def client_rows(filter_: str, sort: str, q: str, limit: int = 300, *, platform: str = "", os_name: str = "", version: str = "", seen: str = "", old: bool = False, new: bool = False):
+    """Rows of the clients table.
+
+    `filter_` is the main tab (online, logged, …); `platform`/`os_name`/`version`/`seen`/`old`/`new` are the
+    extra filters of the filter bar. `facets` counts platforms, OS names and versions over the rows that
+    pass every filter except that facet's own, so each menu shows what choosing it would give.
+    """
     close_stale_sessions()
     now = timezone.now()
     usage = usage_by_client(now - timedelta(days=30))
@@ -83,6 +93,12 @@ def client_rows(filter_: str, sort: str, q: str, limit: int = 300):
         qs = qs.filter(t_open__gt=0)
     elif filter_ == "blocked":
         qs = qs.filter(blocked=True)
+    if seen in SEEN_DAYS:
+        qs = qs.filter(last_seen__gte=now - timedelta(days=SEEN_DAYS[seen]))
+    elif seen == "inactive":
+        qs = qs.filter(Q(last_seen__lt=now - timedelta(days=30)) | Q(last_seen__isnull=True))
+    if new:
+        qs = qs.filter(first_seen__gte=now - timedelta(days=7))
 
     rows = []
     for c in qs:
@@ -114,7 +130,31 @@ def client_rows(filter_: str, sort: str, q: str, limit: int = 300):
         "tickets": lambda r: (-r["tickets_open"], -r["tickets_total"]),
     }
     rows.sort(key=sorters.get(sort, sorters["recent"]))
-    return {"count": len(rows), "results": rows[:limit]}
+
+    # فیلترهای سیستم‌عامل و نسخه روی خود ردیف‌ها (پلتفرم از روی متن سیستم‌عامل ساخته می‌شود)
+    checks = {
+        "platform": lambda r: not platform or (r["platform"] or "نامشخص") == platform,
+        "os": lambda r: not os_name or (r["os"] or "نامشخص") == os_name,
+        "version": lambda r: not version or (r["version"] or "نامشخص") == version,
+        "old": lambda r: not old or r["version_old"],
+    }
+
+    def passing(skip: str):
+        return [r for r in rows if all(fn(r) for key, fn in checks.items() if key != skip)]
+
+    facets = {
+        "platforms": Counter(r["platform"] or "نامشخص" for r in passing("platform")).most_common(),
+        "os": Counter(r["os"] or "نامشخص" for r in passing("os")).most_common(40),
+        "versions": sorted(Counter(r["version"] or "نامشخص" for r in passing("version")).items(), key=lambda kv: _version_key(kv[0]), reverse=True),
+    }
+    rows = passing("")
+    return {"count": len(rows), "results": rows[:limit], "facets": facets}
+
+
+def _version_key(v: str):
+    """1.4.10.2 بعد از 1.4.9.3؛ «نامشخص» آخر."""
+    parts = [int(x) if x.isdigit() else -1 for x in re.split(r"[.+-]", v)] if v and v[0].isdigit() else [-1]
+    return parts
 
 
 def clients_summary():

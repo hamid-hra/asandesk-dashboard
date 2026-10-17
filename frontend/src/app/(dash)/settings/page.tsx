@@ -7,6 +7,7 @@ import { AccountTab } from "@/components/settings/AccountTab";
 import { ActivityTab } from "@/components/settings/ActivityTab";
 import { BackupTab } from "@/components/settings/BackupTab";
 import { DockerLogsTab } from "@/components/settings/DockerLogsTab";
+import { NoticesTab } from "@/components/settings/NoticesTab";
 import s from "@/components/settings/settings.module.css";
 import { I } from "@/components/settings/ui";
 import { UpdateTab } from "@/components/settings/UpdateTab";
@@ -19,6 +20,7 @@ import { RO_TIP } from "@/lib/settings";
 // section = بخش دسترسی لازم برای دیدن تب؛ readOnlyTab = تبی که چیزی برای ویرایش ندارد (نوار «فقط مشاهده» نمی‌آید)
 const SUB = [
   { id: "users", section: "users", label: "کاربران و دسترسی‌ها", icon: I.users },
+  { id: "notices", section: "users", label: "اعلان‌ها", icon: I.bell },
   { id: "backup", section: "backup", label: "پشتیبان‌گیری", icon: I.db },
   { id: "activity", section: "activity", label: "لاگ فعالیت‌ها", icon: I.activity, readOnlyTab: true },
   { id: "update", section: "system", label: "به‌روزرسانی پنل", icon: I.cloud, readOnlyTab: true },
@@ -42,7 +44,7 @@ function SettingsInner() {
     <div className={s.page}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <div className={s.title}>تنظیمات</div>
-        <div className={s.subtitle}>کاربران پنل، پشتیبان‌گیری، لاگ فعالیت‌ها، به‌روزرسانی پنل و حساب خودتان</div>
+        <div className={s.subtitle}>کاربران پنل، اعلان‌ها، پشتیبان‌گیری، لاگ فعالیت‌ها، به‌روزرسانی پنل و حساب خودتان</div>
       </div>
       <div className={s.subtabs} role="tablist">
         {tabs.map((t) => (
@@ -59,6 +61,7 @@ function SettingsInner() {
         </div>
       )}
       {current === "users" && <UsersTab canEdit={canEdit} />}
+      {current === "notices" && <NoticesTab canEdit={canEdit} />}
       {current === "backup" && <BackupTab canEdit={canEdit} />}
       {current === "activity" && <ActivityTab />}
       {current === "update" && <UpdateTab />}
