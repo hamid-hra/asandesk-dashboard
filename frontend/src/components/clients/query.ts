@@ -48,8 +48,8 @@ export const SEEN: [string, string][] = [
 ];
 
 /** پارامترهای API از روی ترتیب و فیلترها */
-export function queryParams(sort: SortState, f: ClientFilters, q: string): URLSearchParams {
-  const p = new URLSearchParams({ sort: sort.key, dir: sort.dir, q });
+export function queryParams(sort: SortState, f: ClientFilters, q: string, page: number, pageSize: number): URLSearchParams {
+  const p = new URLSearchParams({ sort: sort.key, dir: sort.dir, q, page: String(page), page_size: String(pageSize) });
   if (f.status) p.set("status", f.status);
   if (f.account) p.set("account", f.account);
   if (f.tickets) p.set("tickets", "1");

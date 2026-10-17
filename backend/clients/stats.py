@@ -63,10 +63,14 @@ SEEN_DAYS = {"24h": 1, "7d": 7, "30d": 30}
 SORT_DEFAULT_DIR = {"recent": "desc", "mins": "desc", "sessions": "desc", "tickets": "desc", "name": "asc", "version": "desc"}
 
 
+PAGE_SIZES = (10, 25, 50, 100)
+DEFAULT_PAGE_SIZE = 25
+
+
 def client_rows(
-    filter_: str, sort: str, q: str, limit: int = 300, *, platform: str = "", os_name: str = "", version: str = "",
-    seen: str = "", old: bool = False, new: bool = False, status: str = "", account: str = "",
-    tickets: bool = False, blocked: bool = False, direction: str = "",
+    filter_: str, sort: str, q: str, *, page: int = 1, page_size: int = DEFAULT_PAGE_SIZE, platform: str = "",
+    os_name: str = "", version: str = "", seen: str = "", old: bool = False, new: bool = False, status: str = "",
+    account: str = "", tickets: bool = False, blocked: bool = False, direction: str = "",
 ):
     """Rows of the clients table.
 
@@ -74,7 +78,8 @@ def client_rows(
     `version`/`old`, `seen`, `new`) and they combine with AND; `filter_` is the older single-choice tab and is
     still understood. `sort` + `direction` ("asc"/"desc", default per key) order the rows. `facets` counts
     platforms, OS names and versions over the rows that pass every filter except that facet's own, so each
-    menu shows what choosing it would give.
+    menu shows what choosing it would give. The rows come in pages of `page_size` (10, 25, 50 or 100); a page
+    past the end is the last page.
     """
     close_stale_sessions()
     now = timezone.now()
@@ -165,7 +170,13 @@ def client_rows(
         "versions": sorted(Counter(r["version"] or "نامشخص" for r in passing("version")).items(), key=lambda kv: _version_key(kv[0]), reverse=True),
     }
     rows = passing("")
-    return {"count": len(rows), "results": rows[:limit], "facets": facets}
+    page_size = page_size if page_size in PAGE_SIZES else DEFAULT_PAGE_SIZE
+    pages = max(1, -(-len(rows) // page_size))
+    page = min(max(1, page), pages)
+    return {
+        "count": len(rows), "page": page, "pages": pages, "page_size": page_size,
+        "results": rows[(page - 1) * page_size:page * page_size], "facets": facets,
+    }
 
 
 def _version_key(v: str):
@@ -234,23 +245,37 @@ def tickets_summary():
     }
 
 
-def version_distribution():
-    """سهم نسخه‌ها بین کلاینت‌های فعال ۳۰ روز اخیر (برای تب نسخه‌ها)."""
+def devices_by_version() -> dict[str, int]:
+    """{نسخه: شمار کلاینت‌های فعال ۳۰ روز اخیر که همین نسخه را گزارش داده‌اند}"""
     since = timezone.now() - timedelta(days=30)
-    rows = list(
-        Client.objects.filter(last_seen__gte=since).exclude(version="")
-        .values("version").annotate(n=Count("id")).order_by("-n")
-    )
-    total = sum(r["n"] for r in rows)
+    rows = Client.objects.filter(last_seen__gte=since).exclude(version="").values_list("version").annotate(n=Count("id"))
+    return dict(rows)
+
+
+def version_distribution():
+    """سهم نسخه‌ها بین کلاینت‌های فعال ۳۰ روز اخیر (برای تب نسخه‌ها): (درصد روی نسخهٔ فعلی، نسخه‌های پرتعداد + بقیه، کل دستگاه‌ها).
+
+    تا چهار نسخه همه با نام می‌آیند؛ بیشتر از آن سه نسخهٔ پرتعداد و بقیه در «سایر نسخه‌ها». نسخهٔ پایدار فعلی هر
+    چقدر هم کم‌تعداد باشد جداگانه دیده می‌شود، چون «چند نفر به‌روزند» مهم‌ترین پرسش این نمودار است.
+    """
+    rows = sorted(devices_by_version().items(), key=lambda kv: (-kv[1], kv[0]))
+    total = sum(n for _, n in rows)
     if not total:
-        return None, None
+        return None, None, 0
     latest = latest_stable_version()
-    on_current = next((r["n"] for r in rows if r["version"] == latest), 0)
-    top = [{"version": r["version"], "share": round(r["n"] / total * 100, 1)} for r in rows[:3]]
-    rest = sum(r["n"] for r in rows[3:])
+    counts = dict(rows)
+    on_current = counts.get(latest, 0)
+
+    named = rows if len(rows) <= 4 else rows[:3]
+    if latest in counts and latest not in dict(named):
+        named = named[:2] + [(latest, counts[latest])]
+    top = [{"version": v, "share": round(n / total * 100, 1), "count": n} for v, n in named]
+    rest = [kv for kv in rows if kv not in named]
     if rest:
-        top.append({"version": "قدیمی‌تر", "share": round(rest / total * 100, 1)})
-    return (round(on_current / total * 100, 1) if latest else None), top
+        n = sum(n for _, n in rest)
+        # «سایر»، نه «قدیمی‌تر»: بتای جدیدتر هم می‌تواند بین نسخه‌های کم‌تعداد باشد
+        top.append({"version": "سایر نسخه‌ها", "share": round(n / total * 100, 1), "count": n, "versions": len(rest)})
+    return (round(on_current / total * 100, 1) if latest else None), top, total
 
 
 def install_charts(days: int = 90) -> dict:

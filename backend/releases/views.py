@@ -14,7 +14,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from clients.stats import version_distribution
+from clients.models import Client
+from clients.stats import devices_by_version, version_distribution
 
 from .links import LinkError, fetch_installer, platform_of_name
 from .models import DEFAULT_BALE_URL, Channel, DownloadEvent, Release, ReleaseAsset
@@ -53,7 +54,7 @@ class ReleaseListView(APIView):
         channel = request.query_params.get("channel")
         if channel in Channel.values:
             qs = qs.filter(channel=channel)
-        return Response(ReleaseSerializer(qs, many=True).data)
+        return Response(ReleaseSerializer(qs, many=True, context={"devices": devices_by_version()}).data)
 
     def post(self, request):
         data = {
@@ -185,14 +186,18 @@ class ReleaseStatsView(APIView):
         stable = latest_release([Channel.STABLE])
         beta = latest_release([Channel.BETA])
         since = timezone.now() - timedelta(days=30)
-        on_current, distribution = version_distribution()
+        on_current, distribution, active = version_distribution()
         return Response({
             "latest_stable": stable.version if stable else None,
             "latest_beta": beta.version if beta else None,
+            # فقط دانلودهایی که از خود پنل شده؛ فایل روی CDN باشد صفر می‌ماند (برای شمار نصب‌ها installs_30d)
             "downloads_30d": DownloadEvent.objects.filter(ts__gte=since).count(),
+            # نصب تازه = دستگاهی که اولین درخواستش در ۳۰ روز اخیر به API رسیده؛ از CDN هم دیده می‌شود
+            "installs_30d": Client.objects.filter(first_seen__gte=since).count(),
             # از نسخه‌ای که کلاینت‌های فعال ۳۰ روز اخیر در sysinfo گزارش داده‌اند
             "users_on_current": on_current,
             "distribution": distribution,
+            "active_devices": active,
         })
 
 

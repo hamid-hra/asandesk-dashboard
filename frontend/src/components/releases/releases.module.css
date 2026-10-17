@@ -52,6 +52,63 @@
   background: var(--track);
 }
 
+.distBar > span {
+  min-width: 4px;
+}
+
+.distLegend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 10px 24px;
+}
+
+.distItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.distSwatch {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 4px;
+}
+
+.distName {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-2);
+}
+
+.distName em {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.distItem > b {
+  font-weight: 700;
+}
+
+.distItem > small {
+  min-width: 64px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
 .cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));

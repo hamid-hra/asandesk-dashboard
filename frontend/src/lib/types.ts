@@ -173,6 +173,8 @@ export interface Release {
   mandatory: boolean;
   rollout: number;
   downloads: number;
+  /** کلاینت‌های فعال ۳۰ روز اخیر که همین نسخه را گزارش داده‌اند */
+  devices: number;
   /** فیلدهای فایل update.json که اپلیکیشن می‌خواند */
   build: number;
   message: string;
@@ -192,9 +194,15 @@ export interface Release {
 export interface ReleaseStats {
   latest_stable: string | null;
   latest_beta: string | null;
+  /** فقط دانلودهایی که از خود پنل شده؛ با فایل روی CDN صفر می‌ماند */
   downloads_30d: number;
+  /** دستگاه‌هایی که اولین درخواستشان در ۳۰ روز اخیر به API رسیده */
+  installs_30d: number;
   users_on_current: number | null;
-  distribution: { version: string; share: number }[] | null;
+  /** «versions» فقط در ردیف «سایر نسخه‌ها»: چند نسخه در آن جمع شده */
+  distribution: { version: string; share: number; count: number; versions?: number }[] | null;
+  /** شمار کلاینت‌های فعال ۳۰ روز اخیر (مخرج سهم‌ها) */
+  active_devices: number;
 }
 
 export type Plan = "free" | "pro";
@@ -222,6 +230,9 @@ export interface ClientRow {
 
 export interface ClientList {
   count: number;
+  page: number;
+  pages: number;
+  page_size: number;
   results: ClientRow[];
   /** تعداد هر گزینهٔ فیلتر با فیلترهای دیگرِ فعلی: [نام، تعداد] */
   facets?: { platforms: [string, number][]; os: [string, number][]; versions: [string, number][] };

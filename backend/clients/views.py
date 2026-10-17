@@ -60,6 +60,13 @@ def ticket_detail(t: Ticket) -> dict:
 
 # ---------- کلاینت‌ها ----------
 
+def int_param(p, name: str, default: int) -> int:
+    try:
+        return int(p.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 class ClientListView(APIView):
     def get(self, request):
         p = request.query_params
@@ -68,6 +75,8 @@ class ClientListView(APIView):
                 p.get("filter", "all"),
                 p.get("sort", "recent"),
                 p.get("q", "").strip()[:100],
+                page=int_param(p, "page", 1),
+                page_size=int_param(p, "page_size", stats.DEFAULT_PAGE_SIZE),
                 platform=p.get("platform", "")[:32],
                 os_name=p.get("os", "")[:200],
                 version=p.get("version", "")[:32],

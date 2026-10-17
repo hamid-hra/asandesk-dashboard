@@ -24,13 +24,23 @@ class ReleaseSerializer(serializers.ModelSerializer):
     date = serializers.SerializerMethodField()
     assets = AssetSerializer(many=True, read_only=True)
     update_warnings = serializers.SerializerMethodField()
+    devices = serializers.SerializerMethodField()
 
     class Meta:
         model = Release
         fields = ("id", "version", "channel", "date", "published_on", "platforms", "notes", "mandatory",
-                  "rollout", "downloads", "build", "message", "notice_title", "maintenance", "enabled", "bale_url",
-                  "bale_id", "update_warnings",
+                  "rollout", "downloads", "devices", "build", "message", "notice_title", "maintenance", "enabled",
+                  "bale_url", "bale_id", "update_warnings",
                   "assets", "created_at")
+
+    def get_devices(self, obj):
+        """کلاینت‌های فعال ۳۰ روز اخیر روی این نسخه (فهرست، شمارش را یک‌جا در context می‌دهد)."""
+        from clients.stats import devices_by_version  # clients.stats itself imports releases
+
+        devices = self.context.get("devices")
+        if devices is None:
+            devices = devices_by_version()
+        return devices.get(obj.version, 0)
 
     def get_date(self, obj):
         return to_jalali(obj.published_on)

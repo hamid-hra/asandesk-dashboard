@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import useSWR from "swr";
 
 import { ActiveFilters } from "@/components/clients/ActiveFilters";
@@ -11,6 +11,7 @@ import { ClientTable } from "@/components/clients/ClientTable";
 import s from "@/components/clients/clients.module.css";
 import { KpiStrip } from "@/components/clients/KpiStrip";
 import { activeCount, chips, type ClientFilters, DEFAULT_SORT, NO_FILTERS, queryParams, type SortState } from "@/components/clients/query";
+import { DEFAULT_PAGE_SIZE, Pager } from "@/components/clients/Pager";
 import { SearchBox } from "@/components/clients/SearchBox";
 import { type ViewTab, ViewTabs } from "@/components/clients/ViewTabs";
 import { fetcher } from "@/lib/api";
@@ -29,11 +30,18 @@ function ClientsInner() {
   const params = useSearchParams();
   const selected = params.get("id");
   const view: View = params.get("view") === "charts" ? "charts" : "list";
-  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
-  const [q, setQ] = useState("");
-  const [filters, setFilters] = useState<ClientFilters>(NO_FILTERS);
+  const [sort, setSortRaw] = useState<SortState>(DEFAULT_SORT);
+  const [q, setQRaw] = useState("");
+  const [filters, setFiltersRaw] = useState<ClientFilters>(NO_FILTERS);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeRaw] = useState(DEFAULT_PAGE_SIZE);
+  // a different sort, search, filter or page size shows a different set of rows, so start again at page 1
+  const setSort = (v: SortState) => (setSortRaw(v), setPage(1));
+  const setFilters = (v: ClientFilters) => (setFiltersRaw(v), setPage(1));
+  const setQ = useCallback((v: string) => (setQRaw(v), setPage(1)), []);
+  const setPageSize = (n: number) => (setPageSizeRaw(n), setPage(1));
 
-  const query = queryParams(sort, filters, q);
+  const query = queryParams(sort, filters, q, page, pageSize);
   const { data: list, mutate } = useSWR<ClientList>(view === "list" ? `/api/clients?${query}` : null, fetcher, { refreshInterval: 30000, keepPreviousData: true });
   const { data: charts, error: chartsError, mutate: reloadCharts } = useSWR<ClientCharts>(view === "charts" ? "/api/clients/charts" : null, fetcher, { refreshInterval: 60000 });
   const { data: st, mutate: mutateStats } = useSWR<ClientStats>("/api/clients/stats", fetcher, { refreshInterval: 30000 });
@@ -97,11 +105,17 @@ function ClientsInner() {
             facets={list?.facets}
             empty={emptyText}
           />
-          <div className={s.footer}>
-            {list
-              ? `نمایش ${toFa(rows?.length ?? 0)} کلاینت از ${toFa(list.count)}${st ? ` · ${toFa(st.with_open_tickets)} کلاینت با بازخورد جدید` : ""}`
-              : "…"}
-          </div>
+          <Pager
+            page={list?.page ?? page}
+            pages={list?.pages ?? 1}
+            pageSize={list?.page_size ?? pageSize}
+            count={list?.count ?? 0}
+            shown={rows?.length ?? 0}
+            loading={!list}
+            note={st?.with_open_tickets ? `${toFa(st.with_open_tickets)} کلاینت با بازخورد جدید` : undefined}
+            onPage={setPage}
+            onPageSize={setPageSize}
+          />
         </div>
         {selected && (
           <ClientPanel

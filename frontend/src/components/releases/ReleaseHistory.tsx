@@ -67,7 +67,7 @@ export function ReleaseHistory({
         const beta = r.channel === "beta";
         const assets = new Map(r.assets.map((a) => [a.platform, a]));
         return (
-          <div key={r.id} className={s.hist} style={{ background: r.downloads === 0 ? "var(--row-new)" : undefined }}>
+          <div key={r.id} className={s.hist} style={{ background: r.version === current ? "var(--row-new)" : undefined }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <span dir="ltr" className="mono" style={{ fontWeight: 600, fontSize: 16, lineHeight: 1.2, textAlign: "right" }}>
                 v{r.version}
@@ -132,8 +132,10 @@ export function ReleaseHistory({
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-              <span style={{ fontSize: 16, fontWeight: 700 }}>{fmt(r.downloads)}</span>
-              <span style={{ fontSize: 11.5, color: "var(--faint)" }}>دانلود</span>
+              <span style={{ fontSize: 16, fontWeight: 700 }} title="کلاینت‌های فعال ۳۰ روز اخیر که همین نسخه را دارند">
+                {fmt(r.devices)}
+              </span>
+              <span style={{ fontSize: 11.5, color: "var(--faint)" }}>دستگاه</span>
               {canDelete && (
                 <button
                   type="button"
