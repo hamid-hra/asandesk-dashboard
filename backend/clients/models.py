@@ -157,6 +157,8 @@ class ConnSession(models.Model):
     # null = احراز هویت انجام نشد (رمز اشتباه، لغو و …)
     authorized_at = models.DateTimeField(null=True, blank=True, db_index=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    # چرا اتصال بدون احراز هویت تمام شد؛ فقط اگر اپ در گزارش close بفرستد («failed» یا «cancelled»)، وگرنه خالی
+    result = models.CharField(max_length=12, blank=True, default="")
 
     class Meta:
         ordering = ["-started_at"]

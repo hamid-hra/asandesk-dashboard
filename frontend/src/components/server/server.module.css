@@ -527,3 +527,90 @@
     display: none;
   }
 }
+
+/* ---------- درخواست‌های اتصال ---------- */
+.reqCard {
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.reqHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reqTitle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.reqSub {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.reqTiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.reqTile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: var(--subtle);
+  min-width: 0;
+}
+
+.reqTile > span {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reqTile > b {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.reqBar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.reqBar > span {
+  min-width: 3px;
+}
+
+.reqNote {
+  font-size: 12.5px;
+  line-height: 2;
+  color: var(--muted);
+}
+
+.reqNote code {
+  margin: 0 6px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--seg-track);
+  color: var(--text-2);
+  font-size: 12px;
+}

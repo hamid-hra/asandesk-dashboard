@@ -55,7 +55,7 @@ export function Kpis({ data, connNow }: { data: Overview | undefined; connNow: n
       series: connMax,
     },
     {
-      label: "کل نشست‌ها",
+      label: "نشست‌های موفق",
       value: data?.sessions_total == null ? "—" : fmt(data.sessions_total),
       unit: "نشست",
       delta: null,

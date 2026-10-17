@@ -9,6 +9,7 @@ import { ConnChart } from "@/components/server/ConnChart";
 import { Kpis } from "@/components/server/Kpis";
 import { LiveCard } from "@/components/server/LiveCard";
 import { RangeHeader } from "@/components/server/RangeHeader";
+import { RequestsCard } from "@/components/server/RequestsCard";
 import { ResourceChart } from "@/components/server/ResourceChart";
 import { ServersTable } from "@/components/server/ServersTable";
 import s from "@/components/server/server.module.css";
@@ -33,6 +34,7 @@ export default function ServerPage() {
     <div className={s.page}>
       <RangeHeader range={range} onChange={setRange} />
       <Kpis data={overview} connNow={connNow} />
+      <RequestsCard requests={overview?.requests} range={overview?.range ?? range} />
       <div className={s.row}>
         <ConnChart points={points} range={overview?.range ?? range} connNow={connNow} />
         <LiveCard live={live} cpuAvg={cpuAvg} auto={auto} onToggleAuto={() => setAuto((v) => !v)} />

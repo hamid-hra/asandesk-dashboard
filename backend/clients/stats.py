@@ -59,14 +59,22 @@ def version_old(version: str, latest: str | None) -> bool:
 
 
 SEEN_DAYS = {"24h": 1, "7d": 7, "30d": 30}
+# جهت پیش‌فرض هر ترتیب: بیشترین/جدیدترین اول؛ نام الفبایی
+SORT_DEFAULT_DIR = {"recent": "desc", "mins": "desc", "sessions": "desc", "tickets": "desc", "name": "asc", "version": "desc"}
 
 
-def client_rows(filter_: str, sort: str, q: str, limit: int = 300, *, platform: str = "", os_name: str = "", version: str = "", seen: str = "", old: bool = False, new: bool = False):
+def client_rows(
+    filter_: str, sort: str, q: str, limit: int = 300, *, platform: str = "", os_name: str = "", version: str = "",
+    seen: str = "", old: bool = False, new: bool = False, status: str = "", account: str = "",
+    tickets: bool = False, blocked: bool = False, direction: str = "",
+):
     """Rows of the clients table.
 
-    `filter_` is the main tab (online, logged, …); `platform`/`os_name`/`version`/`seen`/`old`/`new` are the
-    extra filters of the filter bar. `facets` counts platforms, OS names and versions over the rows that
-    pass every filter except that facet's own, so each menu shows what choosing it would give.
+    Every column of the table filters on its own (`status`, `account`, `tickets`, `blocked`, `platform`/`os_name`,
+    `version`/`old`, `seen`, `new`) and they combine with AND; `filter_` is the older single-choice tab and is
+    still understood. `sort` + `direction` ("asc"/"desc", default per key) order the rows. `facets` counts
+    platforms, OS names and versions over the rows that pass every filter except that facet's own, so each
+    menu shows what choosing it would give.
     """
     close_stale_sessions()
     now = timezone.now()
@@ -83,15 +91,19 @@ def client_rows(filter_: str, sort: str, q: str, limit: int = 300, *, platform: 
             | Q(account__name__icontains=q) | Q(ip__startswith=q)
         )
     online_after = now - timedelta(seconds=settings.CLIENT_OFFLINE_AFTER_SECONDS)
-    if filter_ == "online":
+    status = status or ("online" if filter_ == "online" else "")
+    account = account or (filter_ if filter_ in ("logged", "guest") else "")
+    if status == "online":
         qs = qs.filter(last_seen__gte=online_after)
-    elif filter_ == "logged":
+    elif status == "offline":
+        qs = qs.filter(Q(last_seen__lt=online_after) | Q(last_seen__isnull=True))
+    if account == "logged":
         qs = qs.filter(account__isnull=False)
-    elif filter_ == "guest":
+    elif account == "guest":
         qs = qs.filter(account__isnull=True)
-    elif filter_ == "tickets":
+    if tickets or filter_ == "tickets":
         qs = qs.filter(t_open__gt=0)
-    elif filter_ == "blocked":
+    if blocked or filter_ == "blocked":
         qs = qs.filter(blocked=True)
     if seen in SEEN_DAYS:
         qs = qs.filter(last_seen__gte=now - timedelta(days=SEEN_DAYS[seen]))
@@ -123,13 +135,18 @@ def client_rows(filter_: str, sort: str, q: str, limit: int = 300, *, platform: 
             "tickets_total": c.t_total,
             "blocked": c.blocked,
         })
+    # هر کلید به‌صورت صعودی مرتب می‌شود و جهت پیش‌فرضش در SORT_DEFAULT_DIR است
     sorters = {
-        "recent": lambda r: (not r["online"], -(datetime.fromisoformat(r["last_seen"]).timestamp() if r["last_seen"] else 0)),
-        "mins": lambda r: -r["mins_30d"],
-        "sessions": lambda r: -r["sessions_30d"],
-        "tickets": lambda r: (-r["tickets_open"], -r["tickets_total"]),
+        "recent": lambda r: (r["online"], datetime.fromisoformat(r["last_seen"]).timestamp() if r["last_seen"] else 0),
+        "mins": lambda r: r["mins_30d"],
+        "sessions": lambda r: r["sessions_30d"],
+        "tickets": lambda r: (r["tickets_open"], r["tickets_total"]),
+        "name": lambda r: (r["display"] or "").casefold(),
+        "version": lambda r: _version_key(r["version"]),
     }
-    rows.sort(key=sorters.get(sort, sorters["recent"]))
+    sort = sort if sort in sorters else "recent"
+    direction = direction if direction in ("asc", "desc") else SORT_DEFAULT_DIR[sort]
+    rows.sort(key=sorters[sort], reverse=direction == "desc")
 
     # فیلترهای سیستم‌عامل و نسخه روی خود ردیف‌ها (پلتفرم از روی متن سیستم‌عامل ساخته می‌شود)
     checks = {

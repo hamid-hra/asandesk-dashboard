@@ -20,12 +20,14 @@ export function ConnChart({ points, range, connNow }: { points: Point[]; range: 
   const n = points.length;
   const conn = points.map((p) => p.conn);
   const fail = points.map((p) => p.fail);
-  const maxC = niceMax(Math.max(0, ...conn.filter((v): v is number => v != null)));
+  const maxC = niceMax(Math.max(0, ...conn.filter((v): v is number => v != null), ...fail.filter((v): v is number => v != null)));
   const cy = (v: number) => H - (v / maxC) * (H - TOP);
   const x = (i: number) => (n > 1 ? (i / (n - 1)) * 1000 : 500);
 
   const connSegs = segments(conn, x, cy);
-  const failSegs = segments(fail, x, cy);
+  // بدون هیچ درخواست بی‌نتیجه‌ای در بازه، خط قرمز صفرِ تخت است و فقط شلوغی می‌سازد
+  const hasFail = fail.some((v) => v);
+  const failSegs = hasFail ? segments(fail, x, cy) : [];
   const ticks = [0, 1, 2, 3, 4].map((k) => {
     const y = TOP + (k / 4) * (H - TOP);
     return { y, top: `${(y / H) * 100}%`, label: tickLabel((maxC * (4 - k)) / 4) };
@@ -57,13 +59,13 @@ export function ConnChart({ points, range, connNow }: { points: Point[]; range: 
         </div>
         <div style={{ flex: 1 }} />
         <div className={s.legend}>
-          <div>
+          <div title="اتصال‌های TCP برقرار روی سرورها، از agent">
             <span style={{ background: "var(--ok)" }} />
-            موفق
+            اتصال همزمان
           </div>
-          <div title="پس از اتصال سرور آسان‌دسک">
+          <div title="درخواست‌هایی که به احراز هویت نرسیدند (ناموفق یا لغو شده)، در هر بازهٔ نمودار">
             <span style={{ background: "var(--danger)" }} />
-            ناموفق
+            درخواست بی‌نتیجه
           </div>
         </div>
       </div>
@@ -125,7 +127,7 @@ export function ConnChart({ points, range, connNow }: { points: Point[]; range: 
                   style={{ width: 11, height: 11, border: "2.5px solid var(--ok)", left: tipBox(hover, n).left, top: `${(cy(hp.conn) / H) * 100}%` }}
                 />
               )}
-              {hp.fail != null && (
+              {hasFail && hp.fail != null && (
                 <div
                   className={s.marker}
                   style={{ width: 9, height: 9, border: "2px solid var(--danger)", left: tipBox(hover, n).left, top: `${(cy(hp.fail) / H) * 100}%` }}
@@ -135,13 +137,18 @@ export function ConnChart({ points, range, connNow }: { points: Point[]; range: 
                 <div className={s.tipTitle}>{tipLabel(hp, range)}</div>
                 <div className={s.tipRow}>
                   <span className="dot" style={{ background: "var(--ok)" }} />
-                  <span>موفق</span>
+                  <span>اتصال همزمان</span>
                   <b>{hp.conn == null ? "—" : fmt(hp.conn)}</b>
                 </div>
                 <div className={s.tipRow}>
+                  <span className="dot" style={{ background: "var(--off)" }} />
+                  <span>درخواست اتصال</span>
+                  <b>{fmt(hp.req)}</b>
+                </div>
+                <div className={s.tipRow}>
                   <span className="dot" style={{ background: "var(--danger)" }} />
-                  <span>ناموفق</span>
-                  <b>{hp.fail == null ? "—" : fmt(hp.fail)}</b>
+                  <span>بی‌نتیجه</span>
+                  <b>{fmt(hp.fail)}</b>
                 </div>
               </div>
             </>

@@ -74,6 +74,11 @@ class ClientListView(APIView):
                 seen=p.get("seen", ""),
                 old=p.get("old") == "1",
                 new=p.get("new") == "1",
+                status=p.get("status", ""),
+                account=p.get("account", ""),
+                tickets=p.get("tickets") == "1",
+                blocked=p.get("blocked") == "1",
+                direction=p.get("dir", ""),
             )
         )
 

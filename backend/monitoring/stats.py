@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import connection
-from django.db.models import OuterRef, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from clients.models import ConnSession
@@ -40,6 +40,57 @@ def floor_to_step(ts: datetime, step: timedelta) -> datetime:
     return origin + ((ts - origin) // step) * step
 
 
+def range_start(rng: Range, now: datetime) -> datetime:
+    """آغاز اولین bucket نمودار؛ KPIها هم از همین‌جا می‌شمارند تا با نمودار هم‌بازه باشند."""
+    return floor_to_step(now, rng.step) - (rng.points - 1) * rng.step
+
+
+def today_start(now: datetime) -> datetime:
+    return timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+# درخواستی که هنوز احراز نشده و تازه شروع شده، «در انتظار» است (کاربر در حال وارد کردن رمز)؛ نه ناموفق
+PENDING_FOR = timedelta(minutes=2)
+
+
+def request_counts(since: datetime, now: datetime | None = None) -> dict:
+    """درخواست‌های اتصالی که به دستگاه کنترل‌شونده رسیده و از آغاز `since` گزارش شده‌اند.
+
+    موفق = احراز هویت شده. بقیه یا هنوز در انتظارند، یا تمام شده‌اند: «ناموفق» و «لغو شده» فقط وقتی جدا
+    می‌شوند که اپ علت را در گزارش close فرستاده باشد (ConnSession.result)؛ وگرنه «نامشخص» می‌مانند.
+    درخواستی که هرگز به دستگاه نرسیده (مثلاً قطع شدن پیش از رسیدن به آن) در این آمار نیست.
+    """
+    now = now or timezone.now()
+    unauth = Q(authorized_at__isnull=True)
+    pending = unauth & Q(ended_at__isnull=True, started_at__gte=now - PENDING_FOR)
+    done = unauth & ~pending
+    agg = ConnSession.objects.filter(started_at__gte=since).aggregate(
+        total=Count("id"),
+        ok=Count("id", filter=Q(authorized_at__isnull=False)),
+        pending=Count("id", filter=pending),
+        failed=Count("id", filter=done & Q(result="failed")),
+        cancelled=Count("id", filter=done & Q(result="cancelled")),
+        unknown=Count("id", filter=done & ~Q(result__in=["failed", "cancelled"])),
+    )
+    bad = agg["failed"] + agg["cancelled"] + agg["unknown"]
+    finished = agg["total"] - agg["pending"]
+    return {**agg, "fail_rate": round(bad / finished * 100, 2) if finished else None}
+
+
+def request_series(rng: Range, start: datetime, end: datetime, now: datetime) -> dict[datetime, tuple[int, int]]:
+    """{آغاز bucket: (کل درخواست‌ها، ناموفق یا لغو شده)}"""
+    sql = f"""
+        SELECT date_bin(%s, started_at, %s) AS b, count(*),
+               count(*) FILTER (WHERE authorized_at IS NULL AND NOT (ended_at IS NULL AND started_at >= %s))
+        FROM {ConnSession._meta.db_table}
+        WHERE started_at >= %s AND started_at < %s
+        GROUP BY b
+    """
+    with connection.cursor() as cur:
+        cur.execute(sql, [rng.step, bin_origin(), now - PENDING_FOR, start, end + rng.step])
+        return {b: (n, bad) for b, n, bad in cur.fetchall()}
+
+
 def bucket_series(rng: Range, now: datetime | None = None):
     """سری زمانی bucket‌شده برای همه سرورها.
 
@@ -48,7 +99,8 @@ def bucket_series(rng: Range, now: datetime | None = None):
     """
     now = now or timezone.now()
     end = floor_to_step(now, rng.step)
-    start = end - (rng.points - 1) * rng.step
+    start = range_start(rng, now)
+    reqs = request_series(rng, start, end, now)
     sql = f"""
         SELECT date_bin(%s, ts, %s) AS b, server_id,
                avg(cpu), avg(ram), avg(disk), avg(net_pct), avg(tcp_established), max(tcp_established)
@@ -68,9 +120,11 @@ def bucket_series(rng: Range, now: datetime | None = None):
     for i in range(rng.points):
         t = start + i * rng.step
         vals = agg.get(t)
+        # درخواست‌ها از نشست‌های گزارش‌شدهٔ کلاینت‌ها می‌آیند و به agent سرور وابسته نیستند؛ بدون درخواست = ۰
+        req, fail = reqs.get(t, (0, 0))
         if not vals:
             points.append({"t": t.isoformat(), "cpu": None, "ram": None, "disk": None, "net": None,
-                           "conn": None, "conn_max": None, "fail": None})
+                           "conn": None, "conn_max": None, "req": req, "fail": fail})
             continue
         n = len(vals)
         points.append({
@@ -81,8 +135,8 @@ def bucket_series(rng: Range, now: datetime | None = None):
             "net": round(sum(v[3] for v in vals) / n, 2),
             "conn": round(sum(v[4] for v in vals), 1),
             "conn_max": sum(v[5] for v in vals),
-            # اتصال‌های ناموفق تا اتصال سرور آسان‌دسک منبع داده ندارد
-            "fail": None,
+            "req": req,
+            "fail": fail,
         })
     return points
 
@@ -184,16 +238,17 @@ def uptime_30d() -> float | None:
 
 def overview(range_id: str):
     rng = RANGES.get(range_id) or RANGES["7d"]
+    now = timezone.now()
+    in_range = request_counts(range_start(rng, now), now)
     return {
         "range": rng.id,
         "step_seconds": int(rng.step.total_seconds()),
-        "points": bucket_series(rng),
+        "points": bucket_series(rng, now),
         "servers": servers_table(),
         # تفکیک پلتفرم/منطقه پس از اتصال سرور آسان‌دسک فعال می‌شود
         "breakdown": None,
         # نشست‌های موفقی که کلاینت‌ها در بازه گزارش داده‌اند (audit/conn)
-        "sessions_total": ConnSession.objects.filter(
-            authorized_at__gte=timezone.now() - rng.points * rng.step
-        ).count(),
-        "fail_rate": None,
+        "sessions_total": in_range["ok"],
+        "fail_rate": in_range["fail_rate"],
+        "requests": {"today": request_counts(today_start(now), now), "range": in_range},
     }

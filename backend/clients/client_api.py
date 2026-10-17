@@ -192,6 +192,9 @@ class SysinfoVerView(ClientView):
         return text("1")
 
 
+CONN_RESULTS = ("failed", "cancelled")
+
+
 class AuditConnView(ClientView):
     """گزارش کلاینت کنترل‌شونده: action=new (اتصال TCP)، بدون action با peer (احراز هویت موفق)، action=close."""
 
@@ -212,7 +215,9 @@ class AuditConnView(ClientView):
                 client=client, conn_id=conn_id, session_id=s(data, "session_id", 24), ip=s(data, "ip", 64), started_at=now
             )
         elif action == "close":
-            open_qs.update(ended_at=now)
+            # اپ می‌تواند علت پایان یک اتصال بدون احراز هویت را هم بفرستد (result: failed | cancelled)
+            result = data.get("result") if data.get("result") in CONN_RESULTS else ""
+            open_qs.update(ended_at=now, **({"result": result} if result else {}))
         elif "peer" in data:
             peer = data.get("peer")
             peer_id, peer_name = "", ""

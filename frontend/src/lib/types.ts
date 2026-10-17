@@ -72,7 +72,9 @@ export interface Point {
   net: number | null;
   conn: number | null;
   conn_max: number | null;
-  fail: number | null;
+  /** درخواست‌های اتصالِ شروع‌شده در این بازه، و آن‌هایی که احراز نشدند (ناموفق یا لغو شده) */
+  req: number;
+  fail: number;
 }
 
 export type ServerStatus = "ok" | "high" | "maint" | "offline";
@@ -91,6 +93,17 @@ export interface ServerRow {
   last_seen: string | null;
 }
 
+/** شمار درخواست‌های اتصال در یک بازه؛ ناموفق و لغو شده فقط وقتی جدا می‌شوند که اپ علت را بفرستد، وگرنه در unknown هستند */
+export interface RequestCounts {
+  total: number;
+  ok: number;
+  pending: number;
+  failed: number;
+  cancelled: number;
+  unknown: number;
+  fail_rate: number | null;
+}
+
 export interface Overview {
   range: RangeId;
   step_seconds: number;
@@ -99,6 +112,7 @@ export interface Overview {
   breakdown: { platform: [string, number][]; region: [string, number][] } | null;
   sessions_total: number | null;
   fail_rate: number | null;
+  requests: { today: RequestCounts; range: RequestCounts };
 }
 
 export interface LiveAggregate {

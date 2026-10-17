@@ -4,41 +4,24 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import useSWR from "swr";
 
+import { ActiveFilters } from "@/components/clients/ActiveFilters";
 import { ClientChartsView } from "@/components/clients/charts/ClientCharts";
 import { ClientPanel } from "@/components/clients/ClientPanel";
 import { ClientTable } from "@/components/clients/ClientTable";
-import { activeCount, type ClientFilters, FilterBar, filterParams, NO_FILTERS } from "@/components/clients/FilterBar";
 import s from "@/components/clients/clients.module.css";
 import { KpiStrip } from "@/components/clients/KpiStrip";
-import { SearchBox, Seg } from "@/components/clients/SearchBox";
+import { activeCount, chips, type ClientFilters, DEFAULT_SORT, NO_FILTERS, queryParams, type SortState } from "@/components/clients/query";
+import { SearchBox } from "@/components/clients/SearchBox";
+import { type ViewTab, ViewTabs } from "@/components/clients/ViewTabs";
 import { fetcher } from "@/lib/api";
 import { fmt, pctText, toFa } from "@/lib/fa";
 import { minutesText } from "@/lib/people";
 import type { ClientCharts, ClientList, ClientStats } from "@/lib/types";
 
-type Filter = "all" | "online" | "logged" | "guest" | "tickets" | "blocked";
-type Sort = "recent" | "mins" | "sessions" | "tickets";
 type View = "list" | "charts";
 
-const VIEWS: [View, string][] = [
-  ["list", "فهرست کلاینت‌ها"],
-  ["charts", "نمودارها"],
-];
-
-const FILTERS: [Filter, string][] = [
-  ["all", "همه"],
-  ["online", "آنلاین"],
-  ["logged", "وارد شده"],
-  ["guest", "مهمان"],
-  ["tickets", "دارای بازخورد جدید"],
-  ["blocked", "مسدود"],
-];
-const SORTS: [Sort, string][] = [
-  ["recent", "آخرین فعالیت"],
-  ["mins", "مدت اتصال"],
-  ["sessions", "نشست"],
-  ["tickets", "بازخورد"],
-];
+const LIST_ICON = "M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01";
+const CHART_ICON = "M4 20V11M10 20V4M16 20v-6M22 20H2";
 
 function ClientsInner() {
   const router = useRouter();
@@ -46,17 +29,19 @@ function ClientsInner() {
   const params = useSearchParams();
   const selected = params.get("id");
   const view: View = params.get("view") === "charts" ? "charts" : "list";
-  const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<Sort>("recent");
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const [q, setQ] = useState("");
-  const [extra, setExtra] = useState<ClientFilters>(NO_FILTERS);
+  const [filters, setFilters] = useState<ClientFilters>(NO_FILTERS);
 
-  const query = new URLSearchParams({ filter, sort, q });
-  filterParams(extra, query);
+  const query = queryParams(sort, filters, q);
   const { data: list, mutate } = useSWR<ClientList>(view === "list" ? `/api/clients?${query}` : null, fetcher, { refreshInterval: 30000, keepPreviousData: true });
   const { data: charts, error: chartsError, mutate: reloadCharts } = useSWR<ClientCharts>(view === "charts" ? "/api/clients/charts" : null, fetcher, { refreshInterval: 60000 });
   const { data: st, mutate: mutateStats } = useSWR<ClientStats>("/api/clients/stats", fetcher, { refreshInterval: 30000 });
 
+  const tabs: ViewTab<View>[] = [
+    { id: "list", label: "فهرست کلاینت‌ها", icon: LIST_ICON, count: st?.total },
+    { id: "charts", label: "نمودارها", icon: CHART_ICON },
+  ];
   const setView = (v: View) => router.replace(v === "charts" ? `${pathname}?view=charts` : pathname, { scroll: false });
   const select = (id: string | null) => router.replace(id ? `${pathname}?id=${encodeURIComponent(id)}` : pathname, { scroll: false });
   const guest = st?.logged_share == null ? null : 100 - st.logged_share;
@@ -79,35 +64,38 @@ function ClientsInner() {
   ];
 
   const rows = list?.results;
+  const emptyText =
+    st?.total === 0
+      ? "هنوز کلاینتی به پنل گزارش نداده است (راهنما: README، بخش «اتصال کلاینت‌ها»)."
+      : activeCount(filters)
+        ? "کلاینتی با این فیلترها پیدا نشد؛ یکی از فیلترها را بردارید."
+        : "کلاینتی با این جستجو پیدا نشد";
   return (
     <div className={s.page}>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <div className={s.title}>کلاینت‌ها</div>
-          <div className={s.subtitle}>{view === "charts" ? "نصب‌ها بر اساس نسخه، پلتفرم و روز" : "فعالیت، مصرف و پشتیبانی هر کلاینت"}</div>
-        </div>
-        <span style={{ flex: 1 }} />
-        <Seg options={VIEWS} value={view} onChange={setView} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div className={s.title}>کلاینت‌ها</div>
+        <div className={s.subtitle}>{view === "charts" ? "نصب‌ها بر اساس نسخه، پلتفرم و روز" : "فعالیت، مصرف و پشتیبانی هر کلاینت"}</div>
       </div>
+      <ViewTabs tabs={tabs} value={view} onChange={setView} />
       {view === "charts" && <ClientChartsView data={charts} error={chartsError} onRetry={() => reloadCharts()} />}
       {view === "list" && <KpiStrip items={kpis} />}
       {view === "list" && <div className={s.split}>
         <div className={`card ${s.listCard}`}>
           <div className={s.toolbar}>
             <SearchBox value={q} onChange={setQ} placeholder="نام، شناسه، ایمیل یا IP…" />
-            <Seg options={FILTERS} value={filter} onChange={setFilter} wrap />
-            <span style={{ flex: 1 }} />
-            <div className={s.sortWrap}>
-              <span>مرتب‌سازی</span>
-              <Seg options={SORTS} value={sort} onChange={setSort} />
-            </div>
+            <span className={s.toolbarHint}>روی عنوان هر ستون بزنید تا فیلتر و مرتب کنید</span>
           </div>
-          <FilterBar value={extra} onChange={setExtra} facets={list?.facets} />
+          <ActiveFilters chips={chips(filters)} sort={sort} onSort={setSort} filters={filters} onFilters={setFilters} />
           <ClientTable
             rows={rows}
             selected={selected}
             onSelect={(id) => select(id === selected ? null : id)}
-            empty={st?.total === 0 ? "هنوز کلاینتی به پنل گزارش نداده است (راهنما: README، بخش «اتصال کلاینت‌ها»)." : activeCount(extra) ? "کلاینتی با این فیلترها پیدا نشد؛ یکی از فیلترها را بردارید." : "کلاینتی با این فیلتر پیدا نشد"}
+            sort={sort}
+            onSort={setSort}
+            filters={filters}
+            onFilters={setFilters}
+            facets={list?.facets}
+            empty={emptyText}
           />
           <div className={s.footer}>
             {list

@@ -1,9 +1,11 @@
 import { toFa } from "@/lib/fa";
 import { agoText, formatId, minutesText } from "@/lib/people";
-import type { ClientRow } from "@/lib/types";
+import type { ClientList, ClientRow } from "@/lib/types";
 
 import { Avatar } from "./Avatar";
 import s from "./clients.module.css";
+import { ColumnHead, Choice, MenuSection } from "./ColumnHead";
+import { type ClientFilters, type SortKey, type SortState, SEEN, SORT_LABEL, withSelected } from "./query";
 
 function Row({ c, selected, onSelect }: { c: ClientRow; selected: boolean; onSelect: () => void }) {
   const tLabel = c.tickets_open ? `${toFa(c.tickets_open)} باز` : c.tickets_total ? `${toFa(c.tickets_total)} بسته` : "ندارد";
@@ -65,19 +67,156 @@ function Row({ c, selected, onSelect }: { c: ClientRow; selected: boolean; onSel
   );
 }
 
-export function ClientTable({ rows, selected, onSelect, empty }: { rows: ClientRow[] | undefined; selected: string | null; onSelect: (id: string) => void; empty: string }) {
+interface HeaderProps {
+  sort: SortState;
+  onSort: (s: SortState) => void;
+  filters: ClientFilters;
+  onFilters: (f: ClientFilters) => void;
+  facets: ClientList["facets"];
+}
+
+/** گزینه‌های مرتب‌سازی یک ستون، در منوی همان ستون */
+function SortChoices({ keys, sort, onSort }: { keys: SortKey[]; sort: SortState; onSort: (s: SortState) => void }) {
+  return (
+    <MenuSection title="مرتب‌سازی">
+      {keys.flatMap((key) =>
+        // اول جهت پیش‌فرضِ هر کلید (بیشترین/جدیدترین یا الفبایی)، بعد برعکسش
+        (key === "name" ? (["asc", "desc"] as const) : (["desc", "asc"] as const)).map((dir) => (
+          <Choice key={`${key}-${dir}`} on={sort.key === key && sort.dir === dir} onClick={() => onSort({ key, dir })}>
+            {SORT_LABEL[key][dir === "asc" ? 0 : 1]}
+          </Choice>
+        )),
+      )}
+    </MenuSection>
+  );
+}
+
+function Header({ sort, onSort, filters: f, onFilters, facets }: HeaderProps) {
+  const set = (patch: Partial<ClientFilters>) => onFilters({ ...f, ...patch });
+  const dirOf = (...keys: SortKey[]) => (keys.includes(sort.key) ? sort.dir : null);
+  const platforms = withSelected(facets?.platforms ?? [], f.os.startsWith("p:") ? f.os.slice(2) : "");
+  const oses = withSelected(facets?.os ?? [], f.os.startsWith("o:") ? f.os.slice(2) : "");
+  const versions = withSelected(facets?.versions ?? [], f.version);
+
+  return (
+    <div className={`${s.tr} ${s.th}`}>
+      <ColumnHead label="کلاینت" sort={dirOf("name")} filtered={f.blocked || f.newOnly}>
+        <SortChoices keys={["name"]} sort={sort} onSort={onSort} />
+        <MenuSection title="نمایش">
+          <Choice kind="check" on={f.blocked} onClick={() => set({ blocked: !f.blocked })}>
+            فقط مسدودها
+          </Choice>
+          <Choice kind="check" on={f.newOnly} onClick={() => set({ newOnly: !f.newOnly })}>
+            نصب تازه · ۷ روز
+          </Choice>
+        </MenuSection>
+      </ColumnHead>
+
+      <ColumnHead label="وضعیت" sort={dirOf("recent")} filtered={!!f.status || !!f.seen}>
+        <SortChoices keys={["recent"]} sort={sort} onSort={onSort} />
+        <MenuSection title="وضعیت">
+          <Choice on={!f.status} onClick={() => set({ status: "" })}>
+            همه
+          </Choice>
+          <Choice on={f.status === "online"} onClick={() => set({ status: "online" })}>
+            آنلاین
+          </Choice>
+          <Choice on={f.status === "offline"} onClick={() => set({ status: "offline" })}>
+            آفلاین
+          </Choice>
+        </MenuSection>
+        <MenuSection title="آخرین فعالیت">
+          {SEEN.map(([v, label]) => (
+            <Choice key={v} on={f.seen === v} onClick={() => set({ seen: v })}>
+              {label}
+            </Choice>
+          ))}
+        </MenuSection>
+      </ColumnHead>
+
+      <ColumnHead label="حساب" filtered={!!f.account}>
+        <MenuSection title="حساب">
+          <Choice on={!f.account} onClick={() => set({ account: "" })}>
+            همه
+          </Choice>
+          <Choice on={f.account === "logged"} onClick={() => set({ account: "logged" })}>
+            وارد شده
+          </Choice>
+          <Choice on={f.account === "guest"} onClick={() => set({ account: "guest" })}>
+            مهمان (بدون ورود)
+          </Choice>
+        </MenuSection>
+      </ColumnHead>
+
+      <ColumnHead label="مدت اتصال · ۳۰ روز" sort={dirOf("mins", "sessions")}>
+        <SortChoices keys={["mins", "sessions"]} sort={sort} onSort={onSort} />
+      </ColumnHead>
+
+      <ColumnHead label="سیستم‌عامل" filtered={!!f.os}>
+        <MenuSection title="سیستم‌عامل" scroll>
+          <Choice on={!f.os} onClick={() => set({ os: "" })}>
+            همه
+          </Choice>
+        </MenuSection>
+        {platforms.length > 0 && (
+          <MenuSection title="پلتفرم" scroll>
+            {platforms.map(([p, c]) => (
+              <Choice key={p} on={f.os === `p:${p}`} count={c} onClick={() => set({ os: `p:${p}` })}>
+                {p}
+              </Choice>
+            ))}
+          </MenuSection>
+        )}
+        {oses.length > 0 && (
+          <MenuSection title="نسخهٔ سیستم‌عامل" scroll>
+            {oses.map(([o, c]) => (
+              <Choice key={o} on={f.os === `o:${o}`} count={c} onClick={() => set({ os: `o:${o}` })}>
+                <bdi dir="auto">{o}</bdi>
+              </Choice>
+            ))}
+          </MenuSection>
+        )}
+      </ColumnHead>
+
+      <ColumnHead label="بازخورد" sort={dirOf("tickets")} filtered={f.tickets}>
+        <SortChoices keys={["tickets"]} sort={sort} onSort={onSort} />
+        <MenuSection title="نمایش">
+          <Choice on={!f.tickets} onClick={() => set({ tickets: false })}>
+            همه
+          </Choice>
+          <Choice on={f.tickets} onClick={() => set({ tickets: true })}>
+            دارای بازخورد جدید
+          </Choice>
+        </MenuSection>
+      </ColumnHead>
+
+      <ColumnHead label="نسخه" sort={dirOf("version")} filtered={!!f.version || f.old}>
+        <SortChoices keys={["version"]} sort={sort} onSort={onSort} />
+        <MenuSection title="نمایش">
+          <Choice kind="check" on={f.old} onClick={() => set({ old: !f.old })}>
+            فقط نسخهٔ قدیمی
+          </Choice>
+        </MenuSection>
+        <MenuSection title="نسخهٔ برنامه" scroll>
+          <Choice on={!f.version} onClick={() => set({ version: "" })}>
+            همه
+          </Choice>
+          {versions.map(([v, c]) => (
+            <Choice key={v} on={f.version === v} count={c} onClick={() => set({ version: v })}>
+              <bdi dir="ltr">{v}</bdi>
+            </Choice>
+          ))}
+        </MenuSection>
+      </ColumnHead>
+    </div>
+  );
+}
+
+export function ClientTable({ rows, selected, onSelect, empty, ...header }: { rows: ClientRow[] | undefined; selected: string | null; onSelect: (id: string) => void; empty: string } & HeaderProps) {
   return (
     <div className={s.tableScroll}>
       <div className={s.table}>
-        <div className={`${s.tr} ${s.th}`}>
-          <span>کلاینت</span>
-          <span>وضعیت</span>
-          <span>حساب</span>
-          <span>مدت اتصال · ۳۰ روز</span>
-          <span>سیستم‌عامل</span>
-          <span>بازخورد</span>
-          <span>نسخه</span>
-        </div>
+        <Header {...header} />
         {rows?.map((c) => <Row key={c.id} c={c} selected={c.id === selected} onSelect={() => onSelect(c.id)} />)}
         {rows && !rows.length && <div className="empty">{empty}</div>}
         {!rows && <div className="empty">در حال بارگذاری…</div>}
