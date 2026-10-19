@@ -94,6 +94,16 @@ def evaluate_sample(server: Server, sample: MetricSample) -> None:
     resolve_alert(server, "offline")
 
 
+def evaluate_services(server: Server, services: dict) -> None:
+    """سرویس‌های پایش‌شده (hbbs/hbbr و …): متوقف‌بودن هشدار بحرانی می‌سازد و با برگشتن بسته می‌شود."""
+    for name, svc in services.items():
+        kind = f"svc_{name}"[:32]
+        if svc.get("up"):
+            resolve_alert(server, kind)
+        else:
+            open_alert(server, kind, AlertLevel.CRIT, f"سرویس {name} متوقف است", f"{server.name} · پروسهٔ {name} پیدا نشد")
+
+
 def check_offline_servers() -> None:
     for server in Server.objects.filter(last_seen__isnull=False):
         if server.online:

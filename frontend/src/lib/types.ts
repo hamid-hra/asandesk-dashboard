@@ -226,6 +226,8 @@ export interface ClientRow {
   tickets_open: number;
   tickets_total: number;
   blocked: boolean;
+  /** فقط از دیتابیس hbbs شناخته شده و به API گزارش نمی‌دهد (نسخهٔ قدیمی) */
+  legacy: boolean;
 }
 
 export interface ClientList {
@@ -240,6 +242,7 @@ export interface ClientList {
 
 export interface ClientStats {
   total: number;
+  legacy: number;
   new_7d: number;
   online: number;
   active_30d: number;
@@ -263,6 +266,7 @@ export interface ClientDetail {
   plan: Plan;
   online: boolean;
   blocked: boolean;
+  legacy: boolean;
   /** اولین باری که دستگاهِ مسدود گزارش داد اطلاعات سرور را از روی خودش برداشته است؛ null = هنوز گزارش نداده */
   revoked_at: string | null;
   last_seen: string | null;

@@ -5,7 +5,7 @@ import useSWR from "swr";
 
 import { Icon } from "@/components/Icon";
 import { api, fetcher } from "@/lib/api";
-import { toFa } from "@/lib/fa";
+import { mbText, toFa } from "@/lib/fa";
 import { agoText, copyText, jStamp, RO_TIP, type HAEventRow, type HAOverview, type HAServerRow } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 
@@ -157,6 +157,33 @@ function Spark({ data }: { data: (number | null)[] }) {
   );
 }
 
+function uptimeText(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${toFa(m)} دقیقه`;
+  if (m < 60 * 24) return `${toFa(Math.floor(m / 60))} ساعت`;
+  return `${toFa(Math.floor(m / 1440))} روز`;
+}
+
+function Services({ services }: { services: NonNullable<HAServerRow["services"]> }) {
+  return (
+    <div className={s.svcs}>
+      {Object.entries(services).map(([name, v]) => (
+        <div key={name} className={s.svc} data-up={String(v.up)}>
+          <span className="dot" style={{ background: v.up ? "var(--ok)" : "var(--danger)" }} />
+          <b className="mono" dir="ltr">{name}</b>
+          {v.up ? (
+            <span>
+              {uptimeText(v.uptime_s)} · CPU {toFa(v.cpu.toFixed(1))}٪ · RAM {mbText(v.ram)}
+            </span>
+          ) : (
+            <span>متوقف است</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ServerCard({ sv, canEdit, onEdit, onPromote, onMaintenance, onDelete }: { sv: HAServerRow; canEdit: boolean; onEdit: () => void; onPromote: () => void; onMaintenance: () => void; onDelete: () => void }) {
   const [label, color] = STATUS[sv.status];
   const items = [
@@ -183,6 +210,7 @@ function ServerCard({ sv, canEdit, onEdit, onPromote, onMaintenance, onDelete }:
       <div className={s.ports} dir="ltr">
         {sv.ports.map((p) => <span key={p.label} className={s.port} data-ok={String(p.ok)} title={p.tip}>{p.label}</span>)}
       </div>
+      {sv.services && <Services services={sv.services} />}
       <div className={s.lat}>
         <span>تأخیر <b dir="ltr" className="mono">{sv.latency_ms != null ? `${sv.latency_ms} ms` : "—"}</b></span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Spark data={sv.history} /><small>۲۴ ساعت گذشته</small></span>

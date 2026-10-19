@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Role, User
 from monitoring import stats
-from monitoring.models import Alert, MetricSample, Server, hash_token
+from monitoring.models import Alert, MetricSample, Server
 from releases.models import Release, version_key
 
 
@@ -17,7 +17,6 @@ def releases_root(tmp_path, settings):
     settings.RELEASES_ROOT = tmp_path
     settings.MEDIA_ROOT = tmp_path
     settings.SECRETS_DIR = tmp_path / "secrets"
-    settings.AGENT_TOKEN_FILE = tmp_path / "agent" / "token"
     return tmp_path
 
 
@@ -118,16 +117,13 @@ def test_setup_rejects_wrong_code_and_weak_password():
 
 
 @pytest.mark.django_db
-def test_bootstrap_generates_agent_token_and_setup_code(settings, capsys):
+def test_bootstrap_prints_setup_code_and_registers_no_server(capsys):
     from django.core.management import call_command
 
     call_command("bootstrap")
-    token = settings.AGENT_TOKEN_FILE.read_text().strip()
-    assert Server.objects.filter(token_hash=hash_token(token)).exists()
     assert "SETUP CODE" in capsys.readouterr().out
     call_command("bootstrap")  # idempotent
-    assert Server.objects.count() == 1
-    assert settings.AGENT_TOKEN_FILE.read_text().strip() == token
+    assert Server.objects.count() == 0  # agent جدا نصب می‌شود؛ سرور محلی ساخته نمی‌شود
 
 
 # ---------- monitoring ----------
@@ -329,3 +325,36 @@ def test_version_ordering():
     assert sorted(versions, key=version_key) == [
         "2.4.1", "2.5.0-alpha.1", "2.5.0-beta.2", "2.5.0-beta.10", "2.5.0", "2.10.0"
     ]
+
+
+# ---------- وضعیت سرویس‌ها (hbbs/hbbr) ----------
+
+SVC_UP = {"up": True, "uptime_s": 3600, "cpu": 0.4, "ram": 30_000_000}
+SVC_DOWN = {"up": False, "uptime_s": 0, "cpu": 0, "ram": 0}
+
+
+@pytest.mark.django_db
+def test_ingest_stores_services_and_alerts_while_one_is_down(server):
+    assert ingest({"services": {"hbbs": SVC_UP, "hbbr": SVC_DOWN}}).status_code == 201
+    server.refresh_from_db()
+    assert server.services["hbbs"]["up"] is True and server.services["hbbr"]["up"] is False and server.services_at
+    alert = Alert.objects.get(server=server, kind="svc_hbbr", resolved_at__isnull=True)
+    assert alert.level == "crit" and "hbbr" in alert.title
+    assert not Alert.objects.filter(kind="svc_hbbs").exists()
+
+    assert ingest({"services": {"hbbs": SVC_UP, "hbbr": SVC_UP}}).status_code == 201
+    assert not Alert.objects.filter(server=server, kind="svc_hbbr", resolved_at__isnull=True).exists()
+
+
+@pytest.mark.django_db
+def test_ingest_without_services_keeps_the_last_known_status(server):
+    ingest({"services": {"hbbs": SVC_UP}})
+    ingest()  # agent قدیمی یا بدون AGENT_SERVICES
+    server.refresh_from_db()
+    assert server.services["hbbs"]["up"] is True
+
+
+@pytest.mark.django_db
+def test_ingest_rejects_bad_service_names(server):
+    assert ingest({"services": {"Bad Name!": SVC_UP}}).status_code == 400
+    assert ingest({"services": {f"s{i}": SVC_UP for i in range(9)}}).status_code == 400

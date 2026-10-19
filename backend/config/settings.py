@@ -20,8 +20,6 @@ def env_list(name, default=""):
 
 # رازهای تولیدشده خودکار (کلید Django، کد راه‌اندازی) — در داکر روی volume اختصاصی backend
 SECRETS_DIR = Path(env("SECRETS_DIR", BASE_DIR / "data" / "secrets"))
-# توکن agent محلی — volume مشترک بین backend و agent
-AGENT_TOKEN_FILE = Path(env("AGENT_TOKEN_FILE", BASE_DIR / "data" / "agent" / "token"))
 
 
 def read_secret(path: Path):

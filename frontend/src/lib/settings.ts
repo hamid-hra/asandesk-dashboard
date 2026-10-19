@@ -216,6 +216,16 @@ export interface HAServerRow {
   last_check: string | null;
   history: (number | null)[];
   agent_online: boolean;
+  /** وضعیت پروسه‌های hbbs/hbbr از agent؛ null = agent گزارش نمی‌دهد */
+  services: Record<string, HAService> | null;
+}
+export interface HAService {
+  up: boolean;
+  uptime_s: number;
+  /** درصد از کل CPU میزبان */
+  cpu: number;
+  /** بایت */
+  ram: number;
 }
 export interface HAEventRow {
   id: number;

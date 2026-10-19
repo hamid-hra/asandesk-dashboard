@@ -251,3 +251,18 @@ def test_a_backup_can_only_be_downloaded_with_edit_access():
     assert r.status_code == 200 and b"".join(r.streaming_content) == b"whole-database"
     owner, _ = as_user(Role.OWNER, username="boss")
     assert owner.get(url).status_code == 200
+
+
+@pytest.mark.django_db
+def test_ha_server_row_shows_services_only_while_agent_is_online():
+    from ha import views as ha_views
+    from monitoring.models import Server
+
+    mon = Server(name="mon", last_seen=timezone.now(), services={"hbbs": {"up": True, "uptime_s": 5, "cpu": 0.1, "ram": 1}})
+    mon.set_token("t")
+    mon.save()
+    sv = HAServer.objects.create(name="s1", address="10.0.0.1", monitor=mon)
+    assert ha_views.server_row(sv)["services"]["hbbs"]["up"] is True
+    Server.objects.filter(pk=mon.pk).update(last_seen=timezone.now() - timezone.timedelta(hours=1))
+    sv = HAServer.objects.get(pk=sv.pk)
+    assert ha_views.server_row(sv)["services"] is None

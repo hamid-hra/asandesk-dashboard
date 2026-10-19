@@ -70,7 +70,7 @@ DEFAULT_PAGE_SIZE = 25
 def client_rows(
     filter_: str, sort: str, q: str, *, page: int = 1, page_size: int = DEFAULT_PAGE_SIZE, platform: str = "",
     os_name: str = "", version: str = "", seen: str = "", old: bool = False, new: bool = False, status: str = "",
-    account: str = "", tickets: bool = False, blocked: bool = False, direction: str = "",
+    account: str = "", tickets: bool = False, blocked: bool = False, direction: str = "", legacy: str = "",
 ):
     """Rows of the clients table.
 
@@ -101,7 +101,8 @@ def client_rows(
     if status == "online":
         qs = qs.filter(last_seen__gte=online_after)
     elif status == "offline":
-        qs = qs.filter(Q(last_seen__lt=online_after) | Q(last_seen__isnull=True))
+        # وضعیت دستگاه‌های قدیمی نامشخص است؛ آفلاین حساب نمی‌شوند
+        qs = qs.filter(Q(last_seen__lt=online_after) | Q(last_seen__isnull=True), legacy=False)
     if account == "logged":
         qs = qs.filter(account__isnull=False)
     elif account == "guest":
@@ -110,10 +111,14 @@ def client_rows(
         qs = qs.filter(t_open__gt=0)
     if blocked or filter_ == "blocked":
         qs = qs.filter(blocked=True)
+    if legacy == "only" or filter_ == "legacy":
+        qs = qs.filter(legacy=True)
+    elif legacy == "exclude":
+        qs = qs.filter(legacy=False)
     if seen in SEEN_DAYS:
         qs = qs.filter(last_seen__gte=now - timedelta(days=SEEN_DAYS[seen]))
     elif seen == "inactive":
-        qs = qs.filter(Q(last_seen__lt=now - timedelta(days=30)) | Q(last_seen__isnull=True))
+        qs = qs.filter(Q(last_seen__lt=now - timedelta(days=30)) | Q(last_seen__isnull=True), legacy=False)
     if new:
         qs = qs.filter(first_seen__gte=now - timedelta(days=7))
 
@@ -139,10 +144,14 @@ def client_rows(
             "tickets_open": c.t_open,
             "tickets_total": c.t_total,
             "blocked": c.blocked,
+            "legacy": c.legacy,
+            "first_seen": c.first_seen.isoformat(),
         })
     # هر کلید به‌صورت صعودی مرتب می‌شود و جهت پیش‌فرضش در SORT_DEFAULT_DIR است
     sorters = {
-        "recent": lambda r: (r["online"], datetime.fromisoformat(r["last_seen"]).timestamp() if r["last_seen"] else 0),
+        # دستگاه‌های قدیمی last_seen ندارند؛ بین خودشان جدیدترین ثبت‌نام بالاتر می‌آید
+        "recent": lambda r: (r["online"], datetime.fromisoformat(r["last_seen"]).timestamp() if r["last_seen"] else 0,
+                             datetime.fromisoformat(r["first_seen"]).timestamp()),
         "mins": lambda r: r["mins_30d"],
         "sessions": lambda r: r["sessions_30d"],
         "tickets": lambda r: (r["tickets_open"], r["tickets_total"]),
@@ -197,6 +206,7 @@ def clients_summary():
     platforms = Counter(c.platform or "نامشخص" for c in active.only("os"))
     return {
         "total": total,
+        "legacy": Client.objects.filter(legacy=True).count(),
         "new_7d": Client.objects.filter(first_seen__gte=now - timedelta(days=7)).count(),
         "online": Client.objects.filter(
             last_seen__gte=now - timedelta(seconds=settings.CLIENT_OFFLINE_AFTER_SECONDS)

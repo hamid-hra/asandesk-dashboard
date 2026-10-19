@@ -416,3 +416,131 @@ def test_feedback_image_files_are_removed_with_ticket():
     assert len(paths) == 2 and all(os.path.exists(p) for p in paths)
     t.delete()
     assert not any(os.path.exists(p) for p in paths)
+
+
+# ---------- کلاینت‌های قدیمی (فقط در دیتابیس hbbs) ----------
+
+def peer(rd_id="111222333", uuid="b2xkLTE=", ip="5.6.7.8", created="2025-03-01T10:20:30+00:00"):
+    from clients.models import sha256
+    return {"id": rd_id, "uuid_hash": sha256(uuid), "ip": ip, "created_at": created}
+
+
+def peers_post(peers, token="tok"):
+    headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"} if token else {}
+    return APIClient().post("/api/agent/peers", {"peers": peers}, format="json", **headers)
+
+
+@pytest.fixture
+def agent_server(db):
+    from monitoring.models import Server
+    s = Server(name="hbbs-1")
+    s.set_token("tok")
+    s.save()
+    return s
+
+
+@pytest.mark.django_db
+def test_peers_import_creates_legacy_clients_and_is_idempotent(agent_server):
+    r = peers_post([peer(), peer("444555666", "b2xkLTI=", "::ffff:9.9.9.9", "2025-04-02T00:00:00+00:00")])
+    assert r.status_code == 200 and r.json() == {"created": 2, "updated": 0, "skipped": 0}
+    c = Client.objects.get(rd_id="111222333")
+    assert c.legacy and c.ip == "5.6.7.8" and c.last_seen is None and not c.online and not c.share_location
+    assert c.first_seen.isoformat() == "2025-03-01T10:20:30+00:00" and c.uuid_hash
+    assert Client.objects.get(rd_id="444555666").ip == "9.9.9.9"  # ::ffff: برداشته می‌شود
+
+    again = peers_post([peer(ip="1.1.1.1")]).json()
+    assert again == {"created": 0, "updated": 1, "skipped": 0}  # IP تازه‌تر ثبت می‌شود
+    assert Client.objects.get(rd_id="111222333").ip == "1.1.1.1"
+    assert peers_post([peer(ip="1.1.1.1")]).json()["updated"] == 0
+
+
+@pytest.mark.django_db
+def test_peers_endpoint_needs_a_server_token_and_a_valid_body(agent_server):
+    assert peers_post([peer()], token=None).status_code == 401
+    assert peers_post([peer()], token="wrong").status_code == 401
+    assert peers_post([{**peer(), "id": "x"}]).status_code == 400  # شناسهٔ کوتاه
+    assert peers_post([{**peer(), "id": "bad id!"}]).status_code == 400
+    assert peers_post([{**peer(), "uuid_hash": "nothex"}]).status_code == 400
+    assert peers_post([peer(f"1000{i:05d}") for i in range(1001)]).status_code == 400
+    assert not Client.objects.exists()
+
+
+@pytest.mark.django_db
+def test_peers_never_change_a_client_that_reports_through_the_api(agent_server):
+    app_post("/api/heartbeat", DEV)
+    before = Client.objects.get(rd_id=DEV["id"])
+    assert not before.legacy and before.ip == ""
+    r = peers_post([peer(DEV["id"], "other", "7.7.7.7")])
+    assert r.json() == {"created": 0, "updated": 0, "skipped": 1}
+    after = Client.objects.get(rd_id=DEV["id"])
+    assert after.ip == "" and after.uuid_hash == before.uuid_hash and after.first_seen == before.first_seen
+
+
+@pytest.mark.django_db
+def test_legacy_client_becomes_regular_when_the_device_reports(agent_server):
+    created = "2024-01-02T03:04:05+00:00"
+    peers_post([peer(DEV["id"], DEV["uuid"], "5.6.7.8", created)])
+    assert Client.objects.get(rd_id=DEV["id"]).legacy
+
+    # uuid دیگر → رد می‌شود و ردیف قدیمی می‌ماند (ادعای ردیف قدیمی ممکن نیست)
+    assert app_post("/api/heartbeat", {"id": DEV["id"], "uuid": "attacker"}).status_code == 401
+    assert Client.objects.get(rd_id=DEV["id"]).legacy
+
+    assert app_post("/api/heartbeat", DEV).status_code == 200
+    c = Client.objects.get(rd_id=DEV["id"])
+    assert not c.legacy and c.online and Client.objects.count() == 1
+    assert c.first_seen.isoformat() == created  # تاریخ اولین ثبت‌نام از دست نمی‌رود
+
+
+@pytest.mark.django_db
+def test_legacy_ip_is_wiped_when_the_upgraded_client_turns_location_off(agent_server):
+    peers_post([peer(DEV["id"], DEV["uuid"], "5.6.7.8")])
+    register(loc=False)
+    c = Client.objects.get(rd_id=DEV["id"])
+    assert not c.legacy and c.ip == ""
+
+
+@pytest.mark.django_db
+def test_peer_of_a_blocked_machine_is_created_blocked(agent_server):
+    Client.objects.create(rd_id="900000001", uuid_hash=peer()["uuid_hash"], blocked=True)
+    peers_post([peer("900000002")])  # همان uuid، شناسهٔ تازه
+    assert Client.objects.get(rd_id="900000002").blocked
+
+
+@pytest.mark.django_db
+def test_legacy_clients_are_listed_counted_and_filterable(agent_server):
+    peers_post([peer("111222333", ip="5.6.7.8"), peer("444555666", "b3RoZXI=", "8.8.4.4", "2025-05-01T00:00:00+00:00")])
+    app_post("/api/heartbeat", DEV)
+    c = panel(Role.VIEWER)
+
+    st = c.get("/api/clients/stats").json()
+    assert st["total"] == 3 and st["legacy"] == 2
+    assert st["online"] == 1  # وضعیت قدیمی‌ها نامشخص است و آنلاین حساب نمی‌شود
+
+    allrows = c.get("/api/clients").json()
+    assert allrows["count"] == 3 and allrows["results"][0]["id"] == DEV["id"]  # آنلاین اول
+    legacy = c.get("/api/clients?filter=legacy").json()
+    assert {r["id"] for r in legacy["results"]} == {"111222333", "444555666"}
+    assert all(r["legacy"] and not r["online"] for r in legacy["results"])
+    assert {r["ip"] for r in legacy["results"]} == {"5.6.7.8", "8.8.4.4"}
+    assert c.get("/api/clients?filter=online").json()["count"] == 1
+    assert c.get("/api/clients?q=8.8.4").json()["count"] == 1  # جست‌وجو با IP
+
+    # فیلتر ستون «کلاینت»: فقط قدیمی‌ها / فقط دستگاه‌هایی که به API گزارش می‌دهند
+    assert {r["id"] for r in c.get("/api/clients?legacy=only").json()["results"]} == {"111222333", "444555666"}
+    assert [r["id"] for r in c.get("/api/clients?legacy=exclude").json()["results"]] == [DEV["id"]]
+    # وضعیت قدیمی‌ها نامشخص است: نه آفلاین حساب می‌شوند و نه «غیرفعال بیش از ۳۰ روز»
+    assert c.get("/api/clients?status=offline").json()["count"] == 0
+    assert c.get("/api/clients?seen=inactive").json()["count"] == 0
+
+    detail = c.get("/api/clients/111222333").json()
+    assert detail["legacy"] and detail["ip"] == "5.6.7.8" and not detail["online"]
+
+
+@pytest.mark.django_db
+def test_legacy_client_cannot_be_blocked_or_logged_out(agent_server):
+    peers_post([peer()])
+    c = panel(Role.ADMIN)
+    assert c.post("/api/clients/111222333/block", {"blocked": True}, format="json").status_code == 400
+    assert c.post("/api/clients/111222333/logout").status_code == 400
+    assert not Client.objects.get(rd_id="111222333").blocked

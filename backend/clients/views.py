@@ -67,6 +67,9 @@ def int_param(p, name: str, default: int) -> int:
         return default
 
 
+LEGACY_NOTE = "این دستگاه به API گزارش نمی‌دهد (نسخهٔ قدیمی)؛ این کار روی آن اثر ندارد."
+
+
 class ClientListView(APIView):
     def get(self, request):
         p = request.query_params
@@ -88,6 +91,7 @@ class ClientListView(APIView):
                 tickets=p.get("tickets") == "1",
                 blocked=p.get("blocked") == "1",
                 direction=p.get("dir", ""),
+                legacy=p.get("legacy", ""),
             )
         )
 
@@ -134,6 +138,7 @@ class ClientDetailView(APIView):
             "plan": c.account.plan if c.account_id else "free",
             "online": c.online,
             "blocked": c.blocked,
+            "legacy": c.legacy,
             "revoked_at": c.revoked_at.isoformat() if c.revoked_at else None,
             "last_seen": c.last_seen.isoformat() if c.last_seen else None,
             "first_seen": c.first_seen.isoformat(),
@@ -156,6 +161,8 @@ class ClientDetailView(APIView):
 class ClientBlockView(APIView):
     def post(self, request, rd_id):
         c = get_object_or_404(Client, rd_id=rd_id)
+        if c.legacy:
+            return Response({"detail": LEGACY_NOTE}, status=status.HTTP_400_BAD_REQUEST)
         blocked = bool(request.data.get("blocked", True))
         # مسدودسازی: heartbeat بعدی دستگاه «blocked: true» می‌گیرد و اپلیکیشن اطلاعات سرور را از روی
         # دستگاه برمی‌دارد. رفع مسدودی: دستگاه در بررسی بعدی «blocked: false» می‌گیرد و اطلاعات برمی‌گردد.
@@ -176,6 +183,8 @@ class ClientLogoutView(APIView):
 
     def post(self, request, rd_id):
         c = get_object_or_404(Client, rd_id=rd_id)
+        if c.legacy:
+            return Response({"detail": LEGACY_NOTE}, status=status.HTTP_400_BAD_REQUEST)
         AccessToken.objects.filter(client=c).delete()
         c.account = None
         c.save(update_fields=["account"])

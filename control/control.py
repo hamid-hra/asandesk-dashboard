@@ -51,7 +51,7 @@ SERVICE_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 SINCE_RE = re.compile(r"^\d{1,4}[smh]$")
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 STAMP_RE = re.compile(r"^(\d{4}-\d\d-\d\dT[\d:.]+Z) ?(.*)$")
-SERVICE_ORDER = ["backend", "frontend", "nginx", "db", "scheduler", "agent", "control"]
+SERVICE_ORDER = ["backend", "frontend", "nginx", "db", "scheduler", "control"]
 
 TOKEN = ""
 STATE = {"check": None, "check_error": ""}

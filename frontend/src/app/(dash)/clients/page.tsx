@@ -55,8 +55,16 @@ function ClientsInner() {
   const guest = st?.logged_share == null ? null : 100 - st.logged_share;
 
   const kpis = [
-    { label: "کل کلاینت‌ها", value: st ? fmt(st.total) : "—", sub: st ? `+${toFa(st.new_7d)} در ۷ روز اخیر` : "" },
-    { label: "آنلاین هم‌اکنون", value: st ? fmt(st.online) : "—", sub: st ? `از ${fmt(st.active_30d)} کلاینت فعال ۳۰ روز` : "" },
+    {
+      label: "کل کلاینت‌ها",
+      value: st ? fmt(st.total) : "—",
+      sub: st ? `${st.legacy ? `${toFa(st.legacy)} قدیمی · ` : ""}+${toFa(st.new_7d)} در ۷ روز اخیر` : "",
+    },
+    {
+      label: "آنلاین هم‌اکنون",
+      value: st ? fmt(st.online) : "—",
+      sub: st ? `از ${fmt(st.active_30d)} کلاینت فعال ۳۰ روز${st.legacy ? ` · ${toFa(st.legacy)} قدیمی نامشخص` : ""}` : "",
+    },
     { label: "وارد حساب شده", value: st?.logged_share == null ? "—" : pctText(st.logged_share), sub: guest == null ? "بدون داده" : `${pctText(guest)} مهمان بدون ورود` },
     {
       label: "میانگین اتصال روزانه",

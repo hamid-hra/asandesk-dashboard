@@ -17,11 +17,13 @@ import s from "./clients.module.css";
 const CONN_TYPE: Record<number, string> = { 0: "ریموت", 1: "انتقال فایل", 2: "انتقال پورت", 3: "دوربین", 4: "ترمینال" };
 
 function Badges({ c }: { c: ClientDetail }) {
-  const items: [string, string, string][] = [
-    c.online ? ["آنلاین", "var(--accent-soft)", "var(--accent-strong)"] : [`آفلاین · ${agoText(c.last_seen)}`, "var(--seg-track)", "var(--muted)"],
-    c.logged ? ["وارد حساب شده", "var(--accent-soft)", "var(--accent-strong)"] : ["مهمان · بدون ورود", "var(--warn-soft)", "var(--warn-text)"],
-    c.plan === "pro" ? ["حرفه‌ای", "var(--beta-soft)", "var(--beta-text)"] : ["رایگان", "var(--seg-track)", "var(--muted)"],
-  ];
+  const items: [string, string, string][] = c.legacy
+    ? [["قدیمی · وضعیت نامشخص", "var(--seg-track)", "var(--muted)"]]
+    : [
+        c.online ? ["آنلاین", "var(--accent-soft)", "var(--accent-strong)"] : [`آفلاین · ${agoText(c.last_seen)}`, "var(--seg-track)", "var(--muted)"],
+        c.logged ? ["وارد حساب شده", "var(--accent-soft)", "var(--accent-strong)"] : ["مهمان · بدون ورود", "var(--warn-soft)", "var(--warn-text)"],
+        c.plan === "pro" ? ["حرفه‌ای", "var(--beta-soft)", "var(--beta-text)"] : ["رایگان", "var(--seg-track)", "var(--muted)"],
+      ];
   if (c.version_old) items.push(["نسخه قدیمی", "var(--warn-soft)", "var(--warn-text)"]);
   if (c.version.includes("-")) items.push(["تست‌کننده بتا", "var(--info-soft)", "var(--info-text)"]);
   if (c.blocked) items.push(["مسدود", "var(--danger-soft)", "var(--danger-strong)"]);
@@ -88,7 +90,12 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
   }
 
   const openT = c.tickets.filter((t) => t.status !== "closed").length;
-  const info: [string, string][] = [
+  const info: [string, string][] = c.legacy
+    ? [
+        ["IP", c.ip || "—"],
+        ["اولین ثبت‌نام در سرور", dfDay.format(new Date(c.first_seen))],
+      ]
+    : [
     ["سیستم‌عامل", c.os || "—"],
     ["نسخه برنامه", c.version || "—"],
     ["IP", c.ip || "—"],
@@ -116,6 +123,14 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
         </button>
       </div>
       <Badges c={c} />
+      {c.legacy && (
+        <div className={s.legacyNote}>
+          <b>دستگاه با نسخهٔ قدیمی برنامه</b>
+          <span>
+            این دستگاه به پنل گزارش نمی‌دهد و فقط شناسه، آخرین IP ثبت‌شده و تاریخ اولین ثبت‌نام آن از دیتابیس سرور شناسه (hbbs) خوانده شده است. وضعیت آنلاین، نشست‌ها و مشخصات سیستم نامشخص است. با نصب نسخهٔ جدید، همین ردیف خودکار کامل می‌شود.
+          </span>
+        </div>
+      )}
       {c.blocked && (
         <div className={s.blockedNote}>
           <b>این دستگاه مسدود است</b>
@@ -126,6 +141,7 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
           </span>
         </div>
       )}
+      {!c.legacy && <>
       <div className={s.miniStats}>
         <div className={s.miniStat}>
           <span>مدت اتصال</span>
@@ -157,6 +173,8 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
         <Daily daily={c.daily} />
       </div>
 
+      </>}
+
       <div className={s.section} style={{ padding: "6px 20px 12px", gap: 0 }}>
         {info.map(([k, v]) => (
           <div key={k} className={s.info}>
@@ -166,6 +184,7 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
         ))}
       </div>
 
+      {!c.legacy && <>
       <div className={s.section}>
         <div className={s.sectionHead}>
           <span>آخرین نشست‌ها</span>
@@ -207,7 +226,9 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
         {!c.tickets.length && <div style={{ fontSize: 12.5, color: "var(--faint)", padding: "4px 0" }}>این کاربر بازخوردی نفرستاده است.</div>}
       </div>
 
-      {user.can_manage && (
+      </>}
+
+      {user.can_manage && !c.legacy && (
         <div className={s.actions}>
           {confirmBlock ? (
             <div className={s.confirmBlock}>

@@ -16,6 +16,11 @@ function Row({ c, selected, onSelect }: { c: ClientRow; selected: boolean; onSel
         <div className={s.whoText}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span className={s.name}>{c.display}</span>
+            {c.legacy && (
+              <span className={s.tag} title="فقط از سرور شناسه (hbbs) شناخته شده و به API گزارش نمی‌دهد" style={{ background: "var(--seg-track)", color: "var(--muted)" }}>
+                قدیمی
+              </span>
+            )}
             {c.blocked && (
               <span className={s.tag} style={{ background: "var(--danger-soft)", color: "var(--danger-strong)" }}>
                 مسدود
@@ -29,17 +34,19 @@ function Row({ c, selected, onSelect }: { c: ClientRow; selected: boolean; onSel
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
         <span className="dot" style={{ background: c.online ? "var(--ok)" : "var(--off)" }} />
-        <span style={{ color: c.online ? "var(--accent-strong)" : "var(--muted)" }}>{c.online ? "آنلاین" : agoText(c.last_seen)}</span>
+        <span style={{ color: c.online ? "var(--accent-strong)" : "var(--muted)" }} title={c.legacy ? "وضعیت آنلاین دستگاه‌های قدیمی از سرور قابل خواندن نیست" : undefined}>
+          {c.legacy ? "نامشخص" : c.online ? "آنلاین" : agoText(c.last_seen)}
+        </span>
       </div>
       <span
         className={s.pill}
-        style={c.logged ? { background: "var(--accent-soft)", color: "var(--accent-strong)" } : { background: "var(--warn-soft)", color: "var(--warn-text)" }}
+        style={c.legacy ? { background: "var(--seg-track)", color: "var(--muted)" } : c.logged ? { background: "var(--accent-soft)", color: "var(--accent-strong)" } : { background: "var(--warn-soft)", color: "var(--warn-text)" }}
       >
-        {c.logged ? "وارد شده" : "مهمان"}
+        {c.legacy ? "—" : c.logged ? "وارد شده" : "مهمان"}
       </span>
       <div className={s.stack}>
         <span>{c.mins_30d ? minutesText(c.mins_30d) : "—"}</span>
-        <span>{toFa(c.sessions_30d)} نشست</span>
+        <span>{c.legacy ? "—" : `${toFa(c.sessions_30d)} نشست`}</span>
       </div>
       <div className={s.stack}>
         <span>{c.platform || "—"}</span>
@@ -100,8 +107,19 @@ function Header({ sort, onSort, filters: f, onFilters, facets }: HeaderProps) {
 
   return (
     <div className={`${s.tr} ${s.th}`}>
-      <ColumnHead label="کلاینت" sort={dirOf("name")} filtered={f.blocked || f.newOnly}>
+      <ColumnHead label="کلاینت" sort={dirOf("name")} filtered={f.blocked || f.newOnly || !!f.legacy}>
         <SortChoices keys={["name"]} sort={sort} onSort={onSort} />
+        <MenuSection title="نوع دستگاه">
+          <Choice on={!f.legacy} onClick={() => set({ legacy: "" })}>
+            همه
+          </Choice>
+          <Choice on={f.legacy === "only"} onClick={() => set({ legacy: "only" })}>
+            قدیمی (بدون API)
+          </Choice>
+          <Choice on={f.legacy === "exclude"} onClick={() => set({ legacy: "exclude" })}>
+            فقط دارای API
+          </Choice>
+        </MenuSection>
         <MenuSection title="نمایش">
           <Choice kind="check" on={f.blocked} onClick={() => set({ blocked: !f.blocked })}>
             فقط مسدودها

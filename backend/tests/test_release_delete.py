@@ -14,7 +14,6 @@ def roots(tmp_path, settings):
     settings.RELEASES_ROOT = tmp_path
     settings.MEDIA_ROOT = tmp_path
     settings.SECRETS_DIR = tmp_path / "secrets"
-    settings.AGENT_TOKEN_FILE = tmp_path / "agent" / "token"
     return tmp_path
 
 

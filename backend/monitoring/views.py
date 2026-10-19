@@ -8,11 +8,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from clients.legacy import import_peers
 from clients.views import open_ticket_count
 
 from . import alerts, stats
 from .models import Alert, AlertLevel, MetricSample, Server, hash_token
-from .serializers import AlertSerializer, IngestSerializer
+from .serializers import AlertSerializer, IngestSerializer, PeersSerializer
 
 HW_FIELDS = ("hostname", "cores", "ram_total", "disk_total", "net_capacity_bps", "agent_version", "pubkey_fp")
 _last_prune = 0.0
@@ -28,14 +29,18 @@ def prune_old_samples():
     MetricSample.objects.filter(ts__lt=cutoff).delete()
 
 
+def server_from_token(request) -> Server | None:
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:].strip() if auth.startswith("Bearer ") else ""
+    return Server.objects.filter(token_hash=hash_token(token)).first() if token else None
+
+
 class IngestView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
-        auth = request.headers.get("Authorization", "")
-        token = auth[7:].strip() if auth.startswith("Bearer ") else ""
-        server = Server.objects.filter(token_hash=hash_token(token)).first() if token else None
+        server = server_from_token(request)
         if server is None:
             return Response({"detail": "invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -60,6 +65,9 @@ class IngestView(APIView):
         if d.get("ip") and not server.ip:
             server.ip = d["ip"]
             update.append("ip")
+        if "services" in d:
+            server.services, server.services_at = d["services"], now
+            update += ["services", "services_at"]
         server.save(update_fields=update)
 
         sample = MetricSample.objects.create(
@@ -74,8 +82,25 @@ class IngestView(APIView):
             alerts.record_event(server, "connected", AlertLevel.INFO, "سرور جدید متصل شد",
                                 f"{server.name} · اولین گزارش agent دریافت شد")
         alerts.evaluate_sample(server, sample)
+        if "services" in d:
+            alerts.evaluate_services(server, d["services"])
         prune_old_samples()
         return Response({"ok": True}, status=status.HTTP_201_CREATED)
+
+
+class PeersIngestView(APIView):
+    """ردیف‌های جدول peer دیتابیس hbbs از agent (دستگاه‌های قدیمی که به API گزارش نمی‌دهند)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if server_from_token(request) is None:
+            return Response({"detail": "invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+        ser = PeersSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        peers = {p["id"]: p for p in ser.validated_data["peers"]}
+        return Response(import_peers(list(peers.values())))
 
 
 class OverviewView(APIView):

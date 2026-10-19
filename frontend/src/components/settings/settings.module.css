@@ -235,6 +235,10 @@
 .port { font-family: "JetBrains Mono", monospace; font-size: 11.5px; padding: 3px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
 .port[data-ok="false"] { background: var(--danger-soft); color: var(--danger-text); }
 .port[data-ok="null"] { background: var(--subtle); color: var(--muted); }
+.svcs { display: flex; flex-direction: column; gap: 6px; }
+.svc { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.svc b { color: var(--text); font-size: 12.5px; }
+.svc[data-up="false"] { color: var(--danger-text); }
 .lat { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12.5px; color: var(--muted); }
 .lat b { color: var(--text); font-size: 15px; }
 .keyOk { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--accent); }

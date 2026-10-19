@@ -89,6 +89,10 @@ def device(data: dict, request, create: bool) -> tuple[Client | None, bool]:
     elif not client.check_uuid(uuid):
         log.warning("client %s: uuid mismatch from %s", rd_id, client_ip(request))
         return None, False
+    if client.legacy:
+        # دستگاهی که قبلاً فقط از دیتابیس hbbs می‌شناختیم حالا خودش به API گزارش داد
+        client.legacy = False
+        client.save(update_fields=["legacy"])
     return client, False
 
 

@@ -27,6 +27,9 @@ class Server(models.Model):
     agent_version = models.CharField(max_length=32, blank=True, editable=False)
     # sha256 کلید عمومی سرور شناسه (اگر agent گزارش دهد)؛ برای سنجش یکسان بودن کلید سرورهای HA
     pubkey_fp = models.CharField(max_length=64, blank=True, editable=False)
+    # آخرین وضعیت سرویس‌هایی که agent پایش می‌کند (مثلاً hbbs/hbbr): {name: {up, uptime_s, cpu, ram}}
+    services = models.JSONField(default=dict, blank=True, editable=False)
+    services_at = models.DateTimeField(null=True, blank=True, editable=False)
     first_seen = models.DateTimeField(null=True, blank=True, editable=False)
     last_seen = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)

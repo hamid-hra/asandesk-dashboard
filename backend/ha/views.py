@@ -42,6 +42,8 @@ def server_row(s: HAServer) -> dict:
         "last_check": s.last_check.isoformat() if s.last_check else None,
         "history": history(s),
         "agent_online": bool(s.monitor and s.monitor.online),
+        # وضعیت سرویس‌های hbbs/hbbr که agent گزارش می‌دهد (فقط وقتی agent زنده است)
+        "services": s.monitor.services if s.monitor and s.monitor.online and s.monitor.services else None,
     }
 
 
@@ -67,13 +69,13 @@ def bad(field, msg):
 def install_command(request, token: str) -> str:
     url = request.build_absolute_uri("/api/agent/ingest")
     return (
-        "git clone https://github.com/hamid-hra/asandesk-dashboard.git && "
-        "docker build -t asandesk-agent asandesk-dashboard/agent && "
+        "git clone https://github.com/hamid-hra/Asan-desk-agent.git && "
+        "docker build -t asandesk-agent Asan-desk-agent && "
         "docker run -d --name asandesk-agent --restart unless-stopped --pid host "
         f"-e AGENT_URL={url} -e AGENT_TOKEN={token} "
-        "-e AGENT_DISK_PATH=/hostfs -e AGENT_SYS=/hostsys -e AGENT_KEY_FILE=/keys/id_ed25519.pub "
+        "-e AGENT_DISK_PATH=/hostfs -e AGENT_SYS=/hostsys -e AGENT_HBBS_DIR=/hbbs "
         "-v /:/hostfs:ro -v /sys:/hostsys:ro "
-        "-v /path/to/hbbs-data/id_ed25519.pub:/keys/id_ed25519.pub:ro asandesk-agent"
+        "-v /path/to/hbbs-data:/hbbs:ro asandesk-agent"
     )
 
 
@@ -260,7 +262,7 @@ class ServerCheckView(APIView):
             {"id": "key", "label": "تطابق کلید عمومی", "critical": ks == "bad", "ok": True if ks == "ok" else (False if ks == "bad" else None),
              "detail": {"ok": "یکسان با سرور اصلی", "bad": "با سرور اصلی یکی نیست", "unknown": "نامشخص (agent کلید را گزارش نکرده)"}[ks],
              "help": "فایل‌های id_ed25519 و id_ed25519.pub سرور اصلی را روی این سرور کپی کنید و hbbs را دوباره راه‌اندازی کنید." if ks == "bad" else
-                     ("برای سنجش خودکار، agent را با گزینهٔ AGENT_KEY_FILE اجرا کنید (دستور مرحلهٔ قبل)." if ks == "unknown" else "")},
+                     ("برای سنجش خودکار، agent را با mount پوشهٔ داده‌ی hbbs (AGENT_HBBS_DIR) اجرا کنید (دستور مرحلهٔ قبل)." if ks == "unknown" else "")},
             {"id": "agent", "label": "ارتباط agent", "critical": False, "ok": online,
              "detail": f"متصل · v{s.monitor.agent_version}" if online and s.monitor.agent_version else ("متصل" if online else "گزارشی نرسیده"),
              "help": "" if online else "دستور نصب مرحلهٔ قبل را روی سرور اجرا کنید. بدون agent هم می‌توان سرور را اضافه کرد، اما آمار منابع و سنجش کلید نمایش داده نمی‌شود."},

@@ -15,7 +15,7 @@ import { Empty, ErrorState, errText, I, Skeleton, Switch } from "./ui";
 const TAILS = [100, 300, 1000, 2000];
 const SINCES: [string, string][] = [["", "از ابتدا"], ["10m", "۱۰ دقیقهٔ اخیر"], ["1h", "۱ ساعت اخیر"]];
 const SERVICE_LABEL: Record<string, string> = {
-  backend: "backend (Django)", frontend: "frontend (Next.js)", nginx: "nginx", db: "دیتابیس", scheduler: "زمان‌بند", agent: "agent", control: "control", "update-job": "کار به‌روزرسانی",
+  backend: "backend (Django)", frontend: "frontend (Next.js)", nginx: "nginx", db: "دیتابیس", scheduler: "زمان‌بند", control: "control", "update-job": "کار به‌روزرسانی",
 };
 const ERROR_RE = /\b(error|exception|traceback|fatal|critical|panic|failed)\b|\s5\d\d\s/i;
 const WARN_RE = /\b(warn|warning|deprecated|timeout|retry)\b|\s4\d\d\s/i;
@@ -30,7 +30,7 @@ function clock(ts: string): string {
 const ALL = "all";
 /** رنگ ثابت برچسب هر سرویس در نمای «همه» */
 const SERVICE_COLOR: Record<string, string> = {
-  backend: "#5fd6a9", frontend: "#7aa7ff", nginx: "#e6c06e", db: "#c99bff", scheduler: "#ff9f7a", agent: "#6fd3e8", control: "#f08a99",
+  backend: "#5fd6a9", frontend: "#7aa7ff", nginx: "#e6c06e", db: "#c99bff", scheduler: "#ff9f7a", control: "#f08a99",
 };
 const colorOf = (svc: string) => SERVICE_COLOR[svc] ?? "#9fb4ad";
 

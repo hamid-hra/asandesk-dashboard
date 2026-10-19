@@ -46,8 +46,8 @@ class AccountAdmin(admin.ModelAdmin):
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ("rd_id", "hostname", "os", "version", "account", "blocked", "last_seen")
-    list_filter = ("blocked",)
+    list_display = ("rd_id", "hostname", "os", "version", "account", "blocked", "legacy", "last_seen")
+    list_filter = ("blocked", "legacy")
     search_fields = ("rd_id", "hostname", "ip", "account__email")
     readonly_fields = ("hostname", "os_user", "os", "cpu", "memory", "version", "ip", "first_seen", "last_seen")
     actions = ["reset_device_key"]

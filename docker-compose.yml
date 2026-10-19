@@ -63,7 +63,6 @@ services:
       - releases:/data/releases
       - static:/data/static
       - secrets:/data/secrets
-      - agent-token:/data/agent
       - backups:/data/backups
       # توکن سرویس control (فقط خواندنی): با آن به‌روزرسانی پنل و لاگ داکر فراخوانی می‌شود
       - control-token:/data/control:ro
@@ -132,31 +131,6 @@ services:
       - backend
       - frontend
 
-  # منابع همین سرور (میزبان داکر) را به داشبورد گزارش می‌دهد
-  agent:
-    build:
-      context: ./agent
-      # شبکه میزبان فقط هنگام بیلد، تا پروکسی روی 127.0.0.1 سرور در دسترس باشد
-      network: host
-      args: *build-proxy
-    restart: unless-stopped
-    pid: host
-    environment:
-      AGENT_URL: http://backend:8000/api/agent/ingest
-      AGENT_TOKEN_FILE: /run/agent/token
-      AGENT_DISK_PATH: /hostfs
-      AGENT_SYS: /hostsys
-      AGENT_PORTS: ${AGENT_PORTS:-}
-      AGENT_NET_CAPACITY_MBPS: ${AGENT_NET_CAPACITY_MBPS:-}
-      AGENT_IP: ${AGENT_IP:-}
-    volumes:
-      - agent-token:/run/agent:ro
-      - /:/hostfs:ro
-      - /sys:/hostsys:ro
-    depends_on:
-      backend:
-        condition: service_healthy
-
   # تنها بخشی که با داکر حرف می‌زند: لاگ کانتینرها و «به‌روزرسانی پنل» از داخل تنظیمات.
   # روی هیچ پورتی منتشر نمی‌شود؛ فقط backend، با توکنی که در volume مشترک است، می‌تواند صدایش کند.
   # دسترسی به docker.sock یعنی دسترسی root به میزبان، برای همین کدش کوچک و جداست (control/control.py).
@@ -188,6 +162,5 @@ volumes:
   releases:
   static:
   secrets:
-  agent-token:
   backups:
   control-token:

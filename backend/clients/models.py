@@ -90,6 +90,9 @@ class Client(models.Model):
     first_seen = models.DateTimeField("اولین تماس", default=timezone.now)
     last_seen = models.DateTimeField("آخرین تماس", null=True, blank=True)
     sysinfo_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # دستگاهی که فقط از دیتابیس سرور شناسه (hbbs) شناخته شده و هنوز به API گزارش نداده است (نسخهٔ قدیمی برنامه).
+    # با اولین heartbeat/sysinfo درست (uuid یکسان) به کلاینت عادی تبدیل می‌شود.
+    legacy = models.BooleanField("قدیمی (بدون API)", default=False)
 
     class Meta:
         ordering = ["-last_seen"]

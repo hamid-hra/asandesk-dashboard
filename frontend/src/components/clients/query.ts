@@ -26,6 +26,8 @@ export interface ClientFilters {
   /** فقط کلاینت‌های دارای بازخورد جدید */
   tickets: boolean;
   blocked: boolean;
+  /** «only» = فقط قدیمی‌ها (دستگاه‌هایی که فقط از سرور شناسه شناخته شده‌اند)، «exclude» = فقط دستگاه‌هایی که به API گزارش می‌دهند */
+  legacy: "" | "only" | "exclude";
   /** «p:Windows» = همهٔ ویندوزها، «o:Windows 11 Pro» = دقیقاً همین سیستم‌عامل */
   os: string;
   version: string;
@@ -34,10 +36,11 @@ export interface ClientFilters {
   newOnly: boolean;
 }
 
-export const NO_FILTERS: ClientFilters = { status: "", account: "", tickets: false, blocked: false, os: "", version: "", seen: "", old: false, newOnly: false };
+export const NO_FILTERS: ClientFilters = { status: "", account: "", tickets: false, blocked: false, legacy: "", os: "", version: "", seen: "", old: false, newOnly: false };
 
 export const STATUS_LABEL = { online: "آنلاین", offline: "آفلاین" } as const;
 export const ACCOUNT_LABEL = { logged: "وارد شده", guest: "مهمان" } as const;
+export const LEGACY_LABEL = { only: "قدیمی (بدون API)", exclude: "فقط دارای API" } as const;
 
 export const SEEN: [string, string][] = [
   ["", "هر زمان"],
@@ -54,6 +57,7 @@ export function queryParams(sort: SortState, f: ClientFilters, q: string, page: 
   if (f.account) p.set("account", f.account);
   if (f.tickets) p.set("tickets", "1");
   if (f.blocked) p.set("blocked", "1");
+  if (f.legacy) p.set("legacy", f.legacy);
   if (f.os.startsWith("p:")) p.set("platform", f.os.slice(2));
   else if (f.os.startsWith("o:")) p.set("os", f.os.slice(2));
   if (f.version) p.set("version", f.version);
@@ -65,7 +69,7 @@ export function queryParams(sort: SortState, f: ClientFilters, q: string, page: 
 
 /** شمار فیلترهای روشن (ترتیب جزو آن نیست) */
 export const activeCount = (f: ClientFilters) =>
-  [f.status, f.account, f.os, f.version, f.seen].filter(Boolean).length + [f.tickets, f.blocked, f.old, f.newOnly].filter(Boolean).length;
+  [f.status, f.account, f.legacy, f.os, f.version, f.seen].filter(Boolean).length + [f.tickets, f.blocked, f.old, f.newOnly].filter(Boolean).length;
 
 export interface Chip {
   key: string;
@@ -84,6 +88,7 @@ export function chips(f: ClientFilters): Chip[] {
   if (f.version) out.push({ key: "version", label: `نسخه: ${f.version}`, clear: { version: "" } });
   if (f.old) out.push({ key: "old", label: "فقط نسخهٔ قدیمی", clear: { old: false } });
   if (f.newOnly) out.push({ key: "new", label: "نصب تازه · ۷ روز", clear: { newOnly: false } });
+  if (f.legacy) out.push({ key: "legacy", label: `نوع: ${LEGACY_LABEL[f.legacy]}`, clear: { legacy: "" } });
   if (f.tickets) out.push({ key: "tickets", label: "دارای بازخورد جدید", clear: { tickets: false } });
   if (f.blocked) out.push({ key: "blocked", label: "مسدود", clear: { blocked: false } });
   return out;
