@@ -34,8 +34,8 @@ function Row({ c, selected, onSelect }: { c: ClientRow; selected: boolean; onSel
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
         <span className="dot" style={{ background: c.online ? "var(--ok)" : "var(--off)" }} />
-        <span style={{ color: c.online ? "var(--accent-strong)" : "var(--muted)" }} title={c.legacy ? "وضعیت آنلاین دستگاه‌های قدیمی از سرور قابل خواندن نیست" : undefined}>
-          {c.legacy ? "نامشخص" : c.online ? "آنلاین" : agoText(c.last_seen)}
+        <span style={{ color: c.online ? "var(--accent-strong)" : "var(--muted)" }} title={c.status_known ? undefined : "وضعیت آنلاین دستگاه‌های قدیمی بدون حالت شنودِ ایجنت معلوم نیست"}>
+          {!c.status_known ? "نامشخص" : c.online ? "آنلاین" : c.last_seen ? agoText(c.last_seen) : c.legacy ? "آفلاین" : agoText(c.last_seen)}
         </span>
       </div>
       <span

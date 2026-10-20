@@ -88,6 +88,12 @@ class PeerSerializer(serializers.Serializer):
         return clean_ip(value)
 
 
+class OnlineSerializer(serializers.Serializer):
+    """شناسه‌های دستگاه‌هایی که agent در چند ثانیهٔ اخیر ثبت‌نام‌شان را در hbbs دیده است."""
+
+    ids = serializers.ListField(child=serializers.RegexField(r"^[A-Za-z0-9_-]{4,32}$"), allow_empty=True, max_length=MAX_PEERS * 5)
+
+
 class PeersSerializer(serializers.Serializer):
     peers = PeerSerializer(many=True, allow_empty=True)
 

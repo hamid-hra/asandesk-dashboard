@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import Role, User
+from ha.models import HAServer
 from monitoring import stats
 from monitoring.models import Alert, MetricSample, Server
 from releases.models import Release, version_key
@@ -32,6 +33,8 @@ def server():
     s = Server(name="srv-1", region="تهران")
     s.set_token("tok")
     s.save()
+    # فقط سرورهایی که در بخش «سرورهای HA» ثبت شده‌اند در آمار و هشدارها می‌آیند
+    HAServer.objects.create(name="srv-1", address="10.0.0.1", monitor=s)
     return s
 
 
@@ -195,7 +198,7 @@ def test_overview_buckets(server):
     MetricSample.objects.create(server=server, ts=now - timedelta(minutes=2), cpu=60, ram=50, disk=60,
                                 tcp_established=20)
     MetricSample.objects.create(server=server, ts=now - timedelta(days=3), cpu=5, ram=5, disk=5)
-    Server.objects.filter(pk=server.pk).update(last_seen=now)
+    Server.objects.filter(pk=server.pk).update(last_seen=now, first_seen=now)
     c = client_for(Role.VIEWER)
     d = c.get("/api/monitoring/overview?range=24h").json()
     assert len(d["points"]) == 25
@@ -358,3 +361,54 @@ def test_ingest_without_services_keeps_the_last_known_status(server):
 def test_ingest_rejects_bad_service_names(server):
     assert ingest({"services": {"Bad Name!": SVC_UP}}).status_code == 400
     assert ingest({"services": {f"s{i}": SVC_UP for i in range(9)}}).status_code == 400
+
+
+# ---------- فقط سرورهای HA در «سرور و منابع» ----------
+
+def ha_server(name, token, ip):
+    s = Server(name=name, ip=ip, first_seen=timezone.now())
+    s.set_token(token)
+    s.save()
+    HAServer.objects.create(name=name, address=ip, monitor=s)
+    return s
+
+
+@pytest.mark.django_db
+def test_servers_outside_ha_are_not_shown_or_alerted():
+    """agent قدیمیِ داخل compose پنل (سرور بدون ردیف HA) نباید منابع سرور داشبورد را نشان بدهد یا هشدار بسازد."""
+    stray = Server(name="dashboard-local", first_seen=timezone.now(), last_seen=timezone.now() - timedelta(hours=1))
+    stray.set_token("stray")
+    stray.save()
+    assert ingest(token="stray").status_code == 201
+    Server.objects.filter(pk=stray.pk).update(last_seen=timezone.now() - timedelta(hours=1))
+
+    c = client_for(Role.VIEWER)
+    d = c.get("/api/monitoring/overview?range=24h").json()
+    assert d["servers"] == [] and all(p["cpu"] is None for p in d["points"])
+    live = c.get("/api/monitoring/live").json()
+    assert live["total"] == 0 and live["aggregate"] is None
+    st = c.get("/api/monitoring/status").json()
+    assert st["total"] == 0 and st["open_crit"] == 0 and st["unacked"] == 0
+    assert c.get("/api/monitoring/alerts").json() == []  # حتی هشدار «سرور گزارش نمی‌دهد» دیده نمی‌شود
+
+
+@pytest.mark.django_db
+def test_overview_and_live_can_be_limited_to_one_server():
+    a = ha_server("srv-a", "ta", "10.0.0.1")
+    b = ha_server("srv-b", "tb", "10.0.0.2")
+    assert ingest({"cpu": 10, "ram": 20, "ram_total": 1000, "ram_used": 200, "cores": 2}, token="ta").status_code == 201
+    assert ingest({"cpu": 70, "ram": 80, "ram_total": 3000, "ram_used": 2400, "cores": 4}, token="tb").status_code == 201
+    c = client_for(Role.VIEWER)
+
+    both = c.get("/api/monitoring/overview?range=24h").json()
+    assert [s["name"] for s in both["servers"]] == ["srv-a", "srv-b"] and both["server"] is None
+    assert both["points"][-1]["cpu"] == 40  # میانگین دو سرور
+    only_b = c.get(f"/api/monitoring/overview?range=24h&server={b.pk}").json()
+    assert only_b["server"] == b.pk and only_b["points"][-1]["cpu"] == 70
+    assert len(only_b["servers"]) == 2  # جدول همیشه همهٔ سرورها را دارد تا بشود بینشان جابه‌جا شد
+
+    live_all = c.get("/api/monitoring/live").json()
+    assert live_all["total"] == 2 and live_all["aggregate"]["cores"] == 6
+    live_a = c.get(f"/api/monitoring/live?server={a.pk}").json()
+    assert live_a["total"] == 1 and live_a["aggregate"]["cpu"] == 10 and live_a["aggregate"]["cores"] == 2
+    assert c.get("/api/monitoring/live?server=abc").json()["total"] == 2  # مقدار نامعتبر = همه

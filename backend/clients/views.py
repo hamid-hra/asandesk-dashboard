@@ -139,6 +139,7 @@ class ClientDetailView(APIView):
             "online": c.online,
             "blocked": c.blocked,
             "legacy": c.legacy,
+            "status_known": stats.legacy_status_known() or not c.legacy,
             "revoked_at": c.revoked_at.isoformat() if c.revoked_at else None,
             "last_seen": c.last_seen.isoformat() if c.last_seen else None,
             "first_seen": c.first_seen.isoformat(),

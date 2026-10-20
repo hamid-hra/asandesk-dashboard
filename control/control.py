@@ -6,7 +6,9 @@ trusted with, because Docker access is root on the host:
 
   * read the logs of this compose project's containers,
   * check GitHub for a newer panel version,
-  * run `git pull` + `docker compose up -d --build` for this project.
+  * run `git pull` + `docker compose up -d --build` for this project,
+  * the same for an Asan-desk-agent installed with docker compose on this server (found by its
+    `asandesk.agent` label), so the agent can be updated from the panel too.
 
 So they live here. This service is not published on any port; only the backend reaches it over the
 compose network, and it must send the token that this service creates in a shared volume.
@@ -39,7 +41,10 @@ from urllib.parse import parse_qs, urlparse
 TOKEN_FILE = Path(os.environ.get("CONTROL_TOKEN_FILE", "/run/control/token"))
 PORT = int(os.environ.get("CONTROL_PORT", "8100"))
 JOB_NAME = "asandesk-update-job"
+AGENT_JOB_NAME = "asandesk-agent-update-job"
+AGENT_LABEL = "asandesk.agent=true"
 VERSION_FILE = "backend/config/version.py"
+AGENT_VERSION_FILE = "agent.py"
 FIRST_CHECK_AFTER = 90  # seconds after start
 CHECK_EVERY = 6 * 3600
 FETCH_TIMEOUT = 45  # nginx cuts a panel request at 60 s
@@ -48,6 +53,7 @@ MAX_LOG_CHARS = 600_000
 PROXY = (os.environ.get("GIT_PROXY") or os.environ.get("BUILD_PROXY") or "").strip()
 
 SERVICE_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
+WORKDIR_RE = re.compile(r"^/[\w./@+-]{1,300}$")  # keeps ":" (extra docker -v options) and spaces out of a path taken from a container label
 SINCE_RE = re.compile(r"^\d{1,4}[smh]$")
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 STAMP_RE = re.compile(r"^(\d{4}-\d\d-\d\dT[\d:.]+Z) ?(.*)$")
@@ -55,6 +61,8 @@ SERVICE_ORDER = ["backend", "frontend", "nginx", "db", "scheduler", "control"]
 
 TOKEN = ""
 STATE = {"check": None, "check_error": ""}
+AGENT_STATE: dict[str, dict] = {}  # compose project of an agent → its last check
+AGENT_OWNERS: dict[str, str] = {}  # project folder → "uid:gid"
 CHECK_LOCK = threading.Lock()
 JOB_LOCK = threading.Lock()
 _info = {"at": 0.0, "value": None}
@@ -100,14 +108,18 @@ def self_info() -> dict:
         value = {"owner": None}
     value.update(project=project, workdir=workdir, image=data["Config"]["Image"])
     if not value.get("owner"):
-        # the user id and group id that own the project folder: git runs as them, so .git never gets root-owned files
-        r = docker("run", "--rm", "-v", f"{workdir}:{workdir}:ro", "-w", workdir, value["image"], "sh", "-c", "stat -c %u:%g .git 2>/dev/null || stat -c %u:%g .")
-        owner = r.stdout.strip().split("\n")[-1] if r.returncode == 0 else ""
-        if not re.fullmatch(r"\d+:\d+", owner):
-            raise ApiError("پوشهٔ پروژه از داخل کانتینر خوانده نشد: " + clean(r.stderr)[:200])
-        value["owner"] = owner
+        value["owner"] = folder_owner(workdir, value["image"])
     _info.update(at=time.monotonic(), value=value)
     return value
+
+
+def folder_owner(workdir: str, image: str) -> str:
+    """The user id and group id that own a project folder: git runs as them, so .git never gets root-owned files."""
+    r = docker("run", "--rm", "-v", f"{workdir}:{workdir}:ro", "-w", workdir, image, "sh", "-c", "stat -c %u:%g .git 2>/dev/null || stat -c %u:%g .")
+    owner = r.stdout.strip().split("\n")[-1] if r.returncode == 0 else ""
+    if not re.fullmatch(r"\d+:\d+", owner):
+        raise ApiError("پوشهٔ پروژه از داخل کانتینر خوانده نشد: " + clean(r.stderr)[:200])
+    return owner
 
 
 # ---------------------------------------------------------------- git (in helper containers)
@@ -125,9 +137,9 @@ def git_prefix() -> str:
     return shlex.join(args)
 
 
-def git_script(script: str, timeout: float = 60) -> subprocess.CompletedProcess:
+def git_script(script: str, timeout: float = 60, info: dict | None = None) -> subprocess.CompletedProcess:
     """Run a shell script in a helper container: host network, owner of the project, project at its real path."""
-    info = self_info()
+    info = info or self_info()
     host = info["workdir"]
     return docker(
         "run", "--rm", "--network", "host", "--user", info["owner"], "-v", f"{host}:{host}", "-w", host,
@@ -169,7 +181,7 @@ def parse_changelog(source: str) -> list[dict]:
     return []
 
 
-def check_script() -> str:
+def check_script(version_file: str = VERSION_FILE) -> str:
     g = git_prefix()
     return f"""
 BR=$({g} rev-parse --abbrev-ref HEAD 2>&1)
@@ -179,12 +191,12 @@ echo @@head; {g} rev-parse HEAD 2>&1
 echo @@counts; {g} rev-list --left-right --count "HEAD...origin/$BR" 2>&1
 echo @@dirty; {g} status --porcelain --untracked-files=no 2>&1 | head -20
 echo @@commits; {g} log -n 30 --format='%H%x1f%an%x1f%aI%x1f%s' "HEAD..origin/$BR" 2>&1
-echo @@diskver; {g} show HEAD:{VERSION_FILE} 2>&1
-echo @@remotever; {g} show "origin/$BR:{VERSION_FILE}" 2>&1
+echo @@diskver; {g} show HEAD:{version_file} 2>&1
+echo @@remotever; {g} show "origin/$BR:{version_file}" 2>&1
 """
 
 
-def build_check(sections: dict[str, str]) -> dict:
+def build_check(sections: dict[str, str], agent: bool = False) -> dict:
     branch = sections.get("branch", "").strip()
     if not branch or branch == "HEAD" or " " in branch:
         raise ApiError("پوشهٔ پروژه روی یک commit ثابت است (detached HEAD)؛ روی یک شاخه مثل main باشید.")
@@ -205,8 +217,7 @@ def build_check(sections: dict[str, str]) -> dict:
         parts = line.split("\x1f")
         if len(parts) == 4:
             commits.append({"sha": parts[0], "author": parts[1], "date": parts[2], "subject": parts[3]})
-    disk = parse_changelog(sections.get("diskver", ""))
-    return {
+    base = {
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "branch": branch,
         "head": sections.get("head", "").strip(),
@@ -214,9 +225,19 @@ def build_check(sections: dict[str, str]) -> dict:
         "behind": behind,
         "dirty": bool(sections.get("dirty", "").strip()),
         "commits": commits,
-        "disk_version": disk[0]["version"] if disk else "",
-        "remote_changelog": parse_changelog(sections.get("remotever", "")),
     }
+    if agent:
+        return {**base, "disk_version": parse_agent_version(sections.get("diskver", "")), "remote_version": parse_agent_version(sections.get("remotever", ""))}
+    disk = parse_changelog(sections.get("diskver", ""))
+    return {**base, "disk_version": disk[0]["version"] if disk else "", "remote_changelog": parse_changelog(sections.get("remotever", ""))}
+
+
+AGENT_VERSION_RE = re.compile(r'^VERSION\s*=\s*"([\w.+-]{1,32})"', re.M)
+
+
+def parse_agent_version(source: str) -> str:
+    m = AGENT_VERSION_RE.search(source or "")
+    return m.group(1) if m else ""
 
 
 def run_check() -> None:
@@ -247,8 +268,8 @@ def job_script(branch: str, info: dict) -> str:
     ])
 
 
-def job_state(with_log: bool = True) -> dict:
-    r = docker("inspect", JOB_NAME, "--format", "{{json .State}}")
+def job_state(with_log: bool = True, name: str = JOB_NAME) -> dict:
+    r = docker("inspect", name, "--format", "{{json .State}}")
     if r.returncode != 0:
         return {"state": "none"}
     st = json.loads(r.stdout)
@@ -260,7 +281,7 @@ def job_state(with_log: bool = True) -> dict:
         "finished_at": None if running else st.get("FinishedAt"),
     }
     if with_log:
-        logs = docker("logs", "--tail", "800", JOB_NAME)
+        logs = docker("logs", "--tail", "800", name)
         out["log"] = clean(logs.stdout + logs.stderr)[-60_000:]
     return out
 
@@ -287,6 +308,79 @@ def start_job() -> None:
         # the last check described the code from before this update; the panel checks again when it is done
         STATE["check"] = None
         STATE["check_error"] = ""
+
+
+# ---------------------------------------------------------------- agents (Asan-desk-agent installed with docker compose)
+
+def agent_projects() -> list[dict]:
+    """Agents on this server: containers labelled asandesk.agent=true that docker compose started.
+
+    An agent started with a plain `docker run` has no project folder to `git pull` in, so it is not found;
+    reinstall it with the compose file of the Asan-desk-agent repository once.
+    """
+    r = docker("ps", "-a", "--filter", f"label={AGENT_LABEL}", "--format",
+               '{{.Names}}|{{.State}}|{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.project.working_dir"}}')
+    if r.returncode != 0:
+        raise ApiError("فهرست کانتینرها خوانده نشد: " + clean(r.stderr)[:200])
+    own = self_info()["project"]
+    out: dict[str, dict] = {}
+    for line in r.stdout.splitlines():
+        name, _, rest = line.partition("|")
+        state, _, rest = rest.partition("|")
+        project, _, workdir = rest.partition("|")
+        if project and SERVICE_RE.match(project) and WORKDIR_RE.match(workdir) and project != own and project not in out:
+            out[project] = {"name": name, "state": state, "project": project, "workdir": workdir}
+    return sorted(out.values(), key=lambda a: a["project"])
+
+
+def agent_info(agent: dict) -> dict:
+    image = self_info()["image"]
+    if agent["workdir"] not in AGENT_OWNERS:
+        AGENT_OWNERS[agent["workdir"]] = folder_owner(agent["workdir"], image)
+    return {"project": agent["project"], "workdir": agent["workdir"], "image": image, "owner": AGENT_OWNERS[agent["workdir"]]}
+
+
+def run_agent_checks() -> None:
+    """Fetch each agent's repository and compare with its origin; failures are kept per agent."""
+    for a in agent_projects():
+        try:
+            r = git_script(check_script(AGENT_VERSION_FILE), timeout=FETCH_TIMEOUT + 25, info=agent_info(a))
+            AGENT_STATE[a["project"]] = {"check": build_check(parse_sections(r.stdout), agent=True), "error": ""}
+        except ApiError as e:
+            AGENT_STATE[a["project"]] = {"check": None, "error": e.message}
+
+
+def agents_body() -> dict:
+    out = []
+    for a in agent_projects():
+        known = AGENT_STATE.get(a["project"]) or {"check": None, "error": ""}
+        out.append({**a, **known})
+    return {"agents": out, "job": job_state(name=AGENT_JOB_NAME)}
+
+
+def start_agent_job(project: str) -> None:
+    with JOB_LOCK:
+        if job_state(with_log=False, name=AGENT_JOB_NAME)["state"] == "running":
+            raise ApiError("یک به‌روزرسانی ایجنت هم‌اکنون در جریان است.", 409)
+        agent = next((a for a in agent_projects() if a["project"] == project), None)
+        if not agent:
+            raise ApiError("چنین ایجنتی روی این سرور پیدا نشد.", 404)
+        info = agent_info(agent)
+        r = git_script(f"{git_prefix()} rev-parse --abbrev-ref HEAD", timeout=30, info=info)
+        branch = r.stdout.strip().splitlines()[-1] if r.returncode == 0 and r.stdout.strip() else ""
+        if not branch or branch == "HEAD" or not re.fullmatch(r"[\w./-]+", branch):
+            raise ApiError("شاخهٔ پروژهٔ ایجنت مشخص نشد (detached HEAD؟).")
+        docker("rm", "-f", AGENT_JOB_NAME)
+        host = info["workdir"]
+        r = docker(
+            "run", "-d", "--name", AGENT_JOB_NAME, "--network", "host", "--label", "asandesk.control=agent-update-job",
+            "-v", "/var/run/docker.sock:/var/run/docker.sock", "-v", f"{host}:{host}", "-w", host,
+            "-e", "BUILDKIT_PROGRESS=plain", "-e", "COMPOSE_ANSI=never",
+            info["image"], "sh", "-c", job_script(branch, info),
+        )
+        if r.returncode != 0:
+            raise ApiError("شروع به‌روزرسانی ایجنت ممکن نشد: " + clean(r.stderr)[:300])
+        AGENT_STATE.pop(project, None)  # the next check describes the new code
 
 
 # ---------------------------------------------------------------- logs
@@ -400,6 +494,14 @@ class Handler(BaseHTTPRequestHandler):
             if (method, url.path) == ("POST", "/update/start"):
                 start_job()
                 return self.send_json(202, status_body())
+            if (method, url.path) == ("GET", "/agents"):
+                return self.send_json(200, agents_body())
+            if (method, url.path) == ("POST", "/agents/check"):
+                run_agent_checks()
+                return self.send_json(200, agents_body())
+            if (method, url.path) == ("POST", "/agents/update"):
+                start_agent_job(query.get("project", ""))
+                return self.send_json(202, agents_body())
             if (method, url.path) == ("GET", "/services"):
                 return self.send_json(200, {"services": services()})
             if (method, url.path) == ("GET", "/logs"):
@@ -419,10 +521,11 @@ class Handler(BaseHTTPRequestHandler):
 def auto_check() -> None:
     time.sleep(FIRST_CHECK_AFTER)
     while True:
-        try:
-            run_check()
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        for check in (run_check, run_agent_checks):
+            try:
+                check()
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
         time.sleep(CHECK_EVERY)
 
 

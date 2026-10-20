@@ -174,3 +174,59 @@ def test_logs_refuse_odd_parameters(fake, qs):
     c, _ = as_user(Role.OWNER)
     assert c.get(f"/api/settings/system/logs?{qs}").status_code == 400
     assert fake.calls == []
+
+
+# ---------- ایجنت روی همین سرور ----------
+
+def agent_status(**over):
+    agent = {
+        "name": "asandesk-agent", "state": "running", "project": "asandesk-agent", "workdir": "/srv/Asan-desk-agent",
+        "check": {"checked_at": "2026-10-20T10:00:00+00:00", "branch": "main", "behind": 3, "ahead": 0, "dirty": False,
+                  "commits": [], "disk_version": "2.0.0", "remote_version": "2.1.0"},
+        "error": "",
+    }
+    return {"agents": [{**agent, **over}], "job": None}
+
+
+@pytest.mark.django_db
+def test_agent_update_status_check_and_start(monkeypatch):
+    seen = []
+
+    def call(method, path, **kw):
+        seen.append((method, path, kw))
+        return agent_status()
+
+    monkeypatch.setattr(control, "call", call)
+    c, _ = as_user(Role.OWNER, username="boss")
+    r = c.get("/api/settings/system/update/agents").json()
+    assert r["agents"][0]["available"] is True and r["agents"][0]["disk_version"] == "2.0.0" and r["agents"][0]["remote_version"] == "2.1.0"
+    assert c.post("/api/settings/system/update/agents/check").status_code == 200
+    r = c.post("/api/settings/system/update/agents/start", {"project": "asandesk-agent"}, format="json")
+    assert r.status_code == 202 and ("POST", "/agents/update", {"params": {"project": "asandesk-agent"}}) in seen
+    assert ActivityLog.objects.filter(action="system.agent_update").exists()
+    assert c.post("/api/settings/system/update/agents/start", {"project": "bad project!"}, format="json").status_code == 400
+
+
+@pytest.mark.django_db
+def test_agent_up_to_date_and_errors_are_reported(monkeypatch):
+    monkeypatch.setattr(control, "call", lambda *a, **k: agent_status(check={"checked_at": "2026-10-20T10:00:00+00:00", "branch": "main", "behind": 0, "disk_version": "2.1.0", "remote_version": "2.1.0"}))
+    c, _ = as_user(Role.OWNER, username="boss")
+    assert c.get("/api/settings/system/update/agents").json()["agents"][0]["available"] is False
+    monkeypatch.setattr(control, "call", lambda *a, **k: agent_status(check=None, error="گرفتن تغییرات از GitHub نشد"))
+    a = c.get("/api/settings/system/update/agents").json()["agents"][0]
+    assert a["available"] is False and "GitHub" in a["error"]
+
+
+@pytest.mark.django_db
+def test_agent_update_is_owner_only_and_survives_a_missing_control(monkeypatch):
+    admin, _ = as_user(Role.ADMIN, username="adm")
+    assert admin.get("/api/settings/system/update/agents").status_code == 403
+    assert admin.post("/api/settings/system/update/agents/start", {"project": "x"}, format="json").status_code == 403
+
+    def down(*a, **k):
+        raise ControlError("control بالا نیست", offline=True)
+
+    monkeypatch.setattr(control, "call", down)
+    owner, _ = as_user(Role.OWNER, username="boss")
+    r = owner.get("/api/settings/system/update/agents").json()
+    assert r["control"]["online"] is False and r["agents"] == []

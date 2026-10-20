@@ -9,7 +9,7 @@ const TICKS = 54;
 const CX = 150;
 
 /** گیج با خط‌های ریز دور یک کمان: خط‌های روشن تا مقدار، و یک خط بلند سفید روی خود مقدار. */
-export function TickGauge({ value, label, sub }: { value: number | null; label: string; sub?: string }) {
+export function TickGauge({ value, label, sub }: { value: number | null; label: string; sub?: React.ReactNode }) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
   const lit = Math.round((TICKS - 1) * (v / 100));
   const needle = START + SWEEP * (v / 100);

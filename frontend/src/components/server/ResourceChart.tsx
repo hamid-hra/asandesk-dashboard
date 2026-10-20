@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { InfoTip } from "@/components/Tip";
 import { idxFrom, segments, smooth, tipBox } from "@/lib/chart";
 import { toFa } from "@/lib/fa";
 import type { Point, RangeId } from "@/lib/types";
@@ -12,7 +13,7 @@ import { METRICS, type MetricId, tipLabel, xLabels } from "./util";
 const RH = 240;
 const ry = (v: number) => RH - (v / 100) * (RH - 10);
 
-export function ResourceChart({ points, range }: { points: Point[]; range: RangeId }) {
+export function ResourceChart({ points, range, scope }: { points: Point[]; range: RangeId; scope: string }) {
   const [selected, setSelected] = useState<MetricId[]>(["cpu", "ram", "net"]);
   const [hover, setHover] = useState<number | null>(null);
   const n = points.length;
@@ -31,8 +32,11 @@ export function ResourceChart({ points, range }: { points: Point[]; range: Range
     <div className={`card ${s.chartCard}`}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>تاریخچه مصرف منابع</div>
-          <div style={{ fontSize: 12.5, color: "var(--muted)", whiteSpace: "nowrap" }}>میانگین همه سرورها · درصد از ظرفیت</div>
+          <div style={{ fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+            تاریخچه مصرف منابع
+            <InfoTip text="میانگین سرورهای انتخاب‌شده، به درصد از ظرفیت. با دکمه‌های بالای صفحه همهٔ سرورها یا فقط یکی را ببینید." />
+          </div>
+          {scope && <div style={{ fontSize: 12.5, color: "var(--muted)", whiteSpace: "nowrap" }}>{scope}</div>}
         </div>
         <div style={{ flex: 1 }} />
         <div className={s.chips}>

@@ -9,11 +9,16 @@ export function LiveCard({
   cpuAvg,
   auto,
   onToggleAuto,
+  scope,
+  single,
 }: {
   live: Live | undefined;
   cpuAvg: number | null;
   auto: boolean;
   onToggleAuto: () => void;
+  /** نام سرور یا «همهٔ سرورها»؛ معلوم می‌کند این اعداد مال کدام سرور است */
+  scope: string;
+  single: boolean;
 }) {
   const a = live?.aggregate;
   const clamp = (v: number) => Math.max(0, Math.min(100, v));
@@ -39,7 +44,10 @@ export function LiveCard({
   return (
     <div className={`card ${s.live}`}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 10 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, flex: 1 }}>منابع لحظه‌ای</div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>منابع لحظه‌ای</span>
+          {scope && <span style={{ fontSize: 12, color: "var(--muted)" }}>{scope}</span>}
+        </div>
         <button className={s.pill} aria-pressed={auto} onClick={onToggleAuto} title="به‌روزرسانی خودکار">
           <span />
           {auto ? "زنده" : "متوقف"}
@@ -48,7 +56,7 @@ export function LiveCard({
       {!a && (
         <div className="empty" style={{ padding: "48px 8px" }}>
           {live && live.total === 0
-            ? "هنوز هیچ سروری ثبت نشده است."
+            ? "هنوز سروری با agent فعال در بخش «سرورهای HA» نیست؛ سرور را آنجا اضافه و agent را رویش نصب کنید."
             : live
               ? "agent در حال حاضر گزارشی ارسال نمی‌کند."
               : "در حال دریافت…"}
@@ -69,17 +77,19 @@ export function LiveCard({
         </div>
       ))}
       {a && (
-        <div className={s.mini}>
+        <div className={s.mini} style={single ? { gridTemplateColumns: "1fr" } : undefined}>
           <div>
             <span>تأخیر میانگین</span>
             <span>{a.latency_ms == null ? "—" : `${toFa(Math.round(a.latency_ms))} ms`}</span>
           </div>
-          <div>
-            <span>سرورهای فعال</span>
-            <span>
-              {toFa(live!.online)} از {toFa(live!.total)}
-            </span>
-          </div>
+          {!single && (
+            <div>
+              <span>سرورهای فعال</span>
+              <span>
+                {toFa(live!.online)} از {toFa(live!.total)}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

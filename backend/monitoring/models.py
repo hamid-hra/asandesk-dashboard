@@ -30,6 +30,8 @@ class Server(models.Model):
     # آخرین وضعیت سرویس‌هایی که agent پایش می‌کند (مثلاً hbbs/hbbr): {name: {up, uptime_s, cpu, ram}}
     services = models.JSONField(default=dict, blank=True, editable=False)
     services_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # آخرین باری که agent فهرست دستگاه‌های آنلاینِ hbbs را فرستاد (حالت شنود اختیاری)؛ تا تازه است وضعیت دستگاه‌های قدیمی معلوم است
+    peers_online_at = models.DateTimeField(null=True, blank=True, editable=False)
     first_seen = models.DateTimeField(null=True, blank=True, editable=False)
     last_seen = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -53,6 +55,15 @@ class Server(models.Model):
             return False
         age = (timezone.now() - self.last_seen).total_seconds()
         return age <= settings.SERVER_OFFLINE_AFTER_SECONDS
+
+
+def monitored_servers():
+    """سرورهایی که در بخش «سرورهای HA» ثبت شده‌اند و agent‌شان دست‌کم یک‌بار گزارش داده است.
+
+    فقط همین‌ها در «سرور و منابع»، آمار، هشدارها و سایدبار می‌آیند؛ سروری که فقط در /admin ساخته شده یا
+    agent قدیمیِ داخل compose پنل را نشان نمی‌دهیم (منابع سرور داشبورد جزو سرورهای کاربر نیست).
+    """
+    return Server.objects.filter(ha__isnull=False, ha__draft=False, first_seen__isnull=False)
 
 
 class MetricSample(models.Model):

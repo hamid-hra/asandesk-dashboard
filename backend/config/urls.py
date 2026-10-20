@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
 
-from monitoring.views import IngestView, PeersIngestView
+from monitoring.views import IngestView, OnlineIngestView, PeersIngestView
 from releases.views import ReleaseListView
 
 from .search import SearchView
@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/monitoring/", include("monitoring.urls")),
     path("api/agent/ingest", IngestView.as_view()),
     path("api/agent/peers", PeersIngestView.as_view()),
+    path("api/agent/online", OnlineIngestView.as_view()),
     path("api/releases", ReleaseListView.as_view()),
     path("api/releases/", include("releases.urls")),
     path("api/", include("notices.urls")),

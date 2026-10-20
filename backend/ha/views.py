@@ -67,15 +67,14 @@ def bad(field, msg):
 
 
 def install_command(request, token: str) -> str:
+    """نصب agent با docker compose؛ همین کار «به‌روزرسانی ایجنت» از داخل پنل را هم ممکن می‌کند (برچسب asandesk.agent)."""
     url = request.build_absolute_uri("/api/agent/ingest")
     return (
-        "git clone https://github.com/hamid-hra/Asan-desk-agent.git && "
-        "docker build -t asandesk-agent Asan-desk-agent && "
-        "docker run -d --name asandesk-agent --restart unless-stopped --pid host "
-        f"-e AGENT_URL={url} -e AGENT_TOKEN={token} "
-        "-e AGENT_DISK_PATH=/hostfs -e AGENT_SYS=/hostsys -e AGENT_HBBS_DIR=/hbbs "
-        "-v /:/hostfs:ro -v /sys:/hostsys:ro "
-        "-v /path/to/hbbs-data:/hbbs:ro asandesk-agent"
+        "git clone https://github.com/hamid-hra/Asan-desk-agent.git && cd Asan-desk-agent && "
+        f"printf 'AGENT_URL=%s\\nAGENT_TOKEN=%s\\nHBBS_DATA=%s\\n' '{url}' '{token}' '/path/to/hbbs-data' > .env && "
+        # ایجنتِ قدیمیِ docker run (اگر هست) همان نام را دارد؛ فقط بعد از موفق بودن clone پاک می‌شود
+        "(docker rm -f asandesk-agent 2>/dev/null || true) && "
+        "docker compose up -d --build"
     )
 
 

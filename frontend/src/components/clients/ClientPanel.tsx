@@ -18,7 +18,14 @@ const CONN_TYPE: Record<number, string> = { 0: "ریموت", 1: "انتقال ف
 
 function Badges({ c }: { c: ClientDetail }) {
   const items: [string, string, string][] = c.legacy
-    ? [["قدیمی · وضعیت نامشخص", "var(--seg-track)", "var(--muted)"]]
+    ? [
+        ["قدیمی (بدون API)", "var(--seg-track)", "var(--muted)"],
+        !c.status_known
+          ? ["وضعیت نامشخص", "var(--seg-track)", "var(--muted)"]
+          : c.online
+            ? ["آنلاین", "var(--accent-soft)", "var(--accent-strong)"]
+            : [c.last_seen ? `آفلاین · ${agoText(c.last_seen)}` : "آفلاین", "var(--seg-track)", "var(--muted)"],
+      ]
     : [
         c.online ? ["آنلاین", "var(--accent-soft)", "var(--accent-strong)"] : [`آفلاین · ${agoText(c.last_seen)}`, "var(--seg-track)", "var(--muted)"],
         c.logged ? ["وارد حساب شده", "var(--accent-soft)", "var(--accent-strong)"] : ["مهمان · بدون ورود", "var(--warn-soft)", "var(--warn-text)"],
@@ -127,7 +134,9 @@ export function ClientPanel({ id, onClose, onChanged }: { id: string; onClose: (
         <div className={s.legacyNote}>
           <b>دستگاه با نسخهٔ قدیمی برنامه</b>
           <span>
-            این دستگاه به پنل گزارش نمی‌دهد و فقط شناسه، آخرین IP ثبت‌شده و تاریخ اولین ثبت‌نام آن از دیتابیس سرور شناسه (hbbs) خوانده شده است. وضعیت آنلاین، نشست‌ها و مشخصات سیستم نامشخص است. با نصب نسخهٔ جدید، همین ردیف خودکار کامل می‌شود.
+            این دستگاه به پنل گزارش نمی‌دهد و فقط شناسه، آخرین IP ثبت‌شده و تاریخ اولین ثبت‌نام آن از دیتابیس سرور شناسه (hbbs) خوانده شده است.{" "}
+            {c.status_known ? "آنلاین بودنش از ثبت‌نام‌هایی می‌آید که ایجنت در hbbs می‌بیند. " : "وضعیت آنلاین آن بدون حالت شنودِ ایجنت معلوم نیست. "}
+            نشست‌ها و سیستم‌عامل و نسخه‌اش را فقط خود برنامه می‌تواند بدهد؛ با نصب نسخهٔ جدید، همین ردیف خودکار کامل می‌شود.
           </span>
         </div>
       )}

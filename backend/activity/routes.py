@@ -74,6 +74,8 @@ ROUTES: dict[tuple[str, str], tuple[str, Label] | None] = {
     # تنظیمات ← به‌روزرسانی پنل: خود ویوها خط دقیق‌تری می‌نویسند (ops/views.py)
     ("ops.UpdateCheckView", "POST"): None,
     ("ops.UpdateStartView", "POST"): None,
+    ("ops.AgentsCheckView", "POST"): None,
+    ("ops.AgentsStartView", "POST"): None,
 }
 
 # درخواست‌های ثبت‌نشده با این عمل و یک خط عمومی نوشته می‌شوند

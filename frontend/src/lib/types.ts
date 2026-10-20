@@ -105,11 +105,14 @@ export interface RequestCounts {
 }
 
 export interface Overview {
+  /** شناسهٔ سروری که نمودارها فقط برای آن است؛ null = همهٔ سرورهای پایش‌شده */
+  server: number | null;
   range: RangeId;
   step_seconds: number;
   points: Point[];
   servers: ServerRow[];
-  breakdown: { platform: [string, number][]; region: [string, number][] } | null;
+  /** دستگاه‌های آنلاین الان به تفکیک پلتفرم؛ [نام، تعداد] */
+  breakdown: { platform: [string, number][]; total: number; legacy: number; legacy_known: boolean } | null;
   sessions_total: number | null;
   fail_rate: number | null;
   requests: { today: RequestCounts; range: RequestCounts };
@@ -200,9 +203,11 @@ export interface ReleaseStats {
   installs_30d: number;
   users_on_current: number | null;
   /** «versions» فقط در ردیف «سایر نسخه‌ها»: چند نسخه در آن جمع شده */
-  distribution: { version: string; share: number; count: number; versions?: number }[] | null;
-  /** شمار کلاینت‌های فعال ۳۰ روز اخیر (مخرج سهم‌ها) */
+  distribution: { version: string; share: number; count: number; versions?: number; legacy?: boolean }[] | null;
+  /** مخرج سهم‌ها: کلاینت‌های فعال ۳۰ روز اخیر + دستگاه‌های قدیمی (فقط-hbbs) */
   active_devices: number;
+  /** از active_devices چند تا قدیمی‌اند */
+  legacy_devices: number;
 }
 
 export type Plan = "free" | "pro";
@@ -228,6 +233,8 @@ export interface ClientRow {
   blocked: boolean;
   /** فقط از دیتابیس hbbs شناخته شده و به API گزارش نمی‌دهد (نسخهٔ قدیمی) */
   legacy: boolean;
+  /** آنلاین/آفلاین بودنش معلوم است؟ دستگاه قدیمی فقط وقتی ایجنت حالت شنود دارد */
+  status_known: boolean;
 }
 
 export interface ClientList {
@@ -243,6 +250,9 @@ export interface ClientList {
 export interface ClientStats {
   total: number;
   legacy: number;
+  /** وضعیت آنلاین دستگاه‌های قدیمی معلوم است (ایجنت با حالت شنود تازه گزارش می‌دهد)؟ */
+  legacy_status_known: boolean;
+  online_legacy: number;
   new_7d: number;
   online: number;
   active_30d: number;
@@ -267,6 +277,7 @@ export interface ClientDetail {
   online: boolean;
   blocked: boolean;
   legacy: boolean;
+  status_known: boolean;
   /** اولین باری که دستگاهِ مسدود گزارش داد اطلاعات سرور را از روی خودش برداشته است؛ null = هنوز گزارش نداده */
   revoked_at: string | null;
   last_seen: string | null;
@@ -378,12 +389,30 @@ export interface ChartDay {
   new: number;
   total: number;
   platforms: Record<string, number>;
+  /** مجموع نصب‌ها تا پایان همین روز، به تفکیک پلتفرم */
+  platform_totals: Record<string, number>;
 }
 
 /** پاسخ /api/clients/charts */
 export interface ClientCharts {
   latest: string | null;
-  totals: { installs: number; active_30d: number; online: number; new_30d: number; logged: number; on_latest: number; on_latest_share: number | null };
+  totals: {
+    installs: number;
+    active_30d: number;
+    online: number;
+    new_30d: number;
+    logged: number;
+    /** دستگاه‌های قدیمی که فقط از سرور شناسه شناخته شده‌اند (در «installs» هم هستند) */
+    legacy: number;
+    /** فعال ۳۰ روز روی آخرین نسخه */
+    on_latest: number;
+    /** همهٔ دستگاه‌ها (حتی غیرفعال) روی آخرین نسخه */
+    on_latest_all: number;
+    /** سهم از همهٔ دستگاه‌ها، قدیمی‌ها هم در مخرج */
+    on_latest_share: number | null;
+    /** سهم فقط از فعال‌های ۳۰ روز */
+    on_latest_share_active: number | null;
+  };
   platforms: ChartPlatform[];
   versions: ChartVersion[];
   daily: ChartDay[];

@@ -318,6 +318,26 @@ export interface UpdateInfo {
   check: UpdateCheck | null;
   check_error: string;
 }
+/** یک ایجنتِ نصب‌شده با docker compose روی همین سرور (Asan-desk-agent) */
+export interface AgentUpdate {
+  project: string;
+  container: string;
+  state: string;
+  checked_at: string | null;
+  branch: string | null;
+  behind: number;
+  dirty: boolean;
+  disk_version: string | null;
+  remote_version: string | null;
+  commits: { sha: string; author: string; date: string; subject: string }[];
+  available: boolean;
+  error: string;
+}
+export interface AgentsInfo {
+  control: { online: boolean; error?: string };
+  agents: AgentUpdate[];
+  job: UpdateJob | null;
+}
 export interface DockerService {
   service: string;
   container: string;

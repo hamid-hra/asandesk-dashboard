@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { KpiStrip } from "@/components/clients/KpiStrip";
 import { errText } from "@/components/settings/ui";
+import { InfoTip } from "@/components/Tip";
 import { PALETTE, platformColor } from "@/lib/chart";
 import { fmt, pctText, toFa } from "@/lib/fa";
 import type { ChartPlatform, ClientCharts } from "@/lib/types";
@@ -32,8 +33,11 @@ function ChartCard({ title, sub, actions, children, grow }: { title: string; sub
     <section className={`card ${s.chartCard}`} style={grow ? { flex: grow } : undefined}>
       <header className={s.cardHead}>
         <div>
-          <div className={s.cardTitle}>{title}</div>
-          {sub && <div className={s.cardSub}>{sub}</div>}
+          {/* توضیح نمودار فقط در tooltip کنار عنوان است، نه زیر آن */}
+          <div className={s.cardTitle} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {title}
+            {sub && <InfoTip text={sub} />}
+          </div>
         </div>
         {actions}
       </header>
@@ -99,11 +103,15 @@ export function ClientChartsView({ data, error, onRetry }: { data: ClientCharts 
   }
 
   const kpis = [
-    { label: "کل نصب‌ها", value: fmt(t.installs), sub: "دستگاه‌هایی که تا حالا گزارش داده‌اند" },
+    {
+      label: "کل نصب‌ها",
+      value: fmt(t.installs),
+      sub: t.legacy ? `${fmt(t.legacy)} قدیمی (فقط از سرور شناسه) · ${fmt(t.installs - t.legacy)} گزارش‌دهنده` : "دستگاه‌هایی که تا حالا گزارش داده‌اند",
+    },
     { label: "فعال ۳۰ روز", value: fmt(t.active_30d), sub: `${pctText((t.active_30d / t.installs) * 100)} از کل نصب‌ها` },
     { label: "آنلاین هم‌اکنون", value: fmt(t.online), sub: "در یک دقیقهٔ اخیر گزارش داده‌اند" },
     { label: "نصب جدید · ۳۰ روز", value: fmt(t.new_30d), sub: "اولین گزارش‌شان در یک ماه اخیر بوده" },
-    { label: "آخرین نسخهٔ پایدار", value: data.latest ?? "—", sub: data.latest ? `${fmt(t.on_latest)} کلاینت فعال روی آن` : "هنوز نسخه‌ای منتشر نشده" },
+    { label: "آخرین نسخهٔ پایدار", value: data.latest ?? "—", sub: data.latest ? `${fmt(t.on_latest_all)} دستگاه روی آن، ${fmt(t.on_latest)} تای آن‌ها فعال` : "هنوز نسخه‌ای منتشر نشده" },
   ];
 
   const platformNames = data.platforms.map((p) => p.platform);
@@ -112,14 +120,30 @@ export function ClientChartsView({ data, error, onRetry }: { data: ClientCharts 
       <KpiStrip items={kpis} />
 
       <div className={s.row}>
-        <ChartCard title="روند نصب" sub="۹۰ روز اخیر، به وقت پنل" grow="2 1 560px">
+        <ChartCard title="روند نصب" sub="۹۰ روز اخیر، به وقت پنل. با دکمه‌های بالا، همه یا فقط یک پلتفرم را ببینید." grow="2 1 560px">
           <InstallsChart daily={data.daily} platforms={platformNames} />
         </ChartCard>
-        <ChartCard title="روی آخرین نسخه" sub="سهم کلاینت‌های فعال ۳۰ روز که به‌روز هستند" grow="1 1 300px">
+        <ChartCard
+          title="روی آخرین نسخه"
+          sub="سهم همهٔ دستگاه‌ها که روی آخرین نسخهٔ پایدار هستند. دستگاه‌های قدیمی که فقط از سرور شناسه شناخته شده‌اند هم در شمارش‌اند، چون نسخه‌شان قدیمی است. سهم فقط بین کلاینت‌های فعال ۳۰ روز در توضیح زیر عدد آمده است."
+          grow="1 1 300px"
+        >
           <TickGauge
             value={t.on_latest_share}
-            label="کلاینت‌های به‌روز"
-            sub={data.latest ? `${fmt(t.on_latest)} از ${fmt(t.active_30d)} کلاینت فعال روی ${data.latest} هستند` : "تا اولین نسخهٔ پایدار منتشر نشود، این شاخص خالی است"}
+            label="دستگاه‌های به‌روز"
+            sub={
+              data.latest ? (
+                <>
+                  <div>{`${fmt(t.on_latest_all)} از ${fmt(t.installs)} دستگاه روی ${data.latest} هستند`}</div>
+                  <div>
+                    {t.legacy ? `${fmt(t.legacy)} دستگاه قدیمی بدون گزارش · ` : ""}
+                    {t.on_latest_share_active == null ? "" : `بین فعال‌های ۳۰ روز ${pctText(t.on_latest_share_active, 1)} (${fmt(t.on_latest)} از ${fmt(t.active_30d)})`}
+                  </div>
+                </>
+              ) : (
+                "تا اولین نسخهٔ پایدار منتشر نشود، این شاخص خالی است"
+              )
+            }
           />
         </ChartCard>
       </div>

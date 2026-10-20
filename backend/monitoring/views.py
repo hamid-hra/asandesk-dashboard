@@ -8,12 +8,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from clients.legacy import import_peers
+from clients.legacy import import_peers, mark_online
 from clients.views import open_ticket_count
 
 from . import alerts, stats
 from .models import Alert, AlertLevel, MetricSample, Server, hash_token
-from .serializers import AlertSerializer, IngestSerializer, PeersSerializer
+from .serializers import AlertSerializer, IngestSerializer, OnlineSerializer, PeersSerializer
 
 HW_FIELDS = ("hostname", "cores", "ram_total", "disk_total", "net_capacity_bps", "agent_version", "pubkey_fp")
 _last_prune = 0.0
@@ -103,15 +103,40 @@ class PeersIngestView(APIView):
         return Response(import_peers(list(peers.values())))
 
 
+def server_param(request) -> int | None:
+    """?server=<شناسهٔ سرور پایش‌شده>؛ مقدار نامعتبر یعنی همه."""
+    try:
+        return int(request.query_params.get("server", "")) or None
+    except ValueError:
+        return None
+
+
+class OnlineIngestView(APIView):
+    """فهرست دستگاه‌های آنلاین در hbbs (agent با حالت شنود). فقط دستگاه‌های قدیمی را «همین الان دیده شد» می‌کند."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        server = server_from_token(request)
+        if server is None:
+            return Response({"detail": "invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+        ser = OnlineSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        server.peers_online_at = timezone.now()
+        server.save(update_fields=["peers_online_at"])
+        return Response({"online": mark_online(list(set(ser.validated_data["ids"])))})
+
+
 class OverviewView(APIView):
     def get(self, request):
         alerts.check_offline_servers()
-        return Response(stats.overview(request.query_params.get("range", "7d")))
+        return Response(stats.overview(request.query_params.get("range", "7d"), server_param(request)))
 
 
 class LiveView(APIView):
     def get(self, request):
-        return Response(stats.live_snapshot())
+        return Response(stats.live_snapshot(server_param(request)))
 
 
 class StatusView(APIView):
@@ -120,11 +145,12 @@ class StatusView(APIView):
     def get(self, request):
         alerts.check_offline_servers()
         live = stats.live_snapshot()
-        pending = Alert.objects.filter(acked_at__isnull=True)
+        shown = alerts.visible_alerts()
+        pending = shown.filter(acked_at__isnull=True)
         return Response({
             "online": live["online"],
             "total": live["total"],
-            "open_crit": Alert.objects.filter(resolved_at__isnull=True, level=AlertLevel.CRIT).count(),
+            "open_crit": shown.filter(resolved_at__isnull=True, level=AlertLevel.CRIT).count(),
             "unacked": pending.count(),
             "uptime_30d": stats.uptime_30d(),
             "open_tickets": open_ticket_count(),
@@ -134,7 +160,7 @@ class StatusView(APIView):
 class AlertListView(APIView):
     def get(self, request):
         alerts.check_offline_servers()
-        qs = Alert.objects.filter(acked_at__isnull=True).select_related("server")[:50]
+        qs = alerts.visible_alerts().filter(acked_at__isnull=True).select_related("server")[:50]
         return Response(AlertSerializer(qs, many=True).data)
 
 

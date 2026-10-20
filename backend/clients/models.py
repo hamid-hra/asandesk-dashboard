@@ -96,6 +96,12 @@ class Client(models.Model):
 
     class Meta:
         ordering = ["-last_seen"]
+        # فهرست کلاینت‌ها ده‌ها هزار ردیف (دستگاه‌های قدیمی) دارد و روی این ستون‌ها فیلتر و مرتب می‌شود
+        indexes = [
+            models.Index(fields=["last_seen"], name="client_last_seen_idx"),
+            models.Index(fields=["first_seen"], name="client_first_seen_idx"),
+            models.Index(fields=["legacy"], name="client_legacy_idx"),
+        ]
         verbose_name = "کلاینت"
         verbose_name_plural = "کلاینت‌ها"
 

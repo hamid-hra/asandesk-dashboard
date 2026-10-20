@@ -197,7 +197,9 @@ class ReleaseStatsView(APIView):
             # از نسخه‌ای که کلاینت‌های فعال ۳۰ روز اخیر در sysinfo گزارش داده‌اند
             "users_on_current": on_current,
             "distribution": distribution,
+            # مخرج سهم‌ها: کلاینت‌های فعال ۳۰ روز + دستگاه‌های قدیمیِ فقط-hbbs
             "active_devices": active,
+            "legacy_devices": Client.objects.filter(legacy=True).count(),
         })
 
 

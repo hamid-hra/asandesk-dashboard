@@ -63,23 +63,27 @@ export default function ReleasesPage() {
           <span className="card-title">توزیع نسخه‌ها بین کاربران</span>
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: 12.5, color: "var(--muted)", whiteSpace: "nowrap" }}>
-            {dist ? `از ${fmt(stats?.active_devices ?? 0)} دستگاه فعال در ۳۰ روز اخیر` : "بدون داده"}
+            {dist
+              ? `از ${fmt(stats?.active_devices ?? 0)} دستگاه${stats?.legacy_devices ? ` (${fmt(stats.legacy_devices)} قدیمی بدون API + بقیه فعال در ۳۰ روز اخیر)` : " فعال در ۳۰ روز اخیر"}`
+              : "بدون داده"}
           </span>
         </div>
         {/* بدون dir=ltr: اولین نسخه سمت راست است، همان جایی که اولین ردیف راهنما */}
         <div className={s.distBar}>
           {dist?.map((d, i) => (
-            <span key={d.version} title={`${d.version}: ${fmt(d.count)} دستگاه (${pctShare(d.share)})`} style={{ width: `${d.share}%`, background: DIST_COLORS[Math.min(i, 3)] }} />
+            <span key={d.version} title={`${d.version}: ${fmt(d.count)} دستگاه (${pctShare(d.share)})`} style={{ width: `${d.share}%`, background: d.legacy ? "var(--off)" : DIST_COLORS[Math.min(i, 3)] }} />
           ))}
         </div>
         {dist ? (
           <div className={s.distLegend}>
             {dist.map((d, i) => (
               <div key={d.version} className={s.distItem}>
-                <span className={s.distSwatch} style={{ background: DIST_COLORS[Math.min(i, 3)] }} />
+                <span className={s.distSwatch} style={{ background: d.legacy ? "var(--off)" : DIST_COLORS[Math.min(i, 3)] }} />
                 <span className={s.distName}>
                   {d.versions ? (
                     `${d.version} (${toFa(d.versions)} نسخه)`
+                  ) : d.legacy ? (
+                    d.version
                   ) : (
                     <bdi dir="ltr" className="mono">
                       {d.version}

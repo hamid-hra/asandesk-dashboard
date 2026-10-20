@@ -10,8 +10,9 @@ from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from clients.models import ConnSession
+from clients.stats import online_breakdown
 
-from .models import MetricSample, Server
+from .models import MetricSample, Server, monitored_servers
 
 
 @dataclass(frozen=True)
@@ -91,8 +92,8 @@ def request_series(rng: Range, start: datetime, end: datetime, now: datetime) ->
         return {b: (n, bad) for b, n, bad in cur.fetchall()}
 
 
-def bucket_series(rng: Range, now: datetime | None = None):
-    """سری زمانی bucket‌شده برای همه سرورها.
+def bucket_series(rng: Range, now: datetime | None = None, server_ids: list[int] | None = None):
+    """سری زمانی bucket‌شده برای سرورهای پایش‌شده (یا فقط `server_ids`).
 
     منابع (CPU/RAM/دیسک/شبکه) میانگین سرورها و کانکشن‌ها مجموع سرورهاست.
     bucket بدون داده مقدار None دارد تا نمودار در آن نقطه قطع شود.
@@ -105,11 +106,12 @@ def bucket_series(rng: Range, now: datetime | None = None):
         SELECT date_bin(%s, ts, %s) AS b, server_id,
                avg(cpu), avg(ram), avg(disk), avg(net_pct), avg(tcp_established), max(tcp_established)
         FROM {MetricSample._meta.db_table}
-        WHERE ts >= %s AND ts < %s
+        WHERE ts >= %s AND ts < %s AND server_id = ANY(%s)
         GROUP BY b, server_id
     """
+    ids = server_ids if server_ids is not None else list(monitored_servers().values_list("pk", flat=True))
     with connection.cursor() as cur:
-        cur.execute(sql, [rng.step, bin_origin(), start, end + rng.step])
+        cur.execute(sql, [rng.step, bin_origin(), start, end + rng.step, ids])
         rows = cur.fetchall()
 
     agg: dict[datetime, list] = {}
@@ -179,14 +181,15 @@ def servers_table():
     return out
 
 
-def reporting_servers():
-    """سرورهای HA که هنوز agent نصب نکرده‌اند (هیچ گزارشی نداده‌اند) در آمار منابع و قطعی حساب نمی‌شوند."""
-    return Server.objects.exclude(ha__isnull=False, first_seen__isnull=True)
+def reporting_servers(server_id: int | None = None):
+    """سرورهای پایش‌شده (HA با agent فعال)؛ با `server_id` فقط همان یکی. سرور بدون agent حساب نمی‌شود."""
+    qs = monitored_servers()
+    return qs.filter(pk=server_id) if server_id else qs
 
 
-def live_snapshot():
+def live_snapshot(server_id: int | None = None):
     latest = latest_samples()
-    servers = list(reporting_servers())
+    servers = list(reporting_servers(server_id))
     online = [srv for srv in servers if srv.online and srv.pk in latest]
     samples = [latest[srv.pk] for srv in online]
     agg = None
@@ -224,29 +227,32 @@ def uptime_30d() -> float | None:
     since = timezone.now() - timedelta(days=30)
     sql = f"""
         SELECT min(ts), count(DISTINCT (server_id, date_trunc('minute', ts)))
-        FROM {MetricSample._meta.db_table} WHERE ts >= %s
+        FROM {MetricSample._meta.db_table} WHERE ts >= %s AND server_id = ANY(%s)
     """
     with connection.cursor() as cur:
-        cur.execute(sql, [since])
+        cur.execute(sql, [since, list(monitored_servers().values_list("pk", flat=True))])
         first, minutes = cur.fetchone()
     if not first:
         return None
-    servers = Server.objects.filter(last_seen__isnull=False).count() or 1
+    servers = monitored_servers().count() or 1
     span = max(1, int((timezone.now() - first).total_seconds() // 60) + 1)
     return round(min(100.0, minutes / (span * servers) * 100), 2)
 
 
-def overview(range_id: str):
+def overview(range_id: str, server_id: int | None = None):
+    """`server_id`: فقط منابع همین سرور؛ بدون آن میانگین/مجموع همهٔ سرورهای پایش‌شده. جدول سرورها همیشه همه را دارد."""
     rng = RANGES.get(range_id) or RANGES["7d"]
+    chosen = [s.pk for s in reporting_servers(server_id)] if server_id else None
     now = timezone.now()
     in_range = request_counts(range_start(rng, now), now)
     return {
         "range": rng.id,
         "step_seconds": int(rng.step.total_seconds()),
-        "points": bucket_series(rng, now),
+        "server": server_id if server_id and chosen else None,
+        "points": bucket_series(rng, now, chosen),
         "servers": servers_table(),
-        # تفکیک پلتفرم/منطقه پس از اتصال سرور آسان‌دسک فعال می‌شود
-        "breakdown": None,
+        # دستگاه‌های آنلاین الان به تفکیک پلتفرم
+        "breakdown": online_breakdown(),
         # نشست‌های موفقی که کلاینت‌ها در بازه گزارش داده‌اند (audit/conn)
         "sessions_total": in_range["ok"],
         "fail_rate": in_range["fail_rate"],

@@ -13,6 +13,7 @@ import { useToast } from "@/lib/toast";
 
 import s from "./settings.module.css";
 import { ErrorState, errText, I, Modal, Skeleton } from "./ui";
+import { AgentUpdates } from "./AgentUpdates";
 import { UpdateBottle } from "./UpdateBottle";
 
 const KIND: Record<string, string> = { new: "جدید", change: "تغییر", fix: "رفع اشکال" };
@@ -271,6 +272,8 @@ export function UpdateTab() {
           </div>
         );
       })()}
+
+      <AgentUpdates />
 
       {confirm && (
         <Modal

@@ -268,10 +268,32 @@
   color: var(--muted);
 }
 
-.dotLegend > span {
+.dotLegend > span,
+.dotLegend > button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.dotLegend > button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.dotLegend > button:hover {
+  background: var(--subtle);
+}
+
+.dotLegend > button[aria-pressed="true"] {
+  border-color: var(--input-border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
 }
 
 .dotLegend i {

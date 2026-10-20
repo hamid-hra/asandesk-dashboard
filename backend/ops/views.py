@@ -99,6 +99,63 @@ class UpdateStartView(OwnerView):
         return Response(shape(raw), status=status.HTTP_202_ACCEPTED)
 
 
+def agent_shape(raw: dict) -> dict:
+    """Agents (Asan-desk-agent started with docker compose) on the panel's own server, and the agent update job."""
+    agents = []
+    for a in raw.get("agents", []):
+        check = a.get("check") or {}
+        behind = int(check.get("behind") or 0)
+        disk, remote = check.get("disk_version") or "", check.get("remote_version") or ""
+        agents.append({
+            "project": a.get("project"),
+            "container": a.get("name"),
+            "state": a.get("state"),
+            "checked_at": check.get("checked_at"),
+            "branch": check.get("branch"),
+            "behind": behind,
+            "dirty": bool(check.get("dirty")),
+            "disk_version": disk or None,
+            "remote_version": remote or None,
+            "commits": check.get("commits") or [],
+            "available": bool(check) and (behind > 0 or bool(disk and remote and disk != remote)),
+            "error": a.get("error") or "",
+        })
+    return {"control": {"online": True}, "agents": agents, "job": raw.get("job")}
+
+
+class AgentsStatusView(OwnerView):
+    def get(self, request):
+        try:
+            return Response(agent_shape(control.call("GET", "/agents")))
+        except ControlError as e:
+            return Response({"control": {"online": False, "error": e.message}, "agents": [], "job": None}) if e.offline else Response({"detail": e.message}, status=e.status)
+
+
+class AgentsCheckView(OwnerView):
+    """Fetch every agent's repository from GitHub now (a few seconds each)."""
+
+    def post(self, request):
+        try:
+            return Response(agent_shape(control.call("POST", "/agents/check", timeout=120)))
+        except ControlError as e:
+            return Response({"detail": e.message}, status=e.status)
+
+
+class AgentsStartView(OwnerView):
+    """git pull + docker compose up -d --build in the agent's own folder (the agent restarts for a few seconds)."""
+
+    def post(self, request):
+        project = str(request.data.get("project", ""))
+        if not SERVICE_RE.match(project):
+            return Response({"project": ["پروژهٔ نامعتبر است."]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            raw = control.call("POST", "/agents/update", params={"project": project})
+        except ControlError as e:
+            return Response({"detail": e.message}, status=e.status)
+        record("system.agent_update", f"به‌روزرسانی ایجنت ({project}) را شروع کرد", request=request)
+        return Response(agent_shape(raw), status=status.HTTP_202_ACCEPTED)
+
+
 class ServicesView(OwnerView):
     def get(self, request):
         try:

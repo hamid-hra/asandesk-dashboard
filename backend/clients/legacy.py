@@ -10,6 +10,13 @@ from django.utils import timezone
 from .models import Client
 
 
+def mark_online(ids: list[str]) -> int:
+    """دستگاه‌های قدیمیِ آنلاین (از شنود agent): آخرین تماسشان الان است. کلاینتی که خودش heartbeat می‌دهد دست نمی‌خورد."""
+    if not ids:
+        return 0
+    return Client.objects.filter(rd_id__in=ids, legacy=True).update(last_seen=timezone.now())
+
+
 def import_peers(peers: list[dict]) -> dict:
     """peers: [{id, uuid_hash, ip, created_at}] اعتبارسنجی‌شده و بدون شناسهٔ تکراری."""
     existing = {c.rd_id: c for c in Client.objects.filter(rd_id__in=[p["id"] for p in peers])}

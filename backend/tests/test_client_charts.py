@@ -47,8 +47,9 @@ def test_charts_count_installs_by_platform_and_version():
     t = body["totals"]
     assert (t["installs"], t["active_30d"], t["new_30d"], t["logged"]) == (5, 4, 4, 1)  # device 4 was installed 60 days ago, so it is not new
     assert body["latest"] == "1.4.9.9"
-    # latest = 2 of the 4 active devices
-    assert t["on_latest"] == 2 and t["on_latest_share"] == 50.0
+    # latest = 2 of the 4 active devices; the headline share counts every install (2 of 5)
+    assert t["on_latest"] == 2 and t["on_latest_share_active"] == 50.0
+    assert t["on_latest_all"] == 2 and t["on_latest_share"] == 40.0
 
     plats = {p["platform"]: p for p in body["platforms"]}
     assert plats["Windows"]["installs"] == 3 and plats["Windows"]["active_30d"] == 2
@@ -91,3 +92,21 @@ def test_charts_follow_the_clients_permission():
     assert panel(Role.VIEWER).get("/api/clients/charts").status_code == 200
     assert panel(Role.CUSTOM, {"clients": "none", "server": "edit"}).get("/api/clients/charts").status_code == 403
     assert APIClient().get("/api/clients/charts").status_code == 403
+
+
+@pytest.mark.django_db
+def test_legacy_devices_count_in_the_latest_version_share_and_the_per_platform_totals():
+    """دستگاه‌های قدیمی (فقط از hbbs) نصب‌اند و به‌روز نیستند: در مخرج «روی آخرین نسخه» می‌آیند."""
+    Release.objects.create(version="1.5.0", published_on=timezone.localdate(), notes="x", platforms=["Windows"])
+    device("1", WIN, "1.5.0")
+    now = timezone.now()
+    for i in range(8):
+        Client.objects.create(rd_id=f"61{i:07d}", legacy=True, first_seen=now - timedelta(days=100))
+    body = panel().get("/api/clients/charts").json()
+    t = body["totals"]
+    assert (t["installs"], t["legacy"], t["on_latest_all"], t["active_30d"], t["on_latest"]) == (9, 8, 1, 1, 1)
+    assert t["on_latest_share"] == 11.1  # ۱ از ۹ دستگاه
+    assert t["on_latest_share_active"] == 100.0  # ۱ از ۱ فعال
+    last = body["daily"][-1]
+    assert last["platform_totals"]["Windows"] == 1 and last["platform_totals"]["نامشخص"] == 8
+    assert last["total"] == 9

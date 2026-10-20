@@ -6,10 +6,13 @@ from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.db import connection
-from django.db.models import Count, OuterRef, Q, Subquery
-from django.db.models.functions import TruncDate
+from django.db.models import (
+    Case, CharField, Count, Exists, F, Func, IntegerField, OuterRef, Q, Subquery, Value, When,
+)
+from django.db.models.functions import Coalesce, Lower, NullIf, TruncDate
 from django.utils import timezone
 
+from monitoring.models import monitored_servers
 from releases.models import Channel
 from releases.services import latest_release
 
@@ -59,12 +62,87 @@ def version_old(version: str, latest: str | None) -> bool:
 
 
 SEEN_DAYS = {"24h": 1, "7d": 7, "30d": 30}
+# agent با حالت شنود هر ~۱۵ ثانیه فهرست آنلاین‌ها را می‌فرستد؛ تا این‌قدر بعد از آخرین گزارش، وضعیت دستگاه‌های قدیمی «معلوم» است
+LEGACY_STATUS_FRESH = timedelta(minutes=5)
+
+
+def legacy_status_known() -> bool:
+    """آیا وضعیت آنلاین دستگاه‌های قدیمی (فقط-hbbs) معلوم است؟ فقط وقتی یک agent با حالت شنود تازه گزارش می‌دهد."""
+    return monitored_servers().filter(peers_online_at__gte=timezone.now() - LEGACY_STATUS_FRESH).exists()
 # جهت پیش‌فرض هر ترتیب: بیشترین/جدیدترین اول؛ نام الفبایی
 SORT_DEFAULT_DIR = {"recent": "desc", "mins": "desc", "sessions": "desc", "tickets": "desc", "name": "asc", "version": "desc"}
 
 
 PAGE_SIZES = (10, 25, 50, 100)
 DEFAULT_PAGE_SIZE = 25
+
+
+# پلتفرم از روی متن سیستم‌عامل؛ همان ترتیب و قاعدهٔ platform_of ولی در SQL تا لازم نباشد همهٔ ردیف‌ها خوانده شوند
+PLATFORM_SQL = Case(
+    When(os__icontains="windows", then=Value("Windows")),
+    When(os__icontains="android", then=Value("Android")),
+    When(Q(os__icontains="mac") | Q(os__icontains="darwin"), then=Value("macOS")),
+    When(Q(os__icontains="ios") | Q(os__icontains="iphone") | Q(os__icontains="ipad"), then=Value("iOS")),
+    When(os="", then=Value("")),
+    default=Value("Linux"),
+    output_field=CharField(),
+)
+UNKNOWN = "نامشخص"
+
+
+def _unknown_to_empty(v: str) -> str:
+    return "" if v == UNKNOWN else v
+
+
+def _apply_row_filters(qs, *, skip: str | None, platform: str, os_name: str, version: str, old: bool, latest: str | None):
+    """فیلترهای سیستم‌عامل/نسخه؛ `skip` فیلتر همان facet را کنار می‌گذارد تا هر منو نشان بدهد انتخابش چه می‌دهد."""
+    if platform and skip != "platform":
+        qs = qs.annotate(plat=PLATFORM_SQL).filter(plat=_unknown_to_empty(platform))
+    if os_name and skip != "os":
+        qs = qs.filter(os=_unknown_to_empty(os_name))
+    if version and skip != "version":
+        qs = qs.filter(version=_unknown_to_empty(version))
+    if old:
+        # version_old: نسخهٔ پایدار فعلی هست و این دستگاه نسخه‌ای دارد که بتا نیست و با آن فرق دارد
+        qs = qs.exclude(version="").exclude(version__contains="-").exclude(version=latest) if latest else qs.none()
+    return qs
+
+
+def _name_sql():
+    """display_name در SQL: نام حساب (یا بخش پیش از @ ایمیل)، وگرنه نام دستگاه، وگرنه شناسه."""
+    account_name = Coalesce(NullIf("account__name", Value("")), Func(F("account__email"), Value("@"), Value(1), function="split_part"))
+    return Lower(Coalesce(Case(When(account__isnull=False, then=account_name), output_field=CharField()), NullIf("hostname", Value("")), "rd_id"))
+
+
+def _version_rank_sql():
+    """ترتیب عددی نسخه‌ها (1.4.10 بعد از 1.4.9)؛ نسخه‌های متمایز کم‌اند پس Case کوچک می‌ماند."""
+    versions = sorted(Client.objects.order_by().values_list("version", flat=True).distinct(), key=_version_key)
+    return Case(*[When(version=v, then=Value(i)) for i, v in enumerate(versions)], default=Value(-1), output_field=IntegerField())
+
+
+def _scored_order(rows, scores: dict, desc: bool, start: int, end: int) -> list[int]:
+    """شناسهٔ ردیف‌های یک صفحه برای مرتب‌سازی با «مدت اتصال/نشست/بازخورد». فقط دستگاه‌های دارای امتیاز (کم‌اند) در پایتون
+    مرتب می‌شوند؛ بقیه که امتیازی ندارند با جدیدترین فعالیت پشت یا جلوی آن‌ها می‌آیند.
+
+    scores: {pk: کلید قابل مقایسه}، فقط برای دستگاه‌هایی که امتیازشان صفر نیست."""
+    in_filter = set(rows.filter(pk__in=list(scores)).values_list("pk", flat=True))
+    ranked = sorted(in_filter, key=scores.__getitem__, reverse=desc)
+    rest = rows.exclude(pk__in=in_filter).order_by(F("last_seen").desc(nulls_last=True), "-first_seen", "pk")
+    n_rest = rest.count()
+    segments = [(ranked, len(ranked)), (rest, n_rest)] if desc else [(rest, n_rest), (ranked, len(ranked))]
+    out, offset = [], 0
+    for seg, size in segments:
+        lo, hi = max(start - offset, 0), min(end - offset, size)
+        if lo < hi:
+            out += list(seg[lo:hi]) if isinstance(seg, list) else list(seg.values_list("pk", flat=True)[lo:hi])
+        offset += size
+    return out
+
+
+def _ticket_scores() -> dict[int, tuple[int, int]]:
+    """{کلاینت: (بازخورد جدید، همهٔ بازخوردها)} فقط برای کلاینت‌هایی که بازخورد دارند."""
+    rows = Ticket.objects.order_by().values("client_id").annotate(total=Count("pk"), open=Count("pk", filter=~Q(status=TicketStatus.CLOSED)))
+    return {r["client_id"]: (r["open"], r["total"]) for r in rows}
 
 
 def client_rows(
@@ -74,21 +152,21 @@ def client_rows(
 ):
     """Rows of the clients table.
 
-    Every column of the table filters on its own (`status`, `account`, `tickets`, `blocked`, `platform`/`os_name`,
-    `version`/`old`, `seen`, `new`) and they combine with AND; `filter_` is the older single-choice tab and is
-    still understood. `sort` + `direction` ("asc"/"desc", default per key) order the rows. `facets` counts
-    platforms, OS names and versions over the rows that pass every filter except that facet's own, so each
-    menu shows what choosing it would give. The rows come in pages of `page_size` (10, 25, 50 or 100); a page
-    past the end is the last page.
+    Every column of the table filters on its own (`status`, `account`, `tickets`, `blocked`, `legacy`,
+    `platform`/`os_name`, `version`/`old`, `seen`, `new`) and they combine with AND; `filter_` is the older
+    single-choice tab and is still understood. `sort` + `direction` ("asc"/"desc", default per key) order the
+    rows. `facets` counts platforms, OS names and versions over the rows that pass every filter except that
+    facet's own, so each menu shows what choosing it would give. The rows come in pages of `page_size` (10, 25,
+    50 or 100); a page past the end is the last page.
+
+    Everything runs in the database and only the rows of the page are loaded: the list holds every device
+    ever seen by the ID server (tens of thousands), so it can not be built in Python.
     """
     close_stale_sessions()
     now = timezone.now()
-    usage = usage_by_client(now - timedelta(days=30))
     latest = latest_stable_version()
-    qs = Client.objects.select_related("account").annotate(
-        t_open=Count("tickets", filter=~Q(tickets__status=TicketStatus.CLOSED)),
-        t_total=Count("tickets"),
-    )
+    known = legacy_status_known()
+    qs = Client.objects.all()
     if q:
         digits = q.replace(" ", "")
         qs = qs.filter(
@@ -101,14 +179,16 @@ def client_rows(
     if status == "online":
         qs = qs.filter(last_seen__gte=online_after)
     elif status == "offline":
-        # وضعیت دستگاه‌های قدیمی نامشخص است؛ آفلاین حساب نمی‌شوند
-        qs = qs.filter(Q(last_seen__lt=online_after) | Q(last_seen__isnull=True), legacy=False)
+        # بدون حالت شنود وضعیت دستگاه‌های قدیمی نامشخص است؛ آفلاین حساب نمی‌شوند
+        qs = qs.filter(Q(last_seen__lt=online_after) | Q(last_seen__isnull=True))
+        if not known:
+            qs = qs.filter(legacy=False)
     if account == "logged":
         qs = qs.filter(account__isnull=False)
     elif account == "guest":
         qs = qs.filter(account__isnull=True)
     if tickets or filter_ == "tickets":
-        qs = qs.filter(t_open__gt=0)
+        qs = qs.filter(Exists(Ticket.objects.filter(client=OuterRef("pk")).exclude(status=TicketStatus.CLOSED)))
     if blocked or filter_ == "blocked":
         qs = qs.filter(blocked=True)
     if legacy == "only" or filter_ == "legacy":
@@ -118,14 +198,76 @@ def client_rows(
     if seen in SEEN_DAYS:
         qs = qs.filter(last_seen__gte=now - timedelta(days=SEEN_DAYS[seen]))
     elif seen == "inactive":
-        qs = qs.filter(Q(last_seen__lt=now - timedelta(days=30)) | Q(last_seen__isnull=True), legacy=False)
+        qs = qs.filter(Q(last_seen__lt=now - timedelta(days=30)) | Q(last_seen__isnull=True))
+        if not known:
+            qs = qs.filter(legacy=False)
     if new:
         qs = qs.filter(first_seen__gte=now - timedelta(days=7))
 
-    rows = []
-    for c in qs:
-        n, secs = usage.get(c.pk, (0, 0.0))
-        rows.append({
+    row_filters = dict(platform=platform, os_name=os_name, version=version, old=old, latest=latest)
+    rows = _apply_row_filters(qs, skip=None, **row_filters)
+
+    def grouped(field: str, skip: str):
+        rows_ = _apply_row_filters(qs, skip=skip, **row_filters).order_by().values(field).annotate(n=Count("pk"))
+        return list(rows_.order_by("-n", field).values_list(field, "n"))
+
+    # پلتفرم از روی همان گروه‌بندی سیستم‌عامل ساخته می‌شود (تعداد سیستم‌عامل‌های متمایز کم است؛ بی‌نیاز از LIKE روی همهٔ ردیف‌ها)
+    by_platform: Counter = Counter()
+    for os_value, n in grouped("os", "platform"):
+        by_platform[platform_of(os_value) or UNKNOWN] += n
+    facets = {
+        "platforms": by_platform.most_common(),
+        "os": [(v or UNKNOWN, n) for v, n in grouped("os", "os")[:40]],
+        "versions": sorted(((v or UNKNOWN, n) for v, n in grouped("version", "version")), key=lambda kv: _version_key(kv[0]), reverse=True),
+    }
+
+    count = rows.count()
+    page_size = page_size if page_size in PAGE_SIZES else DEFAULT_PAGE_SIZE
+    pages = max(1, -(-count // page_size))
+    page = min(max(1, page), pages)
+    start, end = (page - 1) * page_size, page * page_size
+
+    sort = sort if sort in SORT_DEFAULT_DIR else "recent"
+    direction = direction if direction in ("asc", "desc") else SORT_DEFAULT_DIR[sort]
+    desc = direction == "desc"
+    usage = usage_by_client(now - timedelta(days=30))
+    tie = "-pk" if desc else "pk"
+
+    if sort in ("mins", "sessions"):
+        pick = (lambda v: round(v[1] / 60)) if sort == "mins" else (lambda v: v[0])
+        scores = {pk: pick(v) for pk, v in usage.items() if pick(v) > 0}
+        ids = _scored_order(rows, scores, desc, start, end)
+    elif sort == "tickets":  # بیشترین بازخورد جدید، بعد بیشترین بازخورد
+        ids = _scored_order(rows, _ticket_scores(), desc, start, end)
+    else:
+        if sort == "recent":
+            rows = rows.annotate(online_flag=Case(When(last_seen__gte=online_after, then=Value(1)), default=Value(0), output_field=IntegerField()))
+            order = [
+                F("online_flag").desc() if desc else F("online_flag").asc(),
+                F("last_seen").desc(nulls_last=True) if desc else F("last_seen").asc(nulls_first=True),
+                "-first_seen" if desc else "first_seen",
+            ]
+        elif sort == "name":
+            rows = rows.annotate(sort_name=_name_sql())
+            order = [F("sort_name").desc() if desc else F("sort_name").asc()]
+        elif sort == "version":
+            rows = rows.annotate(vrank=_version_rank_sql())
+            order = [F("vrank").desc() if desc else F("vrank").asc()]
+        ids = list(rows.order_by(*order, tie).values_list("pk", flat=True)[start:end])
+
+    by_id = {c.pk: c for c in Client.objects.filter(pk__in=ids).select_related("account")}
+    ticket_counts = {
+        r["client_id"]: (r["open"], r["total"])
+        for r in Ticket.objects.filter(client_id__in=ids).values("client_id").annotate(
+            total=Count("pk"), open=Count("pk", filter=~Q(status=TicketStatus.CLOSED))
+        )
+    }
+    results = []
+    for pk in ids:
+        c = by_id[pk]
+        n, secs = usage.get(pk, (0, 0.0))
+        t_open, t_total = ticket_counts.get(pk, (0, 0))
+        results.append({
             "id": c.rd_id,
             "display": c.display_name,
             "hostname": c.hostname,
@@ -141,51 +283,15 @@ def client_rows(
             "ip": c.ip,
             "mins_30d": round(secs / 60),
             "sessions_30d": n,
-            "tickets_open": c.t_open,
-            "tickets_total": c.t_total,
+            "tickets_open": t_open,
+            "tickets_total": t_total,
             "blocked": c.blocked,
             "legacy": c.legacy,
+            # وضعیت آنلاین/آفلاین این ردیف معلوم است؟ دستگاه قدیمی فقط با حالت شنودِ ایجنت
+            "status_known": known or not c.legacy,
             "first_seen": c.first_seen.isoformat(),
         })
-    # هر کلید به‌صورت صعودی مرتب می‌شود و جهت پیش‌فرضش در SORT_DEFAULT_DIR است
-    sorters = {
-        # دستگاه‌های قدیمی last_seen ندارند؛ بین خودشان جدیدترین ثبت‌نام بالاتر می‌آید
-        "recent": lambda r: (r["online"], datetime.fromisoformat(r["last_seen"]).timestamp() if r["last_seen"] else 0,
-                             datetime.fromisoformat(r["first_seen"]).timestamp()),
-        "mins": lambda r: r["mins_30d"],
-        "sessions": lambda r: r["sessions_30d"],
-        "tickets": lambda r: (r["tickets_open"], r["tickets_total"]),
-        "name": lambda r: (r["display"] or "").casefold(),
-        "version": lambda r: _version_key(r["version"]),
-    }
-    sort = sort if sort in sorters else "recent"
-    direction = direction if direction in ("asc", "desc") else SORT_DEFAULT_DIR[sort]
-    rows.sort(key=sorters[sort], reverse=direction == "desc")
-
-    # فیلترهای سیستم‌عامل و نسخه روی خود ردیف‌ها (پلتفرم از روی متن سیستم‌عامل ساخته می‌شود)
-    checks = {
-        "platform": lambda r: not platform or (r["platform"] or "نامشخص") == platform,
-        "os": lambda r: not os_name or (r["os"] or "نامشخص") == os_name,
-        "version": lambda r: not version or (r["version"] or "نامشخص") == version,
-        "old": lambda r: not old or r["version_old"],
-    }
-
-    def passing(skip: str):
-        return [r for r in rows if all(fn(r) for key, fn in checks.items() if key != skip)]
-
-    facets = {
-        "platforms": Counter(r["platform"] or "نامشخص" for r in passing("platform")).most_common(),
-        "os": Counter(r["os"] or "نامشخص" for r in passing("os")).most_common(40),
-        "versions": sorted(Counter(r["version"] or "نامشخص" for r in passing("version")).items(), key=lambda kv: _version_key(kv[0]), reverse=True),
-    }
-    rows = passing("")
-    page_size = page_size if page_size in PAGE_SIZES else DEFAULT_PAGE_SIZE
-    pages = max(1, -(-len(rows) // page_size))
-    page = min(max(1, page), pages)
-    return {
-        "count": len(rows), "page": page, "pages": pages, "page_size": page_size,
-        "results": rows[(page - 1) * page_size:page * page_size], "facets": facets,
-    }
+    return {"count": count, "page": page, "pages": pages, "page_size": page_size, "results": results, "facets": facets}
 
 
 def _version_key(v: str):
@@ -207,6 +313,8 @@ def clients_summary():
     return {
         "total": total,
         "legacy": Client.objects.filter(legacy=True).count(),
+        "legacy_status_known": legacy_status_known(),
+        "online_legacy": Client.objects.filter(legacy=True, last_seen__gte=now - timedelta(seconds=settings.CLIENT_OFFLINE_AFTER_SECONDS)).count(),
         "new_7d": Client.objects.filter(first_seen__gte=now - timedelta(days=7)).count(),
         "online": Client.objects.filter(
             last_seen__gte=now - timedelta(seconds=settings.CLIENT_OFFLINE_AFTER_SECONDS)
@@ -219,6 +327,22 @@ def clients_summary():
         "with_open_tickets": Client.objects.filter(tickets__status=TicketStatus.OPEN)
         .distinct().count(),
         "platforms": [[p, n / active_n] for p, n in platforms.most_common()] if active_n else [],
+    }
+
+
+def online_breakdown() -> dict:
+    """دستگاه‌های آنلاین الان به تفکیک پلتفرم. دستگاه قدیمی فقط با حالت شنود آنلاین می‌شود و پلتفرمش نامشخص است."""
+    after = timezone.now() - timedelta(seconds=settings.CLIENT_OFFLINE_AFTER_SECONDS)
+    rows = (
+        Client.objects.filter(last_seen__gte=after).annotate(plat=PLATFORM_SQL)
+        .order_by().values("plat").annotate(n=Count("pk")).order_by("-n", "plat")
+    )
+    platform = [[p or UNKNOWN, n] for p, n in rows.values_list("plat", "n")]
+    return {
+        "platform": platform,
+        "total": sum(n for _, n in platform),
+        "legacy": Client.objects.filter(legacy=True).count(),
+        "legacy_known": legacy_status_known(),
     }
 
 
@@ -263,13 +387,15 @@ def devices_by_version() -> dict[str, int]:
 
 
 def version_distribution():
-    """سهم نسخه‌ها بین کلاینت‌های فعال ۳۰ روز اخیر (برای تب نسخه‌ها): (درصد روی نسخهٔ فعلی، نسخه‌های پرتعداد + بقیه، کل دستگاه‌ها).
+    """سهم نسخه‌ها بین کلاینت‌های فعال ۳۰ روز اخیر و دستگاه‌های قدیمی (برای تب نسخه‌ها): (درصد روی نسخهٔ فعلی، نسخه‌های پرتعداد + بقیه، کل دستگاه‌ها).
 
     تا چهار نسخه همه با نام می‌آیند؛ بیشتر از آن سه نسخهٔ پرتعداد و بقیه در «سایر نسخه‌ها». نسخهٔ پایدار فعلی هر
     چقدر هم کم‌تعداد باشد جداگانه دیده می‌شود، چون «چند نفر به‌روزند» مهم‌ترین پرسش این نمودار است.
     """
     rows = sorted(devices_by_version().items(), key=lambda kv: (-kv[1], kv[0]))
-    total = sum(n for _, n in rows)
+    # دستگاه‌های قدیمی (فقط از hbbs) نسخه‌شان معلوم نیست ولی به‌روز نیستند؛ در مخرج و به‌صورت یک سهم جدا می‌آیند
+    legacy = Client.objects.filter(legacy=True).count()
+    total = sum(n for _, n in rows) + legacy
     if not total:
         return None, None, 0
     latest = latest_stable_version()
@@ -285,6 +411,8 @@ def version_distribution():
         n = sum(n for _, n in rest)
         # «سایر»، نه «قدیمی‌تر»: بتای جدیدتر هم می‌تواند بین نسخه‌های کم‌تعداد باشد
         top.append({"version": "سایر نسخه‌ها", "share": round(n / total * 100, 1), "count": n, "versions": len(rest)})
+    if legacy:
+        top.append({"version": "قدیمی (بدون API)", "share": round(legacy / total * 100, 1), "count": legacy, "legacy": True})
     return (round(on_current / total * 100, 1) if latest else None), top, total
 
 
@@ -310,7 +438,7 @@ def install_charts(days: int = 90) -> dict:
     versions: dict[str, dict] = {}
     for g in groups:
         plat = platform_of(g["os"]) or "نامشخص"
-        p = platforms.setdefault(plat, dict.fromkeys(("installs", "active_30d", "online", "new_30d", "logged", "on_latest"), 0))
+        p = platforms.setdefault(plat, dict.fromkeys(("installs", "active_30d", "online", "new_30d", "logged", "on_latest", "on_latest_all"), 0))
         p["installs"] += g["n"]
         p["active_30d"] += g["active"]
         p["online"] += g["online"]
@@ -324,17 +452,23 @@ def install_charts(days: int = 90) -> dict:
             v["platforms_active"][plat] = v["platforms_active"].get(plat, 0) + g["active"]
         if latest and g["version"] == latest:
             p["on_latest"] += g["active"]
+            p["on_latest_all"] += g["n"]
 
     total = sum(p["installs"] for p in platforms.values())
     active = sum(p["active_30d"] for p in platforms.values())
     on_latest = sum(p["on_latest"] for p in platforms.values())
+    on_latest_all = sum(p["on_latest_all"] for p in platforms.values())
 
     # new installs per day in the panel's time zone, plus the running total
     tz = timezone.get_current_timezone()
     today = timezone.localdate()
     first_day = today - timedelta(days=days - 1)
     start = timezone.make_aware(datetime.combine(first_day, time.min))
-    before = Client.objects.filter(first_seen__lt=start).count()
+    running_by_platform: dict[str, int] = {}
+    for row in Client.objects.filter(first_seen__lt=start).order_by().values("os").annotate(n=Count("id")):
+        plat = platform_of(row["os"]) or "نامشخص"
+        running_by_platform[plat] = running_by_platform.get(plat, 0) + row["n"]
+    before = sum(running_by_platform.values())
     per_day: dict = {}
     for row in (
         Client.objects.filter(first_seen__gte=start)
@@ -351,7 +485,10 @@ def install_charts(days: int = 90) -> dict:
         by_platform = per_day.get(d, {})
         new = sum(by_platform.values())
         running += new
-        series.append({"date": d.isoformat(), "new": new, "total": running, "platforms": by_platform})
+        for plat, n in by_platform.items():
+            running_by_platform[plat] = running_by_platform.get(plat, 0) + n
+        series.append({"date": d.isoformat(), "new": new, "total": running, "platforms": by_platform,
+                       "platform_totals": dict(running_by_platform)})
 
     return {
         "latest": latest,
@@ -361,8 +498,12 @@ def install_charts(days: int = 90) -> dict:
             "online": sum(p["online"] for p in platforms.values()),
             "new_30d": sum(p["new_30d"] for p in platforms.values()),
             "logged": sum(p["logged"] for p in platforms.values()),
+            "legacy": Client.objects.filter(legacy=True).count(),
             "on_latest": on_latest,
-            "on_latest_share": round(on_latest / active * 100, 1) if latest and active else None,
+            "on_latest_all": on_latest_all,
+            # سهم از همهٔ دستگاه‌ها (دستگاه‌های قدیمی که به API گزارش نمی‌دهند هم در مخرج‌اند) و فقط از فعال‌های ۳۰ روز
+            "on_latest_share": round(on_latest_all / total * 100, 1) if latest and total else None,
+            "on_latest_share_active": round(on_latest / active * 100, 1) if latest and active else None,
         },
         "platforms": sorted(
             ({"platform": name, **vals, "share": round(vals["installs"] / total * 100, 1) if total else 0} for name, vals in platforms.items()),

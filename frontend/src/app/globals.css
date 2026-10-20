@@ -212,9 +212,18 @@ a:focus-visible {
   padding: 3px;
   background: var(--seg-track);
   border-radius: 9px;
+  /* روی صفحهٔ باریک از عرض والد بیشتر نشود (وگرنه کل صفحه کنار می‌رود)؛ گزینه‌های اضافه با اسکرول افقی دیده می‌شوند */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.seg::-webkit-scrollbar {
+  display: none;
 }
 
 .seg > button {
+  flex: none;
   white-space: nowrap;
   height: 28px;
   padding: 0 12px;

@@ -247,6 +247,19 @@ def test_release_stats_use_client_versions():
     assert rows["2"]["version_old"] and not rows[DEV["id"]]["version_old"]
 
 
+@pytest.mark.django_db
+def test_release_stats_count_legacy_devices_as_not_up_to_date():
+    from releases.models import Release
+    Release.objects.create(version="1.4.9", published_on=timezone.localdate(), notes="x", platforms=["Windows"])
+    register()  # یک کلاینت فعال روی آخرین نسخه
+    Client.objects.bulk_create([Client(rd_id=f"61{i:07d}", legacy=True) for i in range(3)])
+    s = panel().get("/api/releases/stats").json()
+    assert s["active_devices"] == 4 and s["legacy_devices"] == 3
+    assert s["users_on_current"] == 25.0  # ۱ از ۴ دستگاه
+    by = {d["version"]: d for d in s["distribution"]}
+    assert by["1.4.9"]["share"] == 25.0 and by["قدیمی (بدون API)"]["count"] == 3 and by["قدیمی (بدون API)"]["legacy"] is True
+
+
 # ---------- ارسال بازخورد از اپلیکیشن ----------
 
 def gz_b64(text: str | bytes) -> str:
@@ -432,10 +445,12 @@ def peers_post(peers, token="tok"):
 
 @pytest.fixture
 def agent_server(db):
+    from ha.models import HAServer
     from monitoring.models import Server
-    s = Server(name="hbbs-1")
+    s = Server(name="hbbs-1", first_seen=timezone.now())
     s.set_token("tok")
     s.save()
+    HAServer.objects.create(name="hbbs-1", address="10.0.0.9", monitor=s)
     return s
 
 
@@ -544,3 +559,89 @@ def test_legacy_client_cannot_be_blocked_or_logged_out(agent_server):
     assert c.post("/api/clients/111222333/block", {"blocked": True}, format="json").status_code == 400
     assert c.post("/api/clients/111222333/logout").status_code == 400
     assert not Client.objects.get(rd_id="111222333").blocked
+
+
+# ---------- فهرستِ بزرگ: همه‌چیز در SQL و فقط یک صفحه خوانده می‌شود ----------
+
+@pytest.mark.django_db
+def test_big_list_pages_cover_every_row_once_for_every_sort(agent_server, django_assert_max_num_queries):
+    from clients.models import ConnSession, Ticket
+    from clients.stats import SORT_DEFAULT_DIR
+
+    peers_post([peer(f"6100{i:05d}", f"dXVpZC{i}", f"5.0.0.{i % 250}", f"2025-0{1 + i % 9}-1{i % 9} 10:00:00+00:00") for i in range(70)])
+    acc = Account.objects.create(email="zed@x.y", name="Zed")
+    now = timezone.now()
+    for i, ver in enumerate(["1.4.9.1", "1.4.10.2", "1.5.0", "1.4.9"]):
+        c = Client.objects.create(rd_id=f"7000{i}", hostname=f"host{i}", os="windows / 11", version=ver, last_seen=now,
+                                  first_seen=now - timedelta(days=i), account=acc if i == 0 else None)
+        Ticket.objects.create(client=c, subject="x") if i < 2 else None
+        ConnSession.objects.create(client=c, conn_id=i, peer_id="9", started_at=now, authorized_at=now - timedelta(minutes=10 * (i + 1)), ended_at=now)
+    total = Client.objects.count()
+    c = panel(Role.VIEWER)
+    for sort in SORT_DEFAULT_DIR:
+        for direction in ("asc", "desc"):
+            seen = []
+            for page in (1, 2, 3):
+                r = c.get(f"/api/clients?sort={sort}&dir={direction}&page={page}&page_size=25").json()
+                assert r["count"] == total and r["pages"] == 3
+                seen += [row["id"] for row in r["results"]]
+            assert len(seen) == total and len(set(seen)) == total, (sort, direction)
+    # ترتیب نسخه عددی است: 1.4.10.2 بعد از 1.4.9.1
+    vs = [r["version"] for r in c.get("/api/clients?sort=version&dir=desc&page_size=10").json()["results"][:4]]
+    assert vs == ["1.5.0", "1.4.10.2", "1.4.9.1", "1.4.9"]
+    # مرتب‌سازی با مدت اتصال: بیشترین اول
+    assert c.get("/api/clients?sort=mins&dir=desc&page_size=10").json()["results"][0]["id"] == "70003"
+    # تعداد query به اندازهٔ ردیف‌ها بالا نمی‌رود
+    with django_assert_max_num_queries(30):
+        c.get("/api/clients?sort=name&page_size=100")
+
+
+# ---------- وضعیت آنلاین دستگاه‌های قدیمی (حالت شنود ایجنت) ----------
+
+def online_post(ids, token="tok"):
+    headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"} if token else {}
+    return APIClient().post("/api/agent/online", {"ids": ids}, format="json", **headers)
+
+
+@pytest.mark.django_db
+def test_online_report_marks_only_legacy_devices_and_makes_their_status_known(agent_server):
+    peers_post([peer("111222333"), peer("444555666", "b3RoZXI=", "8.8.4.4")])
+    register()  # کلاینت جدید با سیستم‌عامل ویندوز
+    c = panel(Role.VIEWER)
+
+    # بدون شنود وضعیت قدیمی‌ها نامشخص است
+    rows = {r["id"]: r for r in c.get("/api/clients").json()["results"]}
+    assert not rows["111222333"]["status_known"] and rows[DEV["id"]]["status_known"]
+    assert c.get("/api/clients/stats").json()["legacy_status_known"] is False
+
+    assert online_post(["111222333", DEV["id"], "999999999"]).json() == {"online": 1}  # فقط یک ردیف قدیمیِ شناخته‌شده
+    rows = {r["id"]: r for r in c.get("/api/clients").json()["results"]}
+    assert rows["111222333"]["online"] and rows["111222333"]["status_known"]
+    assert not rows["444555666"]["online"] and rows["444555666"]["status_known"]  # دیده نشد → آفلاین
+    st = c.get("/api/clients/stats").json()
+    assert st["legacy_status_known"] is True and st["online_legacy"] == 1
+    # حالا قدیمیِ دیده‌نشده آفلاین حساب می‌شود
+    assert {r["id"] for r in c.get("/api/clients?status=offline").json()["results"]} == {"444555666"}
+    assert c.get("/api/clients/111222333").json()["status_known"] is True
+    # توزیع آنلاین‌ها به تفکیک پلتفرم: ویندوزِ API و یک «نامشخص» (قدیمی)
+    bd = c.get("/api/monitoring/overview").json()["breakdown"]
+    assert bd["total"] == 2 and bd["legacy_known"] is True and dict(map(tuple, bd["platform"])) == {"Windows": 1, "نامشخص": 1}
+
+
+@pytest.mark.django_db
+def test_online_report_needs_a_token_and_valid_ids(agent_server):
+    assert online_post(["111222333"], token=None).status_code == 401
+    assert online_post(["111222333"], token="wrong").status_code == 401
+    assert online_post(["bad id!"]).status_code == 400
+    assert online_post([]).status_code == 200  # گزارش خالی هم یعنی «شنود زنده است، کسی آنلاین نیست»
+    assert panel().get("/api/clients/stats").json()["legacy_status_known"] is True
+
+
+@pytest.mark.django_db
+def test_legacy_status_goes_back_to_unknown_when_the_agent_stops_reporting(agent_server):
+    from monitoring.models import Server
+
+    peers_post([peer()])
+    online_post([])
+    Server.objects.filter(pk=agent_server.pk).update(peers_online_at=timezone.now() - timedelta(minutes=10))
+    assert panel().get("/api/clients/stats").json()["legacy_status_known"] is False

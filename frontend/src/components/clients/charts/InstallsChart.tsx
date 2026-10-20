@@ -19,13 +19,18 @@ const dayText = (iso: string) => dfDay.format(new Date(`${iso}T12:00:00`));
 /** نصب‌ها در ۹۰ روز اخیر: «مجموع نصب‌ها» (سطح) یا «نصب جدید روزانه» (ستون‌های جدا برای هر پلتفرم). */
 export function InstallsChart({ daily, platforms }: { daily: ChartDay[]; platforms: string[] }) {
   const [mode, setMode] = useState<Mode>("total");
+  // «all» = همهٔ پلتفرم‌ها (پیش‌فرض)؛ یا نام یک پلتفرم برای دیدن فقط همان
+  const [plat, setPlat] = useState<string>("all");
   const [hover, setHover] = useState<number | null>(null);
   const n = daily.length;
-  const values = daily.map((d) => (mode === "total" ? d.total : d.new));
+  const shown = plat === "all" ? platforms : platforms.filter((p) => p === plat);
+  const totalOf = (d: ChartDay) => (plat === "all" ? d.total : (d.platform_totals?.[plat] ?? 0));
+  const newOf = (d: ChartDay) => (plat === "all" ? d.new : (d.platforms[plat] ?? 0));
+  const values = daily.map((d) => (mode === "total" ? totalOf(d) : newOf(d)));
   const maxV = niceMax(Math.max(0, ...values), 4);
   const y = (v: number) => H - (v / maxV) * (H - TOP);
   const x = (i: number) => (n > 1 ? (i / (n - 1)) * 1000 : 500);
-  const empty = daily.every((d) => d.total === 0);
+  const empty = daily.every((d) => totalOf(d) === 0);
 
   const ticks = [0, 1, 2, 3, 4].map((k) => {
     const yy = TOP + (k / 4) * (H - TOP);
@@ -42,12 +47,15 @@ export function InstallsChart({ daily, platforms }: { daily: ChartDay[]; platfor
           <button aria-pressed={mode === "total"} onClick={() => setMode("total")}>مجموع نصب‌ها</button>
           <button aria-pressed={mode === "new"} onClick={() => setMode("new")}>نصب جدید روزانه</button>
         </div>
-        <div className={s.dotLegend}>
+        <div className={s.dotLegend} role="group" aria-label="پلتفرم">
+          <button type="button" aria-pressed={plat === "all"} onClick={() => setPlat("all")}>
+            همه
+          </button>
           {platforms.map((p) => (
-            <span key={p}>
+            <button key={p} type="button" aria-pressed={plat === p} onClick={() => setPlat(plat === p ? "all" : p)}>
               <i style={{ background: platformColor(p) }} />
               {p}
-            </span>
+            </button>
           ))}
         </div>
       </div>
@@ -82,7 +90,7 @@ export function InstallsChart({ daily, platforms }: { daily: ChartDay[]; platfor
             {mode === "new" &&
               daily.map((d, i) => {
                 let base = H;
-                return platforms.map((p) => {
+                return shown.map((p) => {
                   const v = d.platforms[p] ?? 0;
                   if (!v) return null;
                   const h = (v / maxV) * (H - TOP);
@@ -95,18 +103,18 @@ export function InstallsChart({ daily, platforms }: { daily: ChartDay[]; platfor
           {hd && hover != null && (
             <>
               <div className={s.cursor} style={{ left: tipBox(hover, n).left }} />
-              {mode === "total" && <div className={s.marker} style={{ left: tipBox(hover, n).left, top: `${(y(hd.total) / H) * 100}%`, width: 11, height: 11, border: "2.5px solid var(--ok)" }} />}
+              {mode === "total" && <div className={s.marker} style={{ left: tipBox(hover, n).left, top: `${(y(totalOf(hd)) / H) * 100}%`, width: 11, height: 11, border: "2.5px solid var(--ok)" }} />}
               <div dir="rtl" className={s.tip} style={tipBox(hover, n)}>
                 <div className={s.tipTitle}>{dayText(hd.date)}</div>
                 <div className={s.tipRow}>
-                  <span>مجموع نصب‌ها</span>
-                  <b>{fmt(hd.total)}</b>
+                  <span>مجموع نصب‌ها{plat === "all" ? "" : ` · ${plat}`}</span>
+                  <b>{fmt(totalOf(hd))}</b>
                 </div>
                 <div className={s.tipRow}>
                   <span>نصب جدید این روز</span>
-                  <b>{fmt(hd.new)}</b>
+                  <b>{fmt(newOf(hd))}</b>
                 </div>
-                {platforms
+                {shown
                   .filter((p) => hd.platforms[p])
                   .map((p) => (
                     <div key={p} className={s.tipRow}>

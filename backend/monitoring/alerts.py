@@ -3,10 +3,10 @@
 from datetime import timedelta
 
 from django.db import IntegrityError, transaction
-from django.db.models import Avg, Min
+from django.db.models import Avg, Min, Q
 from django.utils import timezone
 
-from .models import Alert, AlertLevel, MetricSample, Server
+from .models import Alert, AlertLevel, MetricSample, Server, monitored_servers
 
 CPU_HIGH = 80
 CPU_WINDOW = timedelta(minutes=10)
@@ -16,6 +16,11 @@ RAM_CLEAR = 85
 DISK_WARN = 85
 DISK_CRIT = 95
 DISK_CLEAR = 80
+
+
+def visible_alerts():
+    """هشدارهای سرورهای پایش‌شده و هشدارهای بدون سرور؛ سرورِ بیرون از بخش HA (مثل agent قدیمی پنل) هشدارش دیده نمی‌شود."""
+    return Alert.objects.filter(Q(server__isnull=True) | Q(server__in=monitored_servers()))
 
 
 def fa_num(v) -> str:
@@ -105,7 +110,7 @@ def evaluate_services(server: Server, services: dict) -> None:
 
 
 def check_offline_servers() -> None:
-    for server in Server.objects.filter(last_seen__isnull=False):
+    for server in monitored_servers():
         if server.online:
             continue
         open_alert(
