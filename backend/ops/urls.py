@@ -10,6 +10,7 @@ urlpatterns = [
     path("update/agents", views.AgentsStatusView.as_view()),
     path("update/agents/check", views.AgentsCheckView.as_view()),
     path("update/agents/start", views.AgentsStartView.as_view()),
+    path("logs/sources", views.LogSourcesView.as_view()),
     path("logs/services", views.ServicesView.as_view()),
     path("logs", views.LogsView.as_view()),
 ]

@@ -118,8 +118,9 @@ def apply_result(s: HAServer, r: dict, cfg: HAConfig) -> None:
 
 def pick_serving(cfg: HAConfig) -> None:
     """سرور فعال: سالم‌ترین با کمترین اولویت. اگر برگشت خودکار خاموش باشد، سرور فعال فعلی تا وقتی سالم است می‌ماند."""
-    servers = list(HAServer.objects.filter(draft=False, maintenance=False))
-    healthy = [s for s in servers if s.status in ("ok", "slow")]
+    servers = list(HAServer.objects.filter(draft=False, maintenance=False).select_related("monitor"))
+    # سروری که کلیدش با سرور اصلی یکی نیست هرگز سرور فعال نمی‌شود: کلاینت‌ها با کلید سرور اصلی به آن وصل نمی‌شوند
+    healthy = [s for s in servers if s.status in ("ok", "slow") and key_state(s) != "bad"]
     current = next((s for s in HAServer.objects.filter(draft=False, serving=True)), None)
     target = None
     if current and current in healthy and not cfg.failback:

@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from monitoring.agent_commands import ONLINE_COMMAND
 from monitoring.models import Server as MonServer
 
 from . import checker
@@ -167,7 +168,7 @@ class ServerListView(APIView):
                 return bad("name", "برای این نام قبلاً agent ساخته شده است.")
             mon.save()
             s = HAServer.objects.create(role=role, priority=prio, draft=True, monitor=mon, **data)
-        return Response({"server": server_row(s), "token": token, "command": install_command(request, token)}, status=status.HTTP_201_CREATED)
+        return Response({"server": server_row(s), "token": token, "command": install_command(request, token), "online_command": ONLINE_COMMAND}, status=status.HTTP_201_CREATED)
 
 
 class ServerDetailView(APIView):
@@ -233,7 +234,7 @@ class ServerTokenView(APIView):
             s.save(update_fields=["monitor"])
         token = s.monitor.set_token()
         s.monitor.save()
-        return Response({"token": token, "command": install_command(request, token)})
+        return Response({"token": token, "command": install_command(request, token), "online_command": ONLINE_COMMAND})
 
 
 class ServerCheckView(APIView):
@@ -258,9 +259,10 @@ class ServerCheckView(APIView):
             {"id": "p17", "label": f"پورت {s.relay_port} (رله)", "critical": True, "ok": bool(p.get(relay_label)),
              "detail": "باز" if p.get(relay_label) else "بسته",
              "help": "" if p.get(relay_label) else f"پورت {s.relay_port} را در فایروال باز کنید و از اجرا بودن hbbr مطمئن شوید."},
-            {"id": "key", "label": "تطابق کلید عمومی", "critical": ks == "bad", "ok": True if ks == "ok" else (False if ks == "bad" else None),
+            # کلید جلوی افزودن را نمی‌گیرد (مثلاً هنگام انتقال به سرور تازه)؛ تا یکی نشود، این سرور در failover انتخاب نمی‌شود
+            {"id": "key", "label": "تطابق کلید عمومی", "critical": False, "ok": True if ks == "ok" else (False if ks == "bad" else None),
              "detail": {"ok": "یکسان با سرور اصلی", "bad": "با سرور اصلی یکی نیست", "unknown": "نامشخص (agent کلید را گزارش نکرده)"}[ks],
-             "help": "فایل‌های id_ed25519 و id_ed25519.pub سرور اصلی را روی این سرور کپی کنید و hbbs را دوباره راه‌اندازی کنید." if ks == "bad" else
+             "help": "فعلاً لازم نیست و سرور اضافه می‌شود. تا کلیدها یکی نشود، این سرور در failover انتخاب نمی‌شود (کلاینت‌هایی که با کلید سرور اصلی تنظیم شده‌اند به آن وصل نمی‌شوند). برای یکی کردن، id_ed25519 و id_ed25519.pub سرور اصلی را روی این سرور کپی و hbbs را دوباره راه‌اندازی کنید." if ks == "bad" else
                      ("برای سنجش خودکار، agent را با mount پوشهٔ داده‌ی hbbs (AGENT_HBBS_DIR) اجرا کنید (دستور مرحلهٔ قبل)." if ks == "unknown" else "")},
             {"id": "agent", "label": "ارتباط agent", "critical": False, "ok": online,
              "detail": f"متصل · v{s.monitor.agent_version}" if online and s.monitor.agent_version else ("متصل" if online else "گزارشی نرسیده"),

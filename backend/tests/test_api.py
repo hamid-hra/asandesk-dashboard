@@ -412,3 +412,72 @@ def test_overview_and_live_can_be_limited_to_one_server():
     live_a = c.get(f"/api/monitoring/live?server={a.pk}").json()
     assert live_a["total"] == 1 and live_a["aggregate"]["cpu"] == 10 and live_a["aggregate"]["cores"] == 2
     assert c.get("/api/monitoring/live?server=abc").json()["total"] == 2  # مقدار نامعتبر = همه
+
+
+# ---------- لاگ کانتینرهای hbbs/hbbr از agent ----------
+
+def logs_post(services, token="tok"):
+    headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"} if token else {}
+    return APIClient().post("/api/agent/logs", {"services": services}, format="json", **headers)
+
+
+def line(text, ts="2026-10-20T06:00:00.123456789Z", stream="out"):
+    return {"ts": ts, "stream": stream, "text": text}
+
+
+@pytest.mark.django_db
+def test_agent_logs_are_stored_capped_and_readable_by_the_owner(server, monkeypatch):
+    from monitoring import service_logs
+    from monitoring.models import ServiceLog
+
+    assert ingest({"services": {"hbbs": SVC_UP, "hbbr": SVC_DOWN}}).status_code == 201
+    r = logs_post({"hbbs": {"container": "hbbs", "lines": [line("INFO start"), line("WARN slow", stream="err")]},
+                   "hbbr": {"container": "hbbr", "error": "", "lines": [line("relay up", ts="2026-10-20T05:59:59Z")]}})
+    assert r.status_code == 200 and r.json() == {"stored": 3}
+    server.refresh_from_db()
+    assert server.log_sources["hbbs"]["container"] == "hbbs"
+
+    owner = client_for(Role.OWNER)
+    src = owner.get("/api/settings/system/logs/sources").json()["sources"]
+    assert src[0]["id"] is None and src[1]["id"] == server.pk
+    assert {x["service"]: x["state"] for x in src[1]["services"]} == {"hbbr": "exited", "hbbs": "running"}
+
+    svc = owner.get(f"/api/settings/system/logs/services?server={server.pk}").json()["services"]
+    assert [x["service"] for x in svc] == ["hbbr", "hbbs"]
+    one = owner.get(f"/api/settings/system/logs?server={server.pk}&service=hbbs&tail=100").json()
+    assert [l["text"] for l in one["lines"]] == ["INFO start", "WARN slow"] and one["lines"][1]["stream"] == "err"
+    assert one["lines"][0]["ts"].startswith("2026-10-20T06:00:00.123456")
+    merged = owner.get(f"/api/settings/system/logs?server={server.pk}&service=all&tail=100").json()
+    assert [l["service"] for l in merged["lines"]] == ["hbbr", "hbbs", "hbbs"]  # به ترتیب زمان
+    assert owner.get(f"/api/settings/system/logs?server={server.pk}&service=nginx").status_code == 404
+    assert owner.get("/api/settings/system/logs/services?server=99999").status_code == 404
+
+    # سقف هر سرویس
+    monkeypatch.setattr(service_logs, "LOG_KEEP", 4)
+    logs_post({"hbbs": {"container": "hbbs", "lines": [line(f"n{i}") for i in range(6)]}})
+    assert list(ServiceLog.objects.filter(service="hbbs").order_by("id").values_list("text", flat=True)) == ["n2", "n3", "n4", "n5"]
+    assert ServiceLog.objects.filter(service="hbbr").count() == 1  # سرویس دیگر دست نخورد
+
+
+@pytest.mark.django_db
+def test_agent_logs_need_a_token_and_valid_body_and_viewers_cannot_read(server):
+    assert logs_post({"hbbs": {"lines": []}}, token=None).status_code == 401
+    assert logs_post({"Bad Name": {"lines": []}}).status_code == 400
+    assert logs_post({"hbbs": {"lines": [line("x")] * 601}}).status_code == 400
+    assert logs_post({"hbbs": {"container": "hbbs", "error": "no json-file", "lines": []}}).status_code == 200
+    server.refresh_from_db()
+    assert server.log_sources["hbbs"]["error"] == "no json-file"
+    admin = client_for(Role.ADMIN)
+    assert admin.get("/api/settings/system/logs/sources").status_code == 403
+    assert admin.get(f"/api/settings/system/logs?server={server.pk}&service=hbbs").status_code == 403
+
+
+def test_docker_timestamps_are_parsed():
+    from datetime import datetime, timezone as tz
+
+    from monitoring.service_logs import parse_ts
+
+    fb = datetime(2000, 1, 1, tzinfo=tz.utc)
+    assert parse_ts("2026-10-20T06:00:00.123456789Z", fb) == datetime(2026, 10, 20, 6, 0, 0, 123456, tzinfo=tz.utc)
+    assert parse_ts("2026-10-20T06:00:00Z", fb).second == 0
+    assert parse_ts("garbage", fb) == fb and parse_ts("", fb) == fb

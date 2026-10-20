@@ -32,6 +32,8 @@ class Server(models.Model):
     services_at = models.DateTimeField(null=True, blank=True, editable=False)
     # آخرین باری که agent فهرست دستگاه‌های آنلاینِ hbbs را فرستاد (حالت شنود اختیاری)؛ تا تازه است وضعیت دستگاه‌های قدیمی معلوم است
     peers_online_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # لاگ کانتینرهای سرویس‌ها (hbbs/hbbr) که agent می‌فرستد: {name: {container, error, at}}
+    log_sources = models.JSONField(default=dict, blank=True, editable=False)
     first_seen = models.DateTimeField(null=True, blank=True, editable=False)
     last_seen = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -84,6 +86,19 @@ class MetricSample(models.Model):
     class Meta:
         indexes = [models.Index(fields=["server", "ts"])]
         ordering = ["ts"]
+
+
+class ServiceLog(models.Model):
+    """یک خط لاگ کانتینر یک سرویس روی سرور پایش‌شده (از agent). برای هر سرویس فقط آخرین LOG_KEEP خط می‌ماند."""
+
+    server = models.ForeignKey(Server, on_delete=models.CASCADE, related_name="logs")
+    service = models.CharField(max_length=16)
+    ts = models.DateTimeField()
+    stream = models.CharField(max_length=4, default="out")  # out | err | meta
+    text = models.TextField()
+
+    class Meta:
+        indexes = [models.Index(fields=["server", "service", "id"], name="servicelog_tail_idx")]
 
 
 class AlertLevel(models.TextChoices):

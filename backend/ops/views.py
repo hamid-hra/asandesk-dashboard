@@ -12,6 +12,9 @@ from activity.service import record
 from backups.models import Operation
 from config.version import VERSION
 
+from monitoring import service_logs
+from monitoring.models import monitored_servers
+
 from . import control
 from .control import ControlError
 
@@ -156,8 +159,38 @@ class AgentsStartView(OwnerView):
         return Response(agent_shape(raw), status=status.HTTP_202_ACCEPTED)
 
 
+def remote_server(request):
+    """?server=<شناسهٔ سرور پایش‌شده> برای لاگ سرویس‌های آن سرور (از agent)؛ None = سرویس‌های خود پنل (control)."""
+    raw = request.query_params.get("server", "")
+    if not raw:
+        return None, None
+    try:
+        server = monitored_servers().filter(pk=int(raw)).first()
+    except ValueError:
+        server = None
+    if server is None:
+        return None, Response({"server": ["چنین سروری پیدا نشد."]}, status=status.HTTP_404_NOT_FOUND)
+    return server, None
+
+
+class LogSourcesView(OwnerView):
+    """منبع‌های «لاگ داکر»: خود پنل و هر سرور پایش‌شده‌ای که agent لاگ سرویس‌هایش را می‌فرستد."""
+
+    def get(self, request):
+        servers = [
+            {"id": s.pk, "name": s.name, "online": s.online, "services": service_logs.services_of(s)}
+            for s in monitored_servers().order_by("name")
+        ]
+        return Response({"sources": [{"id": None, "name": "پنل (همین سرور)", "online": True, "services": []}, *servers]})
+
+
 class ServicesView(OwnerView):
     def get(self, request):
+        server, bad = remote_server(request)
+        if bad:
+            return bad
+        if server is not None:
+            return Response({"services": service_logs.services_of(server)})
         try:
             return Response(control.call("GET", "/services"))
         except ControlError as e:
@@ -204,6 +237,14 @@ class LogsView(OwnerView):
         since = request.query_params.get("since", "")
         if since and not SINCE_RE.match(since):
             return Response({"since": ["بازهٔ زمانی نامعتبر است."]}, status=status.HTTP_400_BAD_REQUEST)
+        server, bad = remote_server(request)
+        if bad:
+            return bad
+        if server is not None:
+            known = {x["service"] for x in service_logs.services_of(server)}
+            if service != ALL and service not in known:
+                return Response({"service": ["این سرویس روی این سرور لاگی ندارد."]}, status=status.HTTP_404_NOT_FOUND)
+            return Response(service_logs.read(server, service, tail, since))
         try:
             if service == ALL:
                 return Response(merged_logs(tail, since))

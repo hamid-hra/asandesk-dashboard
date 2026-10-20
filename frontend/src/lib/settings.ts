@@ -351,11 +351,20 @@ export interface DockerLogLine {
   /** فقط در نمای «همهٔ سرویس‌ها» */
   service?: string;
 }
+/** منبع «لاگ داکر»: خود پنل (id = null) یا یک سرور پایش‌شده که agent لاگ سرویس‌هایش را می‌فرستد */
+export interface LogSource {
+  id: number | null;
+  name: string;
+  online: boolean;
+  services: DockerService[];
+}
 export interface DockerLogs {
   service: string;
   container: string;
   state: string;
   lines: DockerLogLine[];
+  /** سرور دور: علتی که agent لاگ را نخواند (مثلاً درایور لاگ json-file نیست) */
+  error?: string;
   /** نمای «همه»: سرویس‌هایی که لاگشان خوانده نشد */
   failed?: string[];
 }

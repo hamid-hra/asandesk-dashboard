@@ -42,8 +42,13 @@ export function BreakdownCard({ breakdown }: { breakdown: Overview["breakdown"] 
         <div className="empty">در این لحظه دستگاهی آنلاین نیست.</div>
       )}
       {breakdown && breakdown.legacy > 0 && !breakdown.legacy_known && (
-        <div style={{ padding: "0 22px 16px", fontSize: 12.5, color: "var(--faint)", lineHeight: 1.9 }}>
-          وضعیت {toFa(breakdown.legacy)} دستگاه قدیمی (بدون API) نامشخص است و در این شمار نیست. برای دیدنشان، حالت شنود ایجنت را روشن کنید (README ایجنت).
+        <div style={{ padding: "0 22px 16px", fontSize: 12.5, color: "var(--faint)", lineHeight: 1.9, display: "flex", flexDirection: "column", gap: 6 }}>
+          <span>وضعیت {toFa(breakdown.legacy)} دستگاه قدیمی (بدون API) نامشخص است و در این شمار نیست. برای دیدنشان، روی سرور hbbs (پوشه‌ای که ایجنت را clone کردید) این را بزنید؛ فقط کانتینر ایجنت تغییر می‌کند:</span>
+          {breakdown.online_command && (
+            <code dir="ltr" style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11.5, background: "var(--subtle)", borderRadius: 8, padding: "6px 8px", overflowWrap: "anywhere", color: "var(--text-2)" }}>
+              {breakdown.online_command}
+            </code>
+          )}
         </div>
       )}
     </div>

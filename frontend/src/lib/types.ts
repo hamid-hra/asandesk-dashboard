@@ -112,7 +112,7 @@ export interface Overview {
   points: Point[];
   servers: ServerRow[];
   /** دستگاه‌های آنلاین الان به تفکیک پلتفرم؛ [نام، تعداد] */
-  breakdown: { platform: [string, number][]; total: number; legacy: number; legacy_known: boolean } | null;
+  breakdown: { platform: [string, number][]; total: number; legacy: number; legacy_known: boolean; online_command?: string } | null;
   sessions_total: number | null;
   fail_rate: number | null;
   requests: { today: RequestCounts; range: RequestCounts };

@@ -88,6 +88,34 @@ class PeerSerializer(serializers.Serializer):
         return clean_ip(value)
 
 
+class LogLineSerializer(serializers.Serializer):
+    ts = serializers.CharField(max_length=40, allow_blank=True)
+    stream = serializers.ChoiceField(choices=["out", "err", "meta"], default="out")
+    text = serializers.CharField(max_length=4000, allow_blank=True, trim_whitespace=False)
+
+
+class ServiceLogSerializer(serializers.Serializer):
+    container = serializers.CharField(max_length=64, allow_blank=True, default="")
+    error = serializers.CharField(max_length=300, allow_blank=True, default="")
+    lines = LogLineSerializer(many=True, allow_empty=True, default=list)
+
+    def validate_lines(self, value):
+        if len(value) > 600:
+            raise serializers.ValidationError("at most 600 lines per service")
+        return value
+
+
+class LogsSerializer(serializers.Serializer):
+    """لاگ کانتینرهای سرویس‌ها (hbbs/hbbr) که agent از فایل json-file داکر می‌خواند."""
+
+    services = serializers.DictField(child=ServiceLogSerializer())
+
+    def validate_services(self, value):
+        if len(value) > MAX_SERVICES or any(not SERVICE_NAME.match(k) for k in value):
+            raise serializers.ValidationError("bad services")
+        return value
+
+
 class OnlineSerializer(serializers.Serializer):
     """شناسه‌های دستگاه‌هایی که agent در چند ثانیهٔ اخیر ثبت‌نام‌شان را در hbbs دیده است."""
 

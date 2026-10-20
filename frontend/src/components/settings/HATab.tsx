@@ -218,9 +218,9 @@ function ServerCard({ sv, canEdit, onEdit, onPromote, onMaintenance, onDelete }:
       {sv.key_state === "ok" && <div className={s.keyOk}><Icon d={I.key} size={15} />کلید عمومی: یکسان ✓</div>}
       {sv.key_state === "unknown" && <div className={s.keyUnknown}><Icon d={I.key} size={15} />کلید عمومی: نامشخص (agent کلید را گزارش نمی‌کند)</div>}
       {sv.key_state === "bad" && (
-        <div className={s.note} data-tone="danger">
+        <div className={s.note} data-tone="warn">
           <Icon d={I.alert} size={18} />
-          <span><b>کلید عمومی با سرور اصلی یکی نیست</b>کلاینت‌ها نمی‌توانند به این سرور وصل شوند. فایل id_ed25519 سرور اصلی را روی این سرور کپی کنید.</span>
+          <span><b>کلید عمومی با سرور اصلی یکی نیست</b>تا یکی نشود، این سرور در failover انتخاب نمی‌شود (کلاینت‌هایی که با کلید سرور اصلی تنظیم شده‌اند به آن وصل نمی‌شوند). هر وقت خواستید، id_ed25519 سرور اصلی را روی این سرور کپی کنید.</span>
         </div>
       )}
       <div className={s.checkTime}>آخرین بررسی سلامت: {sv.last_check ? agoText(sv.last_check) : "هنوز انجام نشده"}</div>
@@ -306,7 +306,7 @@ function ServerDialog({ server, existing, onClose, onDone }: { server: HAServerR
   const [role, setRole] = useState<"primary" | "backup">(existing === 0 ? "primary" : "backup");
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [draft, setDraft] = useState<{ id: number; token: string; command: string } | null>(null);
+  const [draft, setDraft] = useState<{ id: number; token: string; command: string; online_command?: string } | null>(null);
   const [checks, setChecks] = useState<CheckItem[] | null>(null);
   const [target, setTarget] = useState("");
   const flash = useToast();
@@ -338,8 +338,8 @@ function ServerDialog({ server, existing, onClose, onDone }: { server: HAServerR
         onDone("تغییرات ذخیره شد");
         return;
       }
-      const r = await api<{ server: { id: number }; token: string; command: string }>("/api/settings/ha/servers", { method: "POST", body: { ...f, role } });
-      setDraft({ id: r.server.id, token: r.token, command: r.command });
+      const r = await api<{ server: { id: number }; token: string; command: string; online_command?: string }>("/api/settings/ha/servers", { method: "POST", body: { ...f, role } });
+      setDraft({ id: r.server.id, token: r.token, command: r.command, online_command: r.online_command });
       setStep(2);
       runChecks(r.server.id);
     } catch (e) {
@@ -350,7 +350,7 @@ function ServerDialog({ server, existing, onClose, onDone }: { server: HAServerR
     }
   };
 
-  const criticalOk = !!checks && checks.every((c) => !c.critical || c.ok === true || (c.id === "key" && c.ok === null));
+  const criticalOk = !!checks && checks.every((c) => !c.critical || c.ok === true);
   const fields: [keyof typeof f, string, string][] = [
     ["name", "نام سرور", "tehran-2"],
     ["address", "آدرس IP یا دامنه", "185.143.232.24"],
@@ -426,6 +426,17 @@ function ServerDialog({ server, existing, onClose, onDone }: { server: HAServerR
               <button className={s.btnGhost} onClick={async () => (await copyText(draft.command)) && flash("دستور کپی شد")}>کپی</button>
             </div>
             <small className={s.muted}>مسیر <span dir="ltr" className="mono">/path/to/hbbs-data</span> را با پوشهٔ دادهٔ hbbs روی آن سرور عوض کنید.</small>
+            {draft.online_command && (
+              <>
+                <small className={s.muted}>
+                  اختیاری، برای نمایش آنلاین بودن دستگاه‌های قدیمی: بعد از نصب این را هم بزنید. فقط کانتینر ایجنت دسترسی خواندن بسته‌های ثبت‌نام را می‌گیرد؛ hbbs و hbbr و کانتینرهای دیگر دست نمی‌خورند و ایجنت سقف CPU و حافظه دارد.
+                </small>
+                <div className={s.cmd} dir="ltr">
+                  <code>{draft.online_command}</code>
+                  <button className={s.btnGhost} onClick={async () => (await copyText(draft.online_command!)) && flash("دستور کپی شد")}>کپی</button>
+                </div>
+              </>
+            )}
           </div>
           <div className={s.muted}>بررسی اتصال به <span dir="ltr" className="mono">{target}</span></div>
           {!checks && <div className={s.chk} data-st="run"><div><span className={s.mark}><span className={s.spin} /></span>در حال بررسی…</div></div>}
@@ -444,7 +455,7 @@ function ServerDialog({ server, existing, onClose, onDone }: { server: HAServerR
               </div>
             );
           })}
-          {checks && !criticalOk && <div className={s.note} data-tone="danger"><Icon d={I.alert} size={18} />تا وقتی بررسی‌های حیاتی (شبکه، پورت‌ها و کلید) موفق نشوند نمی‌توان سرور را اضافه کرد.</div>}
+          {checks && !criticalOk && <div className={s.note} data-tone="danger"><Icon d={I.alert} size={18} />تا وقتی بررسی‌های حیاتی (شبکه و پورت‌ها) موفق نشوند نمی‌توان سرور را اضافه کرد.</div>}
           {checks && criticalOk && <div className={s.note} data-tone="ok"><Icon d={I.check} size={18} />همهٔ بررسی‌های حیاتی موفق بود؛ می‌توانید سرور را اضافه کنید.</div>}
         </>
       )}

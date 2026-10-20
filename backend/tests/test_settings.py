@@ -266,3 +266,30 @@ def test_ha_server_row_shows_services_only_while_agent_is_online():
     Server.objects.filter(pk=mon.pk).update(last_seen=timezone.now() - timezone.timedelta(hours=1))
     sv = HAServer.objects.get(pk=sv.pk)
     assert ha_views.server_row(sv)["services"] is None
+
+
+@pytest.mark.django_db
+def test_key_mismatch_does_not_block_adding_but_keeps_the_server_out_of_failover(monkeypatch):
+    from monitoring.models import Server
+
+    c, _ = as_user(Role.OWNER, username="boss")
+    a = c.post("/api/settings/ha/servers", {"name": "old", "address": "10.0.0.1", "role": "primary"}, format="json").json()
+    assert "online_command" in a and "docker-compose.sniff.yml" in a["online_command"]
+    b = c.post("/api/settings/ha/servers", {"name": "new", "address": "10.0.0.2"}, format="json").json()
+    HAServer.objects.update(draft=False)
+    Server.objects.filter(pk=HAServer.objects.get(name="old").monitor_id).update(pubkey_fp="a" * 64)
+    Server.objects.filter(pk=HAServer.objects.get(name="new").monitor_id).update(pubkey_fp="b" * 64)
+    healthy = {"ports": {}, "latency": 10, "status": "ok"}
+    monkeypatch.setattr(checker, "probe_server", lambda s: healthy)
+
+    checks = {x["id"]: x for x in c.post(f"/api/settings/ha/servers/{b['server']['id']}/check").json()["checks"]}
+    assert checks["key"]["ok"] is False and checks["key"]["critical"] is False  # جلوی افزودن را نمی‌گیرد
+
+    # سرور اصلی قطع است و فقط سرور با کلید متفاوت سالم است: سرور فعال به آن نمی‌رود
+    def probe(s):
+        return {"ports": {}, "latency": None, "status": "down"} if s.name == "old" else healthy
+
+    monkeypatch.setattr(checker, "probe_server", probe)
+    for _ in range(HAConfig.get().fails + 1):
+        checker.run_checks()
+    assert not HAServer.objects.filter(name="new", serving=True).exists()

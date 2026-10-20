@@ -1,5 +1,6 @@
 """محاسبه داده‌های تب «سرور و منابع» از روی نمونه‌های ذخیره‌شده."""
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -12,6 +13,7 @@ from django.utils import timezone
 from clients.models import ConnSession
 from clients.stats import online_breakdown
 
+from .agent_commands import ONLINE_COMMAND
 from .models import MetricSample, Server, monitored_servers
 
 
@@ -222,7 +224,21 @@ def live_snapshot(server_id: int | None = None):
     return {"online": len(online), "total": len(servers), "aggregate": agg}
 
 
+_uptime_cache: dict = {"at": 0.0, "value": None}
+UPTIME_CACHE_SECONDS = 60
+
+
 def uptime_30d() -> float | None:
+    """آپتایم ۳۰ روز؛ سایدبار هر کاربر مدام می‌پرسد و شمارش ۳۰ روز نمونه گران است، پس یک دقیقه در حافظه می‌ماند."""
+    now = time.monotonic()
+    if _uptime_cache["at"] and now - _uptime_cache["at"] < UPTIME_CACHE_SECONDS:
+        return _uptime_cache["value"]
+    value = _uptime_30d()
+    _uptime_cache.update(at=now, value=value)
+    return value
+
+
+def _uptime_30d() -> float | None:
     """درصد دقیقه‌هایی از ۳۰ روز اخیر (یا از اولین گزارش) که دست‌کم یک گزارش داشته‌اند."""
     since = timezone.now() - timedelta(days=30)
     sql = f"""
@@ -252,7 +268,7 @@ def overview(range_id: str, server_id: int | None = None):
         "points": bucket_series(rng, now, chosen),
         "servers": servers_table(),
         # دستگاه‌های آنلاین الان به تفکیک پلتفرم
-        "breakdown": online_breakdown(),
+        "breakdown": {**online_breakdown(), "online_command": ONLINE_COMMAND},
         # نشست‌های موفقی که کلاینت‌ها در بازه گزارش داده‌اند (audit/conn)
         "sessions_total": in_range["ok"],
         "fail_rate": in_range["fail_rate"],

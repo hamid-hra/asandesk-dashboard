@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { Icon } from "@/components/Icon";
 import { fetcher } from "@/lib/api";
 import { toFa } from "@/lib/fa";
-import { copyText, type DockerLogs, type DockerService } from "@/lib/settings";
+import { copyText, type DockerLogs, type DockerService, type LogSource } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 
 import s from "./settings.module.css";
@@ -16,6 +16,7 @@ const TAILS = [100, 300, 1000, 2000];
 const SINCES: [string, string][] = [["", "از ابتدا"], ["10m", "۱۰ دقیقهٔ اخیر"], ["1h", "۱ ساعت اخیر"]];
 const SERVICE_LABEL: Record<string, string> = {
   backend: "backend (Django)", frontend: "frontend (Next.js)", nginx: "nginx", db: "دیتابیس", scheduler: "زمان‌بند", control: "control", "update-job": "کار به‌روزرسانی",
+  hbbs: "hbbs (سرور شناسه)", hbbr: "hbbr (رله)",
 };
 const ERROR_RE = /\b(error|exception|traceback|fatal|critical|panic|failed)\b|\s5\d\d\s/i;
 const WARN_RE = /\b(warn|warning|deprecated|timeout|retry)\b|\s4\d\d\s/i;
@@ -31,14 +32,20 @@ const ALL = "all";
 /** رنگ ثابت برچسب هر سرویس در نمای «همه» */
 const SERVICE_COLOR: Record<string, string> = {
   backend: "#5fd6a9", frontend: "#7aa7ff", nginx: "#e6c06e", db: "#c99bff", scheduler: "#ff9f7a", control: "#f08a99",
+  hbbs: "#6fd3e8", hbbr: "#e8a36f",
 };
 const colorOf = (svc: string) => SERVICE_COLOR[svc] ?? "#9fb4ad";
 
 const stateColor = (state: string) => (state === "running" ? "var(--ok)" : state === "restarting" ? "var(--warn)" : "var(--danger)");
 
-/** تنظیمات ← لاگ داکر (فقط مالک): لاگ هر سرویس پنل، با جست‌وجو و نمایش زنده. */
+/**
+ * تنظیمات ← لاگ داکر (فقط مالک): لاگ هر سرویس پنل یا hbbs/hbbr هر سرور پایش‌شده، با جست‌وجو و نمایش زنده.
+ * لاگ سرورهای دیگر را agent همان سرور از فایل لاگ داکر می‌خواند و هر چند ثانیه می‌فرستد.
+ */
 export function DockerLogsTab() {
   const flash = useToast();
+  // null = سرویس‌های خود پنل؛ عدد = سرور پایش‌شده
+  const [source, setSourceRaw] = useState<number | null>(null);
   const [service, setService] = useState(ALL);
   // نمای «همه»: پنهان‌کردن بعضی سرویس‌ها
   const [hidden, setHidden] = useState<string[]>([]);
@@ -50,13 +57,21 @@ export function DockerLogsTab() {
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true); // کاربر پایین لاگ است؟ پس با خط تازه همراه شود
 
-  const services = useSWR<{ services: DockerService[] }>("/api/settings/system/logs/services", fetcher, { refreshInterval: 15000 });
+  const sources = useSWR<{ sources: LogSource[] }>("/api/settings/system/logs/sources", fetcher, { refreshInterval: 30000 });
+  const sourceList = sources.data?.sources ?? [];
+  const setSource = (id: number | null) => {
+    setSourceRaw(id);
+    setService(ALL);
+    setHidden([]);
+  };
+  const sq = source ? `&server=${source}` : "";
+  const services = useSWR<{ services: DockerService[] }>(`/api/settings/system/logs/services${source ? `?server=${source}` : ""}`, fetcher, { refreshInterval: 15000 });
   const list = services.data?.services ?? [];
   const all = service === ALL;
   const current = all ? undefined : list.find((x) => x.service === service) ?? list[0];
   const target = all ? ALL : current?.service;
 
-  const url = target ? `/api/settings/system/logs?service=${target}&tail=${tail}${since ? `&since=${since}` : ""}` : null;
+  const url = target && list.length ? `/api/settings/system/logs?service=${target}&tail=${tail}${since ? `&since=${since}` : ""}${sq}` : null;
   const logs = useSWR<DockerLogs>(url, fetcher, { refreshInterval: live ? 3000 : 0, keepPreviousData: true });
 
   const lines = useMemo(() => {
@@ -71,12 +86,40 @@ export function DockerLogsTab() {
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [lines]);
 
+  const sourceBar = sourceList.length > 1 && (
+    <div className={s.people} role="tablist" aria-label="سرور">
+      {sourceList.map((x) => (
+        <button key={x.id ?? "panel"} role="tab" className={s.person} aria-selected={source === x.id} onClick={() => setSource(x.id)}>
+          <span className="dot" style={{ background: x.online ? "var(--ok)" : "var(--off)" }} />
+          <span>{x.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+
   if (services.error && !services.data) {
-    return <ErrorState onRetry={() => services.mutate()} />;
+    // control پنل در دسترس نیست؛ لاگ سرورهای دیگر از agent می‌آید و باید همچنان قابل انتخاب باشد
+    return (
+      <div className="card" style={{ overflow: "visible" }}>
+        {sourceBar}
+        <div style={{ padding: 18 }}>
+          <ErrorState onRetry={() => services.mutate()} />
+        </div>
+      </div>
+    );
   }
   if (!services.data) return <Skeleton rows={3} />;
   if (list.length === 0) {
-    return <Empty icon={I.terminal} title="سرویسی پیدا نشد" text="سرویس control کانتینرهای این پروژه را پیدا نکرد. مطمئن شوید پنل با docker compose بالا آمده است." />;
+    return (
+      <div className="card" style={{ overflow: "visible" }}>
+        {sourceBar}
+        {source ? (
+          <Empty icon={I.terminal} title="این سرور هنوز لاگی نفرستاده" text="ایجنت نسخهٔ ۲.۲ یا بالاتر لازم است (تنظیمات ← به‌روزرسانی پنل، یا git pull و docker compose up -d --build روی همان سرور). hbbs و hbbr باید داخل داکر با درایور لاگ پیش‌فرض (json-file) اجرا شوند." />
+        ) : (
+          <Empty icon={I.terminal} title="سرویسی پیدا نشد" text="سرویس control کانتینرهای این پروژه را پیدا نکرد. مطمئن شوید پنل با docker compose بالا آمده است." />
+        )}
+      </div>
+    );
   }
 
   const plain = lines.map((l) => `${l.ts}${l.service ? ` [${l.service}]` : ""} ${l.text}`).join("\n");
@@ -91,6 +134,7 @@ export function DockerLogsTab() {
 
   return (
     <div className="card" style={{ overflow: "visible" }}>
+      {sourceBar}
       <div className={s.people} role="tablist" aria-label="سرویس‌ها">
         <button role="tab" className={s.person} aria-selected={all} onClick={() => setService(ALL)} title="لاگ همهٔ سرویس‌ها با هم، به ترتیب زمان">
           <Icon d={I.layers} size={15} />
@@ -140,6 +184,11 @@ export function DockerLogsTab() {
             );
           })}
           {logs.data?.failed && logs.data.failed.length > 0 && <span className={s.err}>خوانده نشد: {logs.data.failed.join("، ")}</span>}
+        </div>
+      )}
+      {logs.data?.error && (
+        <div style={{ padding: "12px 18px 0" }}>
+          <div className={s.note} data-tone="warn"><Icon d={I.alert} size={18} /><span><b>agent لاگ این سرویس را نخواند</b>{logs.data.error}</span></div>
         </div>
       )}
       {logs.error && !logs.data ? (

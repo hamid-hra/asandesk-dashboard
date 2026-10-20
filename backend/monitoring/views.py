@@ -13,7 +13,8 @@ from clients.views import open_ticket_count
 
 from . import alerts, stats
 from .models import Alert, AlertLevel, MetricSample, Server, hash_token
-from .serializers import AlertSerializer, IngestSerializer, OnlineSerializer, PeersSerializer
+from . import service_logs
+from .serializers import AlertSerializer, IngestSerializer, LogsSerializer, OnlineSerializer, PeersSerializer
 
 HW_FIELDS = ("hostname", "cores", "ram_total", "disk_total", "net_capacity_bps", "agent_version", "pubkey_fp")
 _last_prune = 0.0
@@ -126,6 +127,21 @@ class OnlineIngestView(APIView):
         server.peers_online_at = timezone.now()
         server.save(update_fields=["peers_online_at"])
         return Response({"online": mark_online(list(set(ser.validated_data["ids"])))})
+
+
+class LogsIngestView(APIView):
+    """خط‌های تازهٔ لاگ کانتینرهای hbbs/hbbr از agent."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        server = server_from_token(request)
+        if server is None:
+            return Response({"detail": "invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+        ser = LogsSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        return Response({"stored": service_logs.store(server, ser.validated_data["services"])})
 
 
 class OverviewView(APIView):
