@@ -59,6 +59,11 @@ services:
       LOCAL_SERVER_REGION: ${LOCAL_SERVER_REGION:-محلی}
       # آدرس مخفی پنل؛ backend فقط برای فایل «اطلاعات ورود» کاربر تازه به آن نیاز دارد
       PANEL_KEY: ${PANEL_KEY:-}
+      # آسان دسک وب (README: «آسان دسک وب»)
+      WEB_RENDEZVOUS_HOST: ${WEB_RENDEZVOUS_HOST:-rd.asandesk.ir}
+      WEB_RS_PUBLIC_KEY: ${WEB_RS_PUBLIC_KEY:-joRoqzc0SDOHe61V9WrRORk4PqBVzBntfGtzveM3h8M=}
+      WEB_RELAY_WS_MAP: ${WEB_RELAY_WS_MAP:-}
+      WEB_DOWNLOAD_URL: ${WEB_DOWNLOAD_URL:-https://asandesk.ir/download}
     volumes:
       - releases:/data/releases
       - static:/data/static
@@ -127,9 +132,42 @@ services:
       - ./nginx/errors:/usr/share/nginx/errors:ro
       - releases:/data/releases:ro
       - static:/data/static:ro
+    # وب‌سوکت سرور شناسه و رله برای آسان دسک وب (درگاه‌های 21118 و 21119 روی همین میزبان، یا HBBS_IP)
+    extra_hosts:
+      - "hbbs-host:${HBBS_IP:-host-gateway}"
     depends_on:
       - backend
       - frontend
+
+  # آسان دسک وب: فایل‌های برنامهٔ وب (web.asandesk.ir). nginx اصلی درخواست‌ها را به این‌جا می‌فرستد.
+  web:
+    build:
+      context: ./web
+      network: host
+      args: *build-proxy
+    restart: unless-stopped
+
+  # درگاه آسان دسک وب: کد کاربر وب را تا وقتی صفحه باز است در hbbs ثبت می‌کند (فقط مسیر /ws/gw از nginx)
+  webgw:
+    build:
+      context: ./webgw
+      network: host
+      args: *build-proxy
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Tehran}
+      BACKEND_URL: http://backend:8000
+      # سرور شناسه (UDP و TCP روی 21116). پیش‌فرض: همین میزبان؛ اگر hbbs جای دیگری است HBBS_IP را بدهید
+      HBBS_HOST: ${WEBGW_HBBS_HOST:-hbbs-host}
+      HBBS_PORT: ${WEBGW_HBBS_PORT:-21116}
+      # رله‌ای که به کنترل‌کننده‌ها معرفی می‌شود؛ باید همان رله‌ای باشد که /ws/relay در nginx به آن می‌رسد
+      RELAY_SERVER: ${WEBGW_RELAY_SERVER:-rd.asandesk.ir}
+      MAX_ONLINE: ${WEBGW_MAX_ONLINE:-5000}
+    extra_hosts:
+      - "hbbs-host:${HBBS_IP:-host-gateway}"
+    depends_on:
+      backend:
+        condition: service_healthy
 
   # تنها بخشی که با داکر حرف می‌زند: لاگ کانتینرها و «به‌روزرسانی پنل» از داخل تنظیمات.
   # روی هیچ پورتی منتشر نمی‌شود؛ فقط backend، با توکنی که در volume مشترک است، می‌تواند صدایش کند.

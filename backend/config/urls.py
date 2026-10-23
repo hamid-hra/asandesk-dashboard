@@ -25,5 +25,7 @@ urlpatterns = [
     path("api/releases/", include("releases.urls")),
     path("api/", include("notices.urls")),
     path("api/search", SearchView.as_view()),
+    path("api/web/", include("webusers.urls")),
+    path("api/", include("webusers.panel_urls")),
     path("api/", include("clients.urls")),
 ]

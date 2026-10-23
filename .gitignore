@@ -11,3 +11,4 @@ frontend/out/
 .DS_Store
 *.tsbuildinfo
 frontend/next-env.d.ts
+web/dist/

@@ -1,0 +1,24 @@
+{
+  "name": "asandesk-webgw",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AsanDesk web gateway: registers web users' codes with hbbs over UDP and tells their browser when someone connects",
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "protobufjs": "^8.8.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
+    "typescript": "~5.9.3"
+  }
+}

@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "activity",
     "ops",
     "notices",
+    "webusers",
 ]
 
 MIDDLEWARE = [
@@ -172,6 +173,21 @@ FEEDBACK_MAX_IMAGES = 3
 FEEDBACK_MAX_IMAGE_BYTES = int(env("FEEDBACK_MAX_IMAGE_MB", "2")) * 1024 * 1024
 # Django بدنهٔ بزرگ‌تر از این را قبل از خواندن request.body رد می‌کند (پیش‌فرض ۲٫۵ مگابایت)
 DATA_UPLOAD_MAX_MEMORY_SIZE = FEEDBACK_MAX_BODY + 1024 * 1024
+
+# آسان دسک وب (web.asandesk.ir؛ backend/webusers). برنامهٔ وب این مقادیر را از /api/web/config می‌خواند.
+# کلید عمومی سرور شناسه (همان ORG_PUBLIC_KEY برنامهٔ دسکتاپ؛ id_ed25519.pub روی سرور hbbs)
+WEB_RS_PUBLIC_KEY = env("WEB_RS_PUBLIC_KEY", "joRoqzc0SDOHe61V9WrRORk4PqBVzBntfGtzveM3h8M=")
+# نشانی وب‌سوکت سرور شناسه و رله از دید مرورگر (nginx همین مسیرها را به 21118 و 21119 می‌رساند)
+WEB_ID_WS = env("WEB_ID_WS", "/ws/id")
+WEB_RELAY_WS = env("WEB_RELAY_WS", "/ws/relay")
+# اگر چند رله دارید: «نام رله=نشانی وب‌سوکت» با کاما، مثلا relay2.asandesk.ir=wss://relay2.asandesk.ir/ws/relay
+WEB_RELAY_WS_MAP = dict(x.split("=", 1) for x in env_list("WEB_RELAY_WS_MAP", "") if "=" in x)
+# درگاه وب (webgw): کد کاربر وب را در سرور شناسه ثبت می‌کند تا دیگران بتوانند صفحه‌اش را ببینند
+WEB_GW_WS = env("WEB_GW_WS", "/ws/gw")
+WEB_RENDEZVOUS_HOST = env("WEB_RENDEZVOUS_HOST", "rd.asandesk.ir")
+WEB_DOWNLOAD_URL = env("WEB_DOWNLOAD_URL", "https://asandesk.ir/download")
+WEB_SIGNUPS_PER_IP_HOUR = int(env("WEB_SIGNUPS_PER_IP_HOUR", "10"))
+WEB_LOGINS_PER_IP_MINUTE = int(env("WEB_LOGINS_PER_IP_MINUTE", "10"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
