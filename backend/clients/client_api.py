@@ -3,7 +3,8 @@
 کلاینت وقتی `api-server` تنظیم شده باشد این مسیرها را صدا می‌زند:
   /api/heartbeat، /api/sysinfo، /api/sysinfo_ver، /api/audit/conn،
   /api/login، /api/currentUser، /api/logout، /api/login-options
-به‌علاوه /api/client/feedback (ارسال بازخورد از داخل اپلیکیشن؛ پاسخی به کاربر برنمی‌گردد).
+به‌علاوه /api/client/feedback (ارسال بازخورد از داخل اپلیکیشن؛ پاسخی به کاربر برنمی‌گردد)
+و /api/client/conn-failure (دلیل اتصال ناموفق، از دستگاه کنترل‌کننده).
 
 بدنه درخواست‌ها JSON است ولی کلاینت همیشه Content-Type نمی‌فرستد، پس بدنه دستی خوانده می‌شود.
 احراز هویت دستگاه: جفت (id, uuid). uuid در اولین تماس ثبت می‌شود (TOFU).
@@ -12,6 +13,7 @@
 import base64
 import json
 import logging
+import time
 import zlib
 from datetime import timedelta
 
@@ -29,7 +31,8 @@ from rest_framework.throttling import SimpleRateThrottle
 from accounts.throttles import request_ip, within_limit
 
 from .models import (
-    AccessToken, Account, Client, ConnSession, FeedbackCategory, Priority, Ticket, TicketImage, TicketMessage, sha256,
+    CONN_FAILURE_GROUPS, AccessToken, Account, Client, ConnFailure, ConnSession, FeedbackCategory, Priority, Ticket,
+    TicketImage, TicketMessage, sha256,
 )
 
 log = logging.getLogger(__name__)
@@ -513,3 +516,47 @@ class ClientFeedbackView(ClientView):
         if dropped:
             rsp["attachments_dropped"] = True
         return JsonResponse(rsp, status=201)
+
+
+_last_failure_prune = 0.0
+
+
+def prune_conn_failures():
+    """Delete failure reports older than CONN_FAILURE_KEEP_DAYS, at most once an hour per process."""
+    global _last_failure_prune
+    if settings.CONN_FAILURE_KEEP_DAYS <= 0 or (_last_failure_prune and time.monotonic() - _last_failure_prune < 3600):
+        return
+    _last_failure_prune = time.monotonic()
+    ConnFailure.objects.filter(created_at__lt=timezone.now() - timedelta(days=settings.CONN_FAILURE_KEEP_DAYS)).delete()
+
+
+class ClientConnFailureView(ClientView):
+    """A connection attempt from this device failed (report_conn_failure in the app's src/asandesk.rs).
+
+    Body: id, uuid, peer (the ID that was dialled), reason (a code from CONN_FAILURE_GROUPS; anything
+    else is kept as «other»), detail (the app's error text), type, version. The app sends it only while
+    «ارسال اطلاعات برای پشتیبانی» is on, and at most once per peer and reason every 30 seconds.
+    """
+
+    def post(self, request):
+        data = read_json(request)
+        client, _ = device(data, request, create=True)
+        if client is None:
+            return JsonResponse({"error": "invalid id/uuid"}, status=401)
+        touch(client, request)
+        if client.blocked:
+            return JsonResponse({"error": "blocked"}, status=403)
+        since = timezone.now() - timedelta(hours=1)
+        if client.conn_failures.filter(created_at__gte=since).count() >= settings.CLIENT_CONN_FAILURES_PER_HOUR:
+            return JsonResponse({"error": "too many reports"}, status=429)
+        reason = s(data, "reason", 24)
+        ConnFailure.objects.create(
+            client=client,
+            peer_id=s(data, "peer", 32),
+            reason=reason if reason in CONN_FAILURE_GROUPS else "other",
+            detail=s(data, "detail", 200),
+            conn_type=s(data, "type", 12),
+            version=s(data, "version", 32),
+        )
+        prune_conn_failures()
+        return JsonResponse({"ok": True}, status=201)

@@ -162,6 +162,9 @@ CLIENT_FEEDBACK_PER_HOUR = int(env("CLIENT_FEEDBACK_PER_HOUR", "5"))
 # سقف به‌ازای هر آدرس IP (دستگاه را مهاجم می‌سازد، پس سقف هر دستگاه کافی نیست): دستگاه تازه و بازخورد در ساعت
 CLIENT_NEW_DEVICES_PER_IP_HOUR = int(env("CLIENT_NEW_DEVICES_PER_IP_HOUR", "100"))
 CLIENT_FEEDBACK_PER_IP_HOUR = int(env("CLIENT_FEEDBACK_PER_IP_HOUR", "30"))
+# دلیل اتصال‌های ناموفق که اپ گزارش می‌دهد: سقف هر دستگاه در ساعت و چند روز نگه‌داری (۰ = همیشه)
+CLIENT_CONN_FAILURES_PER_HOUR = int(env("CLIENT_CONN_FAILURES_PER_HOUR", "120"))
+CONN_FAILURE_KEEP_DAYS = int(env("CONN_FAILURE_KEEP_DAYS", "90"))
 # سقف کل فضای لاگ و تصویر بازخوردها؛ بعد از آن فقط متن بازخورد ذخیره می‌شود
 FEEDBACK_MAX_TOTAL_BYTES = int(env("FEEDBACK_MAX_TOTAL_MB", "2048")) * 1024 * 1024
 # بدنه: متن + لاگ (تا ~۲ مگابایت base64) + حداکثر ۳ تصویر (اپ هرکدام را زیر ~۰٫۶ مگابایت نگه می‌دارد)

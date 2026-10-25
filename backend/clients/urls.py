@@ -27,4 +27,5 @@ urlpatterns = [
     path("logout", client_api.LogoutView.as_view()),
     path("login-options", client_api.login_options),
     path("client/feedback", client_api.ClientFeedbackView.as_view()),
+    path("client/conn-failure", client_api.ClientConnFailureView.as_view()),
 ]

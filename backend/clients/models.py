@@ -180,6 +180,47 @@ class ConnSession(models.Model):
         return max(timedelta(0), (self.ended_at or timezone.now()) - self.authorized_at)
 
 
+# Reason codes the app sends for a failed connection (src/asandesk.rs conn_failure_reason in the client
+# repo) and whose side each one is on; the panel groups its chart by this side.
+CONN_FAILURE_GROUPS = {
+    "server_unreachable": "server",
+    "server_no_answer": "server",
+    "server_error": "server",
+    "relay_failed": "server",
+    "key_mismatch": "server",
+    "id_not_exist": "user",
+    "wrong_password": "user",
+    "wrong_2fa": "user",
+    "too_many_attempts": "user",
+    "offline": "peer",
+    "rejected": "peer",
+    "not_allowed": "peer",
+    "peer_closed": "peer",
+    "peer_unreachable": "network",
+    "timeout": "network",
+    "network": "network",
+    "dropped": "network",
+    "other": "other",
+}
+
+
+class ConnFailure(models.Model):
+    """A connection attempt that failed on the controlling device, and why (POST /api/client/conn-failure)."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="conn_failures")
+    # the ID the user tried to reach
+    peer_id = models.CharField(max_length=32, blank=True)
+    reason = models.CharField(max_length=24)
+    # the app's own error text, for the reasons the code alone does not explain
+    detail = models.CharField(max_length=200, blank=True)
+    conn_type = models.CharField(max_length=12, blank=True)
+    version = models.CharField(max_length=32, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
 class TicketStatus(models.TextChoices):
     """بازخورد فقط «جدید» یا «بررسی‌شده» است؛ به کاربر پاسخی داده نمی‌شود."""
 

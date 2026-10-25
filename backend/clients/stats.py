@@ -16,7 +16,7 @@ from monitoring.models import monitored_servers
 from releases.models import Channel
 from releases.services import latest_release
 
-from .models import Client, ConnSession, Ticket, TicketStatus, platform_of
+from .models import CONN_FAILURE_GROUPS, Client, ConnFailure, ConnSession, Ticket, TicketStatus, platform_of
 
 
 def close_stale_sessions():
@@ -518,4 +518,57 @@ def install_charts(days: int = 90) -> dict:
             key=lambda x: -x["installs"],
         ),
         "daily": series,
+    }
+
+
+def failure_charts(days: int = 30, recent: int = 30) -> dict:
+    """Failed connection attempts the apps reported in the last `days` days: per day and side
+    (server / user / peer / network / other), per reason, and the latest ones.
+
+    `sessions` is the number of sessions that did start in the same window (reported by the controlled
+    side), so the panel can show roughly how many attempts fail.
+    """
+    tz = timezone.get_current_timezone()
+    today = timezone.localdate()
+    first_day = today - timedelta(days=days - 1)
+    start = timezone.make_aware(datetime.combine(first_day, time.min))
+    qs = ConnFailure.objects.filter(created_at__gte=start)
+
+    per_day: dict = {}
+    for row in qs.annotate(d=TruncDate("created_at", tzinfo=tz)).values("d", "reason").annotate(n=Count("id")):
+        day = per_day.setdefault(row["d"], {})
+        group = CONN_FAILURE_GROUPS.get(row["reason"], "other")
+        day[group] = day.get(group, 0) + row["n"]
+    daily = []
+    for i in range(days):
+        d = first_day + timedelta(days=i)
+        groups = per_day.get(d, {})
+        daily.append({"date": d.isoformat(), "total": sum(groups.values()), "groups": groups})
+
+    reasons = [
+        {"reason": r["reason"], "group": CONN_FAILURE_GROUPS.get(r["reason"], "other"), "count": r["n"],
+         "devices": r["devices"], "peers": r["peers"]}
+        for r in qs.order_by().values("reason").annotate(
+            n=Count("id"), devices=Count("client", distinct=True), peers=Count("peer_id", distinct=True)
+        ).order_by("-n", "reason")
+    ]
+    groups: dict[str, int] = {}
+    for r in reasons:
+        groups[r["group"]] = groups.get(r["group"], 0) + r["count"]
+    day_ago = timezone.now() - timedelta(days=1)
+    return {
+        "days": days,
+        "total": sum(groups.values()),
+        "last_24h": qs.filter(created_at__gte=day_ago).count(),
+        "devices": qs.values("client").distinct().count(),
+        "sessions": ConnSession.objects.filter(authorized_at__gte=start).count(),
+        "groups": groups,
+        "reasons": reasons,
+        "daily": daily,
+        "recent": [
+            {"at": f.created_at.isoformat(), "device": f.client.rd_id, "device_name": f.client.display_name,
+             "peer": f.peer_id, "reason": f.reason, "group": CONN_FAILURE_GROUPS.get(f.reason, "other"),
+             "detail": f.detail, "type": f.conn_type, "version": f.version}
+            for f in qs.select_related("client", "client__account")[:recent]
+        ],
     }

@@ -10,6 +10,7 @@ import { fmt, pctText, toFa } from "@/lib/fa";
 import type { ChartPlatform, ClientCharts } from "@/lib/types";
 
 import s from "./charts.module.css";
+import { FailuresSection } from "./FailuresView";
 import { InstallsChart } from "./InstallsChart";
 import { Radar, type RadarSeries } from "./Radar";
 import { RadialBars, type RadialItem } from "./RadialBars";
@@ -184,6 +185,8 @@ export function ClientChartsView({ data, error, onRetry }: { data: ClientCharts 
           </div>
         </ChartCard>
       </div>
+
+      <FailuresSection data={data.failures} />
     </div>
   );
 }

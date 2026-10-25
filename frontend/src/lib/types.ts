@@ -416,4 +416,48 @@ export interface ClientCharts {
   platforms: ChartPlatform[];
   versions: ChartVersion[];
   daily: ChartDay[];
+  failures: ConnFailures;
+}
+
+/** Whose side a failed connection is on (CONN_FAILURE_GROUPS in backend/clients/models.py) */
+export type FailureGroup = "server" | "user" | "peer" | "network" | "other";
+
+export interface FailureDay {
+  date: string;
+  total: number;
+  groups: Partial<Record<FailureGroup, number>>;
+}
+
+export interface FailureReason {
+  reason: string;
+  group: FailureGroup;
+  count: number;
+  devices: number;
+  peers: number;
+}
+
+export interface FailureRow {
+  at: string;
+  device: string;
+  device_name: string;
+  peer: string;
+  reason: string;
+  group: FailureGroup;
+  detail: string;
+  type: string;
+  version: string;
+}
+
+/** Failed connection attempts the apps reported, «failures» in /api/clients/charts */
+export interface ConnFailures {
+  days: number;
+  total: number;
+  last_24h: number;
+  devices: number;
+  /** sessions that did start in the same window (reported by the controlled side) */
+  sessions: number;
+  groups: Partial<Record<FailureGroup, number>>;
+  reasons: FailureReason[];
+  daily: FailureDay[];
+  recent: FailureRow[];
 }

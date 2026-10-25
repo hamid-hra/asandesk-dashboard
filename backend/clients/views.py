@@ -102,10 +102,10 @@ class ClientStatsView(APIView):
 
 
 class ClientChartsView(APIView):
-    """Installs by version, platform and day for the «نمودارها» view (needs the clients section)."""
+    """Installs by version, platform and day, and why connections fail, for the «نمودارها» view (needs the clients section)."""
 
     def get(self, request):
-        return Response(stats.install_charts())
+        return Response({**stats.install_charts(), "failures": stats.failure_charts()})
 
 
 class ClientDetailView(APIView):
