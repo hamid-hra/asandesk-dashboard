@@ -41,6 +41,7 @@ export const ConnType = { DEFAULT_CONN: 0 } as const;
 export const PunchFailure = { ID_NOT_EXIST: 0, OFFLINE: 2, LICENSE_MISMATCH: 3, LICENSE_OVERUSE: 4 } as const;
 export const BoolOption = { NotSet: 0, No: 1, Yes: 2 } as const;
 export const ImageQuality = { NotSet: 0, Low: 2, Balanced: 3, Best: 4 } as const;
+export const PreferCodec = { Auto: 0, VP9: 1, H264: 2, H265: 3, VP8: 4, AV1: 5 } as const;
 export const KeyboardMode = { Legacy: 0, Map: 1, Translate: 2 } as const;
 export const Permission = { Keyboard: 0, Clipboard: 2, Audio: 3, File: 4, Restart: 5, Recording: 6, BlockInput: 7 } as const;
 

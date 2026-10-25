@@ -12,8 +12,43 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="آسان دسک" />
     <title>آسان دسک وب</title>
+    <script src="/boot.js"></script>
+    <!-- لودینگ آغازین (src/splash.ts): همان AsanLoader برنامه، پیش از رسیدن فایل‌های برنامه -->
+    <style>
+      #splash { --sp-fg: #29a37a; --sp-line: #e2e8e8; --sp-bar: #26a379; position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; background: #f1f4f4; transition: opacity 0.35s ease; }
+      :root[data-theme='dark'] #splash { --sp-fg: #2fbf8e; --sp-line: #26312f; --sp-bar: #3ec08d; background: #0a100f; }
+      #splash.sp-gone { opacity: 0; pointer-events: none; }
+      .sp-mark { position: relative; width: 150px; height: 150px; }
+      .sp-ring { position: absolute; inset: 8%; border-radius: 50%; border: 3px solid var(--sp-fg); animation: spPulse 2.4s ease-out infinite; }
+      .sp-svg { position: relative; width: 100%; height: 100%; overflow: visible; animation: spBreath 2.4s ease-in-out infinite; }
+      .sp-spin, .sp-top, .sp-bot { transform-box: view-box; transform-origin: 50% 50%; animation: 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+      .sp-spin { animation-name: spSpin; }
+      .sp-top { animation-name: spTop; fill: var(--sp-fg); }
+      .sp-bot { animation-name: spBot; fill: var(--sp-fg); }
+      .sp-track { width: 140px; height: 3px; border-radius: 3px; background: var(--sp-line); overflow: hidden; }
+      .sp-bar { width: 50%; height: 100%; border-radius: 3px; background: var(--sp-bar); animation: spBar 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+      @keyframes spSpin { 0%, 14% { transform: rotate(0deg); } 74%, 100% { transform: rotate(180deg); } }
+      @keyframes spTop { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(-70px, -70px); } 78% { transform: translate(10px, 10px); } 86%, 100% { transform: translate(0, 0); } }
+      @keyframes spBot { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(70px, 70px); } 78% { transform: translate(-10px, -10px); } 86%, 100% { transform: translate(0, 0); } }
+      @keyframes spPulse { 0%, 76% { transform: scale(0.6); opacity: 0; } 80% { opacity: 0.55; } 100% { transform: scale(1.5); opacity: 0; } }
+      @keyframes spBreath { 0%, 100% { transform: scale(1); } 78% { transform: scale(0.94); } 86% { transform: scale(1.04); } }
+      @keyframes spBar { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+      @media (prefers-reduced-motion: reduce) { .sp-spin, .sp-top, .sp-bot, .sp-ring, .sp-svg { animation: none; } .sp-ring { opacity: 0; } }
+    </style>
   </head>
   <body>
+    <div id="splash" role="status" aria-label="آسان دسک">
+      <div class="sp-mark">
+        <div class="sp-ring"></div>
+        <svg class="sp-svg" viewBox="0 0 1000 1000" aria-hidden="true">
+          <g class="sp-spin">
+            <polygon class="sp-top" points="472,133 705,366 629,501 458,331 229,560 137,467" />
+            <polygon class="sp-bot" points="776,443 868,535 533,870 300,636 376,502 546,672" />
+          </g>
+        </svg>
+      </div>
+      <div class="sp-track"><div class="sp-bar"></div></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

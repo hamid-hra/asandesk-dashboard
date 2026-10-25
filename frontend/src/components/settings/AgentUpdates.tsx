@@ -7,11 +7,12 @@ import { Icon } from "@/components/Icon";
 import { api, fetcher } from "@/lib/api";
 import { toFa } from "@/lib/fa";
 import { whenText } from "@/lib/people";
-import { type AgentsInfo, jStamp } from "@/lib/settings";
+import { type AgentsInfo } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 
 import s from "./settings.module.css";
 import { errText, I } from "./ui";
+import { JobStatusRow, UpdateProgressDialog } from "./UpdateProgress";
 
 const Ver = ({ v }: { v: string | null }) => (v ? <span dir="ltr" className="mono">{v}</span> : <span>—</span>);
 
@@ -24,8 +25,9 @@ export function AgentUpdates() {
   const flash = useToast();
   const [checking, setChecking] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
+  const [progressOpen, setProgressOpen] = useState(false);
   // تابع ثابت: با تابع تازه در هر رندر SWR تایمرش را از نو می‌سازد
-  const refreshInterval = useCallback((latest?: AgentsInfo) => (latest?.job?.state === "running" ? 3000 : 30000), []);
+  const refreshInterval = useCallback((latest?: AgentsInfo) => (latest?.job?.state === "running" ? 2000 : 30000), []);
   const { data, mutate } = useSWR<AgentsInfo>("/api/settings/system/update/agents", fetcher, { refreshInterval, keepPreviousData: true });
 
   if (!data || !data.control.online) return null;
@@ -46,7 +48,7 @@ export function AgentUpdates() {
     setStarting(project);
     try {
       await mutate(await api<AgentsInfo>("/api/settings/system/update/agents/start", { method: "POST", body: { project } }), { revalidate: false });
-      flash("به‌روزرسانی ایجنت شروع شد");
+      setProgressOpen(true);
     } catch (e) {
       flash(errText(e));
     } finally {
@@ -107,19 +109,17 @@ export function AgentUpdates() {
         </div>
       ))}
 
-      {job && (
-        <div className={s.note} data-tone={job.state === "failed" ? "danger" : job.state === "ok" ? "ok" : "info"}>
-          {job.state === "running" ? <span className={s.spin} /> : <Icon d={job.state === "ok" ? I.check : I.alert} size={18} />}
-          <span>
-            <b>{job.state === "running" ? "به‌روزرسانی ایجنت در جریان است…" : job.state === "ok" ? "ایجنت به‌روز شد" : "به‌روزرسانی ایجنت ناموفق بود"}</b>
-            {job.started_at && <>شروع: {jStamp(job.started_at)}</>}
-          </span>
-        </div>
-      )}
-      {job && (job.state === "failed" || running) && job.log && (
-        <div className={s.jobLog} dir="ltr" role="log" aria-label="لاگ به‌روزرسانی ایجنت">
-          <pre>{job.log}</pre>
-        </div>
+      {job && <JobStatusRow kind="agent" job={job} onOpen={() => setProgressOpen(true)} />}
+
+      {job && progressOpen && (
+        <UpdateProgressDialog kind="agent" title="به‌روزرسانی ایجنت" job={job} onClose={() => setProgressOpen(false)}>
+          {job.state === "failed" && (
+            <div className={s.note} data-tone="danger">
+              <Icon d={I.alert} size={18} />
+              <span><b>مرحله‌ای خطا داد</b>لاگ زیر علتش را نشان می‌دهد؛ ایجنت فعلی معمولاً همان‌طور که بود کار می‌کند.</span>
+            </div>
+          )}
+        </UpdateProgressDialog>
       )}
     </div>
   );

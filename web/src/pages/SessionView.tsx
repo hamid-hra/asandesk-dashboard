@@ -200,7 +200,7 @@ export function SessionView({
       >
         <canvas
           ref={canvasRef}
-          style={{ visibility: connected ? 'visible' : 'hidden' }}
+          style={{ visibility: connected && state?.hasVideo ? 'visible' : 'hidden' }}
           onPointerMove={onPointer}
           onPointerDown={onPointer}
           onPointerUp={onPointer}
@@ -213,6 +213,7 @@ export function SessionView({
             <div className="ltr num" style={{ color: '#eef6f3', fontWeight: 700 }}>{formatId(peerId)}</div>
             {state?.delay != null && <div className="ltr num">{state.delay}ms</div>}
             <div className="ltr num">{state?.fps ?? 0} fps</div>
+            {state?.codec && <div className="ltr num">{state.codec}</div>}
           </div>
           <div className="rail-sep" />
           <button className={`rail-btn${panel === 'display' ? ' open' : ''}`} title={t('rail_display_settings')} onClick={() => setPanel(panel === 'display' ? null : 'display')}>
@@ -294,6 +295,14 @@ export function SessionView({
         />
       )}
 
+      {connected && !state?.hasVideo && (
+        <div className="session-overlay" style={{ pointerEvents: 'none' }}>
+          <div className="session-card">
+            <AsanLoader small label={t(state?.videoStalled ? 'st_no_video' : 'st_waiting_video')} />
+            {state?.videoStalled && <p style={{ fontSize: 12.5 }}>{t('st_no_video_hint')}</p>}
+          </div>
+        </div>
+      )}
       {connected && !state?.keyboard && <div className="session-hint">{t('view_only_peer')}</div>}
       {connected && state?.keyboard && !focused && panel === null && <div className="session-hint">{t('focus_hint')}</div>}
 

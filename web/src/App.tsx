@@ -5,6 +5,7 @@ import { t, useLang } from './i18n';
 import { AuthPage } from './pages/AuthPage';
 import { HomePage } from './pages/HomePage';
 import { AsanLoader } from './loader';
+import { hideSplash } from './splash';
 import { ToastHost } from './ui';
 
 type Boot = { phase: 'loading' } | { phase: 'error' } | { phase: 'ready'; cfg: WebConfig; me: Me | null };
@@ -28,6 +29,10 @@ export function App() {
   };
 
   useEffect(load, []);
+  // صفحهٔ ورود یا خطا همین حالا آماده است؛ صفحهٔ اصلی خودش وقتی آماده شد لودینگ آغازین را برمی‌دارد
+  useEffect(() => {
+    if (boot.phase === 'error' || (boot.phase === 'ready' && !boot.me)) hideSplash();
+  }, [boot]);
 
   if (boot.phase === 'loading') return <AsanLoader full label={t('st_connecting')} />;
   if (boot.phase !== 'ready') {

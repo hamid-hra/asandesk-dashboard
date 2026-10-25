@@ -354,14 +354,12 @@
 @media (max-width: 560px) { .readMeter { display: none; } }
 
 /* ---------- بطری به‌روزرسانی پنل ---------- */
-.jobHero { display: flex; align-items: center; gap: 28px; padding: 8px 4px; }
-.jobHero[data-state="running"] { padding: 18px 8px; }
-.jobInfo { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
 .jobTitle { font-size: 16px; }
 .jobPct { font-size: 34px; font-weight: 800; color: var(--accent); line-height: 1.1; font-variant-numeric: tabular-nums; }
 .jobStage { font-size: 13.5px; color: var(--text-2); }
-.jobActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-@media (max-width: 560px) { .jobHero { flex-direction: column; align-items: center; text-align: center; } .jobInfo { align-items: center; } }
+/* پنجرهٔ پیشرفت به‌روزرسانی (UpdateProgress.tsx): نشان پرشونده وسط، زیرش درصد و مرحله */
+.progHero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 6px 0 2px; }
+.progHero .jobTitle { margin-top: 6px; }
 
 /* ---------- لاگ داکر: همهٔ سرویس‌ها ---------- */
 .svcFilter { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--divider); }

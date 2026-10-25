@@ -1,4 +1,5 @@
 // پخش تصویر: فریم‌های VP9/VP8/AV1/H264 با WebCodecs رمزگشایی و روی canvas کشیده می‌شوند
+import { alog } from '../log';
 import type { Msg } from './proto';
 
 type CodecKey = 'vp9s' | 'vp8s' | 'av1s' | 'h264s' | 'h265s';
@@ -46,6 +47,9 @@ export class VideoSink {
   private ts = 0;
   private ctx: CanvasRenderingContext2D | null;
   frames = 0;
+  /** برای لاگ وقتی تصویر نمی‌آید: چند بستهٔ تصویر و چند فریم کلیدی رسیده */
+  chunks = 0;
+  keys = 0;
   /** فریم کلیدی لازم است (بعد از خطا یا تغییر کدک) */
   onNeedKeyframe: (() => void) | null = null;
   onSize: ((w: number, h: number) => void) | null = null;
@@ -61,13 +65,23 @@ export class VideoSink {
     this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
   }
 
+  get codecName(): string {
+    return this.codec ? this.codec.replace(/s$/, '').toUpperCase() : '';
+  }
+
   push(vf: Msg) {
     const kind = vf.union as CodecKey | undefined;
-    if (this.dead || !kind || !(kind in CODEC_STRING)) return;
+    if (this.dead) return;
+    if (!kind || !(kind in CODEC_STRING)) {
+      if (this.chunks++ === 0) alog('video: unsupported frame type', kind ?? 'none');
+      return;
+    }
     if (kind !== this.codec || !this.decoder || this.decoder.state === 'closed') this.configure(kind);
     const decoder = this.decoder;
     if (!decoder) return;
     for (const f of vf[kind].frames || []) {
+      this.chunks += 1;
+      if (f.key) this.keys += 1;
       if (this.waitKey && !f.key) continue;
       this.waitKey = false;
       // صف رمزگشا بیش از حد پر شده: یک فریم کلیدی تازه می‌خواهیم و تا آن موقع فریم‌ها را دور می‌ریزیم
@@ -78,7 +92,8 @@ export class VideoSink {
       this.ts += 16_667;
       try {
         decoder.decode(new EncodedVideoChunk({ type: f.key ? 'key' : 'delta', timestamp: this.ts, data: f.data }));
-      } catch {
+      } catch (e) {
+        alog('video: decode threw', kind, e instanceof Error ? e.message : String(e));
         this.resetForKeyframe();
         return;
       }
@@ -87,15 +102,20 @@ export class VideoSink {
 
   private configure(kind: CodecKey) {
     this.close();
+    if (kind !== this.codec) alog('video: codec', kind);
     this.codec = kind;
     this.waitKey = true;
     try {
       this.decoder = new VideoDecoder({
         output: (frame) => this.draw(frame),
-        error: () => this.resetForKeyframe(),
+        error: (e) => {
+          alog('video: decoder error', kind, e.message);
+          this.resetForKeyframe();
+        },
       });
       this.decoder.configure({ codec: CODEC_STRING[kind], optimizeForLatency: true });
-    } catch {
+    } catch (e) {
+      alog('video: configure failed', kind, e instanceof Error ? e.message : String(e));
       this.decoder = null;
     }
     this.onNeedKeyframe?.();
@@ -108,6 +128,7 @@ export class VideoSink {
     this.failures = this.failures.filter((t) => now - t < 10_000);
     this.failures.push(now);
     if (this.failures.length > 5) {
+      alog('video: too many decoder errors', kind);
       this.dead = true;
       this.onFatal?.();
       return;
@@ -119,7 +140,8 @@ export class VideoSink {
     try {
       const w = frame.displayWidth;
       const h = frame.displayHeight;
-      if (this.canvas.width !== w || this.canvas.height !== h) {
+      if (this.canvas.width !== w || this.canvas.height !== h || this.frames === 0) {
+        if (this.frames === 0) alog('video: first frame', this.codec, `${w}x${h}`);
         this.canvas.width = w;
         this.canvas.height = h;
         this.onSize?.(w, h);

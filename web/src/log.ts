@@ -16,7 +16,8 @@ export function logText(): string {
   return `${lines.join('\n')}\n`;
 }
 
-if (typeof window !== 'undefined') {
+// آزمون‌ها (test/e2e.test.ts) یک window ساختگی بی‌رویداد دارند
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   alog('start', navigator.userAgent);
   window.addEventListener('error', (e) => alog('error', e.message, `${e.filename}:${e.lineno}`));
   window.addEventListener('unhandledrejection', (e) => alog('unhandled', e.reason instanceof Error ? e.reason : String(e.reason)));

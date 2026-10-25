@@ -9,6 +9,7 @@ import { webCodecsAvailable } from '../net/video';
 import { AsanLoader, AsanSpinner } from '../loader';
 import { alog } from '../log';
 import { installPromptNow, onInstallPrompt, promptInstall } from '../pwa';
+import { hideSplash } from '../splash';
 import { Telemetry } from '../telemetry';
 import { FeedbackDialog } from './FeedbackDialog';
 import { DialogTitle, Menu, Modal, PasswordInput, QrCode, copyText, toast } from '../ui';
@@ -157,6 +158,15 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
       gwRef.current?.start();
     }
   }, [deviceBlocked]);
+
+  // لودینگ آغازین تا وقتی دستگاه‌ها آمده‌اند و وضعیت درگاه معلوم است؛ حداکثر چند ثانیه
+  useEffect(() => {
+    if (devicesLoaded && gwState !== 'connecting') hideSplash();
+  }, [devicesLoaded, gwState]);
+  useEffect(() => {
+    const timer = window.setTimeout(hideSplash, 6000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const reload = () => {
     alog('reload');

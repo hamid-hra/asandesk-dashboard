@@ -4,8 +4,9 @@ import { b64decode, b64encode, loginHash, passwordH1 } from './crypto';
 import { ctrlAltDel, keyEventsFor, lockScreen, modifiersOf, typeText } from './keys';
 import { ConnectError, connectToPeer } from './rendezvous';
 import { WsTransport } from './transport';
-import { BoolOption, ImageQuality, PROTOCOL_VERSION, Permission, type Msg } from './proto';
+import { BoolOption, ImageQuality, PROTOCOL_VERSION, Permission, PreferCodec, type Msg } from './proto';
 import { VideoSink, decodeAbility } from './video';
+import { alog } from '../log';
 
 export type SessionPhase =
   | 'connecting'
@@ -43,6 +44,12 @@ export interface SessionState {
   keyboard: boolean;
   delay: number | null;
   fps: number;
+  /** نام کدک تصویر (VP9، AV1، …) برای نوار کناری */
+  codec: string;
+  /** اولین فریم تصویر رسیده و کشیده شده */
+  hasVideo: boolean;
+  /** چند بار درخواست تصویر داده شد و هنوز چیزی نرسیده */
+  videoStalled: boolean;
 }
 
 export type Quality = 'speed' | 'balanced' | 'best';
@@ -74,8 +81,9 @@ function geom(d: Msg): DisplayGeom {
 export class RemoteSession {
   state: SessionState = {
     phase: 'connecting', message: 'st_connecting', detail: '', passwordError: false, peer: null,
-    keyboard: true, delay: null, fps: 0,
+    keyboard: true, delay: null, fps: 0, codec: '', hasVideo: false, videoStalled: false,
   };
+  private noVideoChecks = 0;
   private conn: WsTransport | null = null;
   private video: VideoSink;
   private hash: { salt: string; challenge: string } | null = null;
@@ -100,6 +108,11 @@ export class RemoteSession {
     this.video = new VideoSink(canvas);
     this.video.onNeedKeyframe = () => this.conn?.send({ misc: { refresh_video: true } });
     this.video.onFatal = () => this.fail('err_codec');
+    this.video.onSize = () => {
+      if (!this.state.hasVideo || this.state.codec !== this.video.codecName) {
+        this.set({ hasVideo: true, videoStalled: false, codec: this.video.codecName });
+      }
+    };
   }
 
   subscribe(fn: (s: SessionState) => void): () => void {
@@ -145,6 +158,17 @@ export class RemoteSession {
       this.lastFrames = this.video.frames;
       if (fps !== this.state.fps) this.set({ fps });
     });
+    this.every(3000, () => this.checkVideo());
+  }
+
+  /** وصل شده‌ایم ولی تصویری کشیده نشده: دوباره فریم کلیدی می‌خواهیم و وضعیت را در لاگ (همراه بازخورد) می‌نویسیم */
+  private checkVideo() {
+    if (this.state.phase !== 'connected' || this.video.frames > 0) return;
+    this.noVideoChecks += 1;
+    const v = this.video;
+    alog('video: nothing drawn yet', `${this.noVideoChecks * 3}s`, `codec=${v.codecName || '-'}`, `chunks=${v.chunks}`, `keys=${v.keys}`);
+    if (this.noVideoChecks <= 5) this.conn?.send({ misc: { refresh_video: true } });
+    if (this.noVideoChecks === 5) this.set({ videoStalled: true });
   }
 
   private every(ms: number, fn: () => void) {
@@ -180,6 +204,7 @@ export class RemoteSession {
         this.onMisc(m.misc);
         break;
       case 'message_box':
+        alog('peer message', m.message_box?.msgtype || '', m.message_box?.title || '', m.message_box?.text || '');
         if (m.message_box?.msgtype?.includes('error')) this.fail('err_other', m.message_box.text || '');
         break;
       default:
@@ -224,7 +249,9 @@ export class RemoteSession {
             ability_av1: ability.av1 ? 1 : 0,
             ability_h264: ability.h264 ? 1 : 0,
             ability_h265: 0,
-            prefer: 0,
+            // بی‌ترجیح، دستگاه مقابل وقتی همه AV1 بخوانند AV1 می‌فرستد؛ VP9 همان کدکی است که در هر دو جهت
+            // آزموده شده (طرف مقابل همیشه VP9 نرم‌افزاری دارد)
+            prefer: PreferCodec.VP9,
           },
         },
       },
@@ -276,8 +303,17 @@ export class RemoteSession {
           /* ignore */
         }
       }
-      this.onPeerInfo(lr.peer_info);
+      const pi = lr.peer_info;
+      const dims = (pi.displays || []).map((d: Msg) => `${d.width}x${d.height}`).join(',');
+      alog('peer', pi.platform || '-', pi.version || '-', `displays=${dims}`, `current=${pi.current_display || 0}`, `encoding=${JSON.stringify(pi.encoding ?? null)}`);
+      this.onPeerInfo(pi);
       this.set({ phase: 'connected', message: '' });
+      // ویندوزی با چند نشست (RDP): دستگاه مقابل تا انتخاب نشست تصویری نمی‌فرستد؛ برنامهٔ دسکتاپ می‌پرسد، ما همان نشست فعلی را می‌خواهیم
+      const sessions = pi.windows_sessions?.sessions || [];
+      if (sessions.length > 1) {
+        alog('peer windows sessions', sessions.length, 'picking current', pi.windows_sessions.current_sid);
+        this.conn?.send({ misc: { selected_sid: pi.windows_sessions.current_sid || 0 } });
+      }
       this.conn?.send({ misc: { refresh_video: true } });
     }
   }

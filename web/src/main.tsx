@@ -8,6 +8,7 @@ import './styles.css';
 import './theme';
 import './log';
 import './pwa';
+import './splash';
 import { App } from './App';
 
 createRoot(document.getElementById('root')!).render(

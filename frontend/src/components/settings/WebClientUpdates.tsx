@@ -7,11 +7,12 @@ import { Icon } from "@/components/Icon";
 import { api, fetcher } from "@/lib/api";
 import { toFa } from "@/lib/fa";
 import { whenText } from "@/lib/people";
-import { jStamp, type WebClientInfo } from "@/lib/settings";
+import { type WebClientInfo } from "@/lib/settings";
 import { useToast } from "@/lib/toast";
 
 import s from "./settings.module.css";
 import { errText, I } from "./ui";
+import { JobStatusRow, UpdateProgressDialog } from "./UpdateProgress";
 
 const KIND: Record<string, string> = { new: "جدید", change: "تغییر", fix: "رفع اشکال" };
 const Ver = ({ v }: { v: string | null | undefined }) => (v ? <span dir="ltr" className="mono">{v}</span> : <span>—</span>);
@@ -27,7 +28,8 @@ export function WebClientUpdates() {
   const [checking, setChecking] = useState(false);
   const [starting, setStarting] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const refreshInterval = useCallback((latest?: WebClientInfo) => (latest?.job?.state === "running" ? 3000 : 30000), []);
+  const [progressOpen, setProgressOpen] = useState(false);
+  const refreshInterval = useCallback((latest?: WebClientInfo) => (latest?.job?.state === "running" ? 2000 : 30000), []);
   const { data, mutate } = useSWR<WebClientInfo>("/api/settings/system/update/web", fetcher, { refreshInterval, keepPreviousData: true });
 
   if (!data || !data.control.online) return null;
@@ -49,7 +51,7 @@ export function WebClientUpdates() {
     setStarting(true);
     try {
       await mutate(await api<WebClientInfo>("/api/settings/system/update/web/start", { method: "POST" }), { revalidate: false });
-      flash("به‌روزرسانی کلاینت وب شروع شد");
+      setProgressOpen(true);
     } catch (e) {
       flash(errText(e));
     } finally {
@@ -171,19 +173,23 @@ export function WebClientUpdates() {
         </>
       )}
 
-      {job && (
-        <div className={s.note} data-tone={job.state === "failed" ? "danger" : job.state === "ok" ? "ok" : "info"}>
-          {running ? <span className={s.spin} /> : <Icon d={job.state === "ok" ? I.check : I.alert} size={18} />}
-          <span>
-            <b>{running ? "به‌روزرسانی کلاینت وب در جریان است…" : job.state === "ok" ? "کلاینت وب به‌روز شد" : "به‌روزرسانی کلاینت وب ناموفق بود"}</b>
-            {job.started_at && <>شروع: {jStamp(job.started_at)}</>}
-          </span>
-        </div>
-      )}
-      {job && (job.state === "failed" || running) && job.log && (
-        <div className={s.jobLog} dir="ltr" role="log" aria-label="لاگ به‌روزرسانی کلاینت وب">
-          <pre>{job.log}</pre>
-        </div>
+      {job && <JobStatusRow kind="web" job={job} onOpen={() => setProgressOpen(true)} />}
+
+      {job && progressOpen && (
+        <UpdateProgressDialog kind="web" title="به‌روزرسانی کلاینت وب آسان دسک" job={job} onClose={() => setProgressOpen(false)}>
+          {job.state === "ok" && (
+            <div className={s.note} data-tone="ok">
+              <Icon d={I.check} size={18} />
+              <span><b>کلاینت وب به‌روز شد</b>کاربرانی که صفحه را باز دارند با بارگذاری دوباره نسخهٔ تازه را می‌گیرند.</span>
+            </div>
+          )}
+          {job.state === "failed" && (
+            <div className={s.note} data-tone="danger">
+              <Icon d={I.alert} size={18} />
+              <span><b>مرحله‌ای خطا داد</b>لاگ زیر علتش را نشان می‌دهد؛ کلاینت وب فعلی معمولاً همان‌طور که بود کار می‌کند.</span>
+            </div>
+          )}
+        </UpdateProgressDialog>
       )}
     </div>
   );
