@@ -121,6 +121,10 @@ services:
     entrypoint: ["/bin/sh", "/gate/entrypoint.sh"]
     environment:
       PANEL_KEY: ${PANEL_KEY:-}
+      # آسان دسک وب: نشانی داخلی سرور شناسه و رله‌ها (nginx/gate/web-hbbs.sh، docs/ASANDESK-WEB.md)
+      HBBS_LAN_IP: ${HBBS_LAN_IP:-}
+      HBBR_LAN_IP: ${HBBR_LAN_IP:-}
+      WEB_RELAY_LAN: ${WEB_RELAY_LAN:-}
     ports:
       - "${HTTP_PORT:-8080}:80"
     volumes:
@@ -154,10 +158,12 @@ services:
     environment:
       TZ: ${TZ:-Asia/Tehran}
       BACKEND_URL: http://backend:8000
-      # سرور شناسه (UDP و TCP روی 21116): همان نامی که برنامهٔ دسکتاپ به آن وصل می‌شود، تا کد کاربر وب در همان
-      # hbbs ثبت شود که کارشناس از آن می‌پرسد. اگر hbbs روی همین میزبان است و نام عمومی از داخل داکر نمی‌رسد:
-      # WEBGW_HBBS_HOST=hbbs-host (همراه با HBBS_IP خالی = خود میزبان)
-      HBBS_HOST: ${WEBGW_HBBS_HOST:-rd.asandesk.ir}
+      # سرور شناسه (UDP و TCP روی 21116): پیش‌فرض rd.asandesk.ir، همان نامی که برنامهٔ دسکتاپ به آن وصل می‌شود، تا
+      # کد کاربر وب در همان hbbs ثبت شود که کارشناس از آن می‌پرسد. اگر hbbs در همین شبکهٔ داخلی است و نام عمومی از
+      # داخل نمی‌رسد: HBBS_LAN_IP=<نشانی داخلی hbbs> (nginx هم همان را می‌خواند). WEBGW_HBBS_HOST بر هر دو مقدم است؛
+      # WEBGW_HBBS_HOST=hbbs-host یعنی خود همین میزبان (یا HBBS_IP).
+      HBBS_HOST: ${WEBGW_HBBS_HOST:-}
+      HBBS_LAN_IP: ${HBBS_LAN_IP:-}
       HBBS_PORT: ${WEBGW_HBBS_PORT:-21116}
       # رله‌ای که به کنترل‌کننده‌ها معرفی می‌شود؛ باید همان رله‌ای باشد که /ws/relay در nginx به آن می‌رسد
       RELAY_SERVER: ${WEBGW_RELAY_SERVER:-rd.asandesk.ir}

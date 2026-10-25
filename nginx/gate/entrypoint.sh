@@ -59,4 +59,7 @@ else
   write_gate "$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 fi
 
+# نشانی سرور شناسه و رله برای آسان دسک وب (HBBS_LAN_IP و ...)؛ default.conf همیشه این فایل را می‌خواند
+sh /gate/web-hbbs.sh
+
 exec nginx -g 'daemon off;'

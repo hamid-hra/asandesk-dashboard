@@ -191,13 +191,15 @@ function envInt(name: string, fallback: number): number {
 }
 
 if (import.meta.main) {
-  const hbbsHost = process.env.HBBS_HOST || 'rd.asandesk.ir';
+  // HBBS_LAN_IP: hbbs's address on the local network when the public name cannot be reached from here;
+  // the relay advertised to controllers stays public, they connect from outside
+  const hbbsHost = process.env.HBBS_HOST || process.env.HBBS_LAN_IP || 'rd.asandesk.ir';
   const opts: ServerOptions = {
     port: envInt('PORT', 8200),
     backendUrl: (process.env.BACKEND_URL || 'http://backend:8000').replace(/\/$/, ''),
     hbbsHost,
     hbbsPort: envInt('HBBS_PORT', 21116),
-    relayServer: process.env.RELAY_SERVER || hbbsHost,
+    relayServer: process.env.RELAY_SERVER || process.env.HBBS_HOST || 'rd.asandesk.ir',
     revalidateMs: envInt('REVALIDATE_SECONDS', 60) * 1000,
     maxOnline: envInt('MAX_ONLINE', 5000),
     maxPerIp: envInt('MAX_PER_IP', 30),

@@ -33,9 +33,23 @@ sudo ufw allow from 172.16.0.0/12 to any port 21116
 sudo ufw allow from 172.16.0.0/12 to any port 21118:21119 proto tcp
 ```
 
-اگر داشبورد روی **سرور دیگری** است، به‌جای `172.16.0.0/12` آی‌پی عمومی سرور داشبورد را بگذارید. اگر از داخل داکر نام
-عمومی به همین میزبان نمی‌رسد (NAT خاص)، در `.env` بنویسید `WEBGW_HBBS_HOST=hbbs-host` (درگاه به خود میزبان وصل می‌شود)
-و در `nginx/default.conf` نام `rd.asandesk.ir` را در دو خط `set $hbbs_ws` و `set $hbbr_ws` عوض کنید.
+اگر داشبورد روی **سرور دیگری** است، به‌جای `172.16.0.0/12` آی‌پی سرور داشبورد را بگذارید (آی‌پی داخلی، اگر در یک
+شبکه‌اند و `HBBS_LAN_IP` پایین را زده‌اید؛ وگرنه آی‌پی عمومی).
+
+**داشبورد و سرور شناسه در یک شبکهٔ داخلی‌اند ولی از داشبورد به `rd.asandesk.ir` نمی‌رسد** (روتر/فایروال اجازه نمی‌دهد
+از داخل شبکه به آی‌پی عمومی خودش برگردید): نشانی داخلی را در `.env` بنویسید تا درگاه وب و nginx مستقیم از شبکهٔ داخلی
+وصل شوند:
+
+```bash
+HBBS_LAN_IP=192.168.1.10                     # آی‌پی داخلی سرور hbbs (رله هم همین‌جا فرض می‌شود)
+# HBBR_LAN_IP=192.168.1.11                   # فقط اگر hbbr روی سرور دیگری است
+# WEB_RELAY_LAN=relay2.asandesk.ir=192.168.1.12,relay3.asandesk.ir=192.168.1.13   # فقط اگر رلهٔ دیگری هم دارید
+```
+
+بعد `docker compose up -d` (nginx و webgw با نشانی تازه از نو ساخته می‌شوند). برنامه‌های دسکتاپ و رله‌ای که به کارشناس
+معرفی می‌شود همان نام عمومی می‌مانند، چون از بیرون وصل می‌شوند. nginx در شروع کار نشانی‌ای را که به کار می‌برد در لاگ
+می‌نویسد: `docker compose logs nginx | grep web-hbbs`. اگر hbbs روی **خود همین میزبان** است، `WEBGW_HBBS_HOST=hbbs-host`
+هم کار می‌کند (درگاه به خود میزبان وصل می‌شود).
 
 **۳. به‌روزرسانی داشبورد.**
 
@@ -49,7 +63,7 @@ cd ~/asandesk-dashboard && git pull && docker compose up -d --build
 
 ```bash
 docker compose ps web webgw                       # هر دو Up
-docker compose exec nginx sh -c 'nc -zv rd.asandesk.ir 21118; nc -zv rd.asandesk.ir 21119'   # هر دو open
+docker compose exec nginx sh -c 'nc -zv rd.asandesk.ir 21118; nc -zv rd.asandesk.ir 21119'   # هر دو open (با HBBS_LAN_IP، همان آی‌پی را بگذارید)
 docker compose logs -f webgw                      # بعد از ورود یک کاربر در سایت: «online: 3…»
 ```
 
