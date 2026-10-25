@@ -77,6 +77,7 @@ export const PLATFORM_COLOR: Record<string, string> = {
   macOS: "#a855f7",
   Android: "#26a379",
   iOS: "#ec4899",
+  Web: "#14b8c4",
   نامشخص: "#8b95a1",
 };
 export const platformColor = (name: string) => PLATFORM_COLOR[name] ?? "#8b95a1";

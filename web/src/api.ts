@@ -4,6 +4,7 @@ export interface WebConfig {
   id_ws: string;
   relay_ws: string;
   relay_ws_map: Record<string, string>;
+  relay_domain?: string;
   gw_ws: string;
   rendezvous_host: string;
   download_url: string;
@@ -78,7 +79,7 @@ export const api = {
   register: (data: Record<string, string>) => call<{ user: Me }>('POST', 'auth/register', data).then((r) => r.user),
   logout: () => call<object>('POST', 'auth/logout'),
   changePassword: (current: string, next: string) => call<object>('POST', 'me/password', { current, new: next }),
-  peerKey: () => call<{ web_id: string; seed: string; pk: string }>('GET', 'me/peer-key'),
+  peerKey: () => call<{ web_id: string; seed: string; pk: string; uuid: string }>('GET', 'me/peer-key'),
   devices: () => call<{ devices: Device[] }>('GET', 'devices').then((r) => r.devices),
   touchDevice: (peer_id: string, name = '', platform = '') =>
     call<{ device: Device }>('POST', 'devices', { peer_id, name, platform }).then((r) => r.device),

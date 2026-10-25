@@ -1,20 +1,46 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, type Me, type WebConfig } from '../api';
+import { alog } from '../log';
 import { Icon } from '../icons';
 import { formatId, t, useLang } from '../i18n';
 import { RemoteSession, type PeerSummary, type Quality, type SessionState } from '../net/session';
-import { PasswordInput, Spinner } from '../ui';
+import { AsanLoader } from '../loader';
+import { PasswordInput } from '../ui';
 
 type Panel = null | 'display' | 'keys' | 'text';
 
+/** علت شکست اتصال برای نمودار «چرا اتصال‌ها ناموفق‌اند» پنل (همان کدهای برنامهٔ دسکتاپ، CONN_FAILURE_GROUPS) */
+const FAILURE_REASON: Record<string, string> = {
+  err_id_server: 'server_unreachable',
+  err_relay: 'relay_failed',
+  err_peer_timeout: 'timeout',
+  err_not_exist: 'id_not_exist',
+  err_offline: 'offline',
+  err_key_mismatch: 'key_mismatch',
+  err_overuse: 'server_error',
+  err_refused: 'rejected',
+  err_wrong_password: 'wrong_password',
+  err_too_many: 'too_many_attempts',
+  err_not_allowed: 'not_allowed',
+  err_ip_blocked: 'not_allowed',
+  err_id_blocked: 'not_allowed',
+  err_2fa_wrong: 'wrong_2fa',
+  err_insecure: 'other',
+  err_handshake: 'other',
+  err_main_window: 'other',
+  err_codec: 'other',
+  err_other: 'other',
+};
+
 export function SessionView({
-  cfg, peerId, me, onConnected, onExit,
+  cfg, peerId, me, onConnected, onExit, onFailed,
 }: {
   cfg: WebConfig;
   peerId: string;
   me: Me;
   onConnected: (peer: PeerSummary) => void;
   onExit: () => void;
+  onFailed?: (reason: string, detail: string) => void;
 }) {
   useLang();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -36,8 +62,26 @@ export function SessionView({
     const s = new RemoteSession(cfg, peerId, { webId: me.web_id, name: me.full_name }, canvas);
     sessionRef.current = s;
     reported.current = false;
+    let lastKey = '';
+    let wasConnected = false;
     const unsub = s.subscribe((st) => {
       setState(st);
+      const key = `${st.phase}|${st.message}`;
+      if (key !== lastKey) {
+        lastKey = key;
+        alog('session', peerId, st.phase, st.message, st.detail);
+        if (st.phase === 'connected') wasConnected = true;
+        // اتصال برقرار نشد، رمز اشتباه بود، یا بعد از وصل شدن بی‌خبر قطع شد
+        const reason =
+          st.phase === 'closed' && !wasConnected
+            ? FAILURE_REASON[st.message]
+            : st.phase === 'password' && st.message === 'err_wrong_password'
+              ? 'wrong_password'
+              : st.phase === 'closed' && st.message === 'st_peer_closed' && !st.detail
+                ? 'dropped'
+                : undefined;
+        if (reason) onFailed?.(reason, st.detail);
+      }
       if (st.phase === 'connected' && st.peer && !reported.current) {
         reported.current = true;
         onConnected(st.peer);
@@ -355,8 +399,7 @@ function SessionCard({
 
   return (
     <div className="session-card">
-      <Spinner big />
-      <h3>{t(state.message || 'st_connecting')}</h3>
+      <AsanLoader small label={t(state.message || 'st_connecting')} />
       {state.phase === 'approval' && <p>{t('st_approval_sub')}</p>}
       <div className="peer">{formatId(peerId)}</div>
       <button className="btn" onClick={onExit}>{t('cancel')}</button>

@@ -52,6 +52,9 @@ PLATFORMS = ("Windows", "macOS", "Linux", "Android", "iOS")
 
 def platform_of(os_name: str) -> str:
     s = (os_name or "").lower()
+    # آسان دسک وب: «AsanDesk Web · Chrome 130 · Windows» (webusers؛ مرورگر سیستم‌عامل را هم می‌گوید)
+    if s.startswith("asandesk web"):
+        return "Web"
     if "windows" in s:
         return "Windows"
     if "android" in s:

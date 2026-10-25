@@ -311,3 +311,69 @@ def test_the_token_is_created_once_and_reused(tmp_path, monkeypatch):
     first = control.load_token()
     assert len(first) >= 32 and (tmp_path / "run" / "token").read_text() == first
     assert control.load_token() == first
+
+
+# ---------------------------------------------------------------- web client
+
+WEB_CHECK_OUTPUT = (
+    "@@branch\nmain\n"
+    "@@fetch\nrc=0\n"
+    "@@head\n" + "a" * 40 + "\n"
+    "@@counts\n0\t2\n"
+    "@@dirty\n"
+    "@@commits\n"
+    '@@diskver\n[{"version": "1.0.0", "date": "2026-10-23", "title": "t", "items": [["new", "x"]]}]\n'
+    '@@remotever\n[{"version": "1.5.0.0", "date": "2026-10-25", "title": "جدید", "items": [["fix", "eval"], ["new", "pwa"]]}, {"version": "1.0.0", "items": []}]\n'
+    "@@changed\nweb/src/net/pb.ts\nwebgw/src/main.ts\n"
+    "@@webcommits\n" + "d" * 40 + "\x1fHamid\x1f2026-10-25T10:00:00+03:30\x1fWeb: no eval\n"
+)
+
+
+def test_the_web_check_reads_its_own_changelog_and_only_web_commits():
+    c = control.build_web_check(control.parse_sections(WEB_CHECK_OUTPUT))
+    assert (c["disk_version"], c["remote_version"], c["web_files"], c["panel_files"]) == ("1.0.0", "1.5.0.0", 2, [])
+    assert [e["version"] for e in c["remote_changelog"]] == ["1.5.0.0", "1.0.0"]
+    assert c["remote_changelog"][0]["items"][0] == {"type": "fix", "text": "eval"}
+    assert [x["subject"] for x in c["commits"]] == ["Web: no eval"]
+
+
+def test_panel_files_in_the_new_commits_are_listed():
+    out = WEB_CHECK_OUTPUT.replace("@@changed\n", "@@changed\nbackend/webusers/views.py\n")
+    c = control.build_web_check(control.parse_sections(out))
+    assert c["panel_files"] == ["backend/webusers/views.py"] and c["web_files"] == 2
+
+
+def test_a_broken_web_changelog_is_just_empty():
+    assert control.parse_web_changelog("not json") == [] and control.parse_web_changelog('{"a": 1}') == []
+
+
+def test_the_web_job_refuses_panel_changes_and_rebuilds_only_web_and_webgw():
+    script = control.web_job_script("main", INFO)
+    assert "grep -v -E '^(web|webgw)/'" in script and "exit 12" in script
+    assert script.index("exit 12") < script.index("pull --ff-only")  # checked before anything changes
+    assert "up -d --build --no-deps web webgw" in script
+    assert "su-exec 1000:1000" in script
+    quoted = control.web_job_script("x'; reboot; echo '", {**INFO, "project": "p; reboot"})
+    assert "-p 'p; reboot'" in quoted and "'x'\"'\"'; reboot; echo '\"'\"''" in quoted
+
+
+def test_the_web_job_waits_for_a_running_panel_update_and_the_other_way_round(docker):
+    docker.when("inspect", control.JOB_NAME, result=done(json.dumps({"Running": True, "ExitCode": 0})))
+    with pytest.raises(control.ApiError) as e:
+        control.start_web_job()
+    assert e.value.status == 409
+    docker.rules.clear()
+    docker.when("inspect", control.WEB_JOB_NAME, result=done(json.dumps({"Running": True, "ExitCode": 0})))
+    with pytest.raises(control.ApiError):
+        control.start_job()
+    assert not any(c[:2] == ("run", "-d") for c in docker.calls)
+
+
+def test_the_web_job_runs_detached_with_its_own_name(docker, monkeypatch):
+    monkeypatch.setattr(control, "git_script", lambda script, timeout=60: done("main\n"))
+    monkeypatch.setattr(control, "WEB_STATE", {"check": {"behind": 1}, "check_error": ""})
+    docker.when("run", "-d", result=done("abc\n"))
+    docker.when("rm", result=done())
+    control.start_web_job()
+    run = next(c for c in docker.calls if c[:2] == ("run", "-d"))
+    assert control.WEB_JOB_NAME in run and control.WEB_STATE["check"] is None

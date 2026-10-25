@@ -185,10 +185,14 @@ WEB_ID_WS = env("WEB_ID_WS", "/ws/id")
 WEB_RELAY_WS = env("WEB_RELAY_WS", "/ws/relay")
 # اگر چند رله دارید: «نام رله=نشانی وب‌سوکت» با کاما، مثلا relay2.asandesk.ir=wss://relay2.asandesk.ir/ws/relay
 WEB_RELAY_WS_MAP = dict(x.split("=", 1) for x in env_list("WEB_RELAY_WS_MAP", "") if "=" in x)
+# رله‌هایی که زیر این دامنه‌اند از مسیر /ws/relay/<نام رله> در nginx می‌گذرند (hbbs چند رله را می‌چرخاند)
+WEB_RELAY_DOMAIN = env("WEB_RELAY_DOMAIN", "asandesk.ir")
 # درگاه وب (webgw): کد کاربر وب را در سرور شناسه ثبت می‌کند تا دیگران بتوانند صفحه‌اش را ببینند
 WEB_GW_WS = env("WEB_GW_WS", "/ws/gw")
 WEB_RENDEZVOUS_HOST = env("WEB_RENDEZVOUS_HOST", "rd.asandesk.ir")
 WEB_DOWNLOAD_URL = env("WEB_DOWNLOAD_URL", "https://asandesk.ir/download")
+# سرویس web داخل docker compose؛ پنل نسخهٔ در حال اجرای کلاینت وب را از /version.json آن می‌خواند
+WEB_APP_URL = env("WEB_APP_URL", "http://web")
 WEB_SIGNUPS_PER_IP_HOUR = int(env("WEB_SIGNUPS_PER_IP_HOUR", "10"))
 WEB_LOGINS_PER_IP_MINUTE = int(env("WEB_LOGINS_PER_IP_MINUTE", "10"))
 

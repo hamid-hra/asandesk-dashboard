@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "erasableSyntaxOnly": true,
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["vite/client"]

@@ -26,8 +26,14 @@ export class ConnectError extends Error {
 
 /** نشانی وب‌سوکت رله‌ای که مقصد انتخاب کرده (از روی نام میزبان آن رله) */
 export function relayWsUrl(cfg: WebConfig, relayServer: string): string {
-  const host = relayServer.replace(/^\[|\]$/g, '').split(':')[0].trim();
-  return (host && cfg.relay_ws_map[host]) || cfg.relay_ws;
+  const host = relayServer.replace(/^\[|\]$/g, '').split(':')[0].trim().toLowerCase();
+  if (host && cfg.relay_ws_map[host]) return cfg.relay_ws_map[host];
+  // هر رلهٔ زیر دامنهٔ آسان دسک مسیر خودش را در nginx دارد (/ws/relay/<نام رله>)
+  const domain = (cfg.relay_domain || '').toLowerCase();
+  if (domain && /^[a-z0-9.-]+$/.test(host) && (host === domain || host.endsWith(`.${domain}`))) {
+    return `${cfg.relay_ws.replace(/\/$/, '')}/${host}`;
+  }
+  return cfg.relay_ws;
 }
 
 function uuidv4(): string {

@@ -2,9 +2,9 @@
 import type { ReactNode } from 'react';
 import { Icon } from './icons';
 import { setLang, t, useLang } from './i18n';
+import { AsanSpinner, Logo } from './loader';
 import { setTheme, useTheme } from './theme';
-
-export const WEB_VERSION = '1.0.0';
+import { WEB_VERSION } from './version';
 
 export function TitleBar({ children }: { children?: ReactNode }) {
   const lang = useLang();
@@ -12,9 +12,7 @@ export function TitleBar({ children }: { children?: ReactNode }) {
   return (
     <header className="titlebar">
       <div className="brand">
-        <span className="logo">
-          <Icon name="shield" size={15} />
-        </span>
+        <Logo size={22} />
         {t('app_name')}
         <span className="web-tag">{t('web_version')}</span>
       </div>
@@ -38,7 +36,16 @@ export function TitleBar({ children }: { children?: ReactNode }) {
 
 export type ServerState = 'ok' | 'connecting' | 'down';
 
-export function StatusBar({ server, host, delay }: { server: ServerState; host: string; delay: number | null }) {
+/** نوار پایین مثل برنامهٔ دسکتاپ: وضعیت سرور و نشانی آن، و آن طرف نسخه، بارگذاری مجدد و تأخیر */
+export function StatusBar({
+  server, host, delay, onReload, reloading,
+}: {
+  server: ServerState;
+  host: string;
+  delay: number | null;
+  onReload?: () => void;
+  reloading?: boolean;
+}) {
   useLang();
   const label = server === 'ok' ? t('status_ok') : server === 'connecting' ? t('status_connecting') : t('status_down');
   return (
@@ -47,14 +54,20 @@ export function StatusBar({ server, host, delay }: { server: ServerState; host: 
       <span>{label}</span>
       <span className="ltr hide-sm">{host}</span>
       <span className="grow" />
-      {delay !== null && (
-        <span className="ltr num hide-sm" title={t('latency')}>
-          {delay}ms
-        </span>
+      {onReload && (
+        <>
+          <span className="ltr num status-delay" title={t('latency')}>
+            <Icon name="wifi" size={14} />
+            {delay !== null ? `${delay}ms` : '—'}
+          </span>
+          <button className="status-btn" onClick={onReload} disabled={reloading} title={t('asan_reload')} aria-label={t('asan_reload')}>
+            {reloading ? <AsanSpinner size={14} /> : <Icon name="refresh" size={14} />}
+          </button>
+          <span className="status-sep" />
+        </>
       )}
-      <span>
-        {t('web_version')} {WEB_VERSION}
-      </span>
+      <span>{t('version')}</span>
+      <span className="ltr num">{WEB_VERSION}</span>
     </footer>
   );
 }

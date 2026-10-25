@@ -39,8 +39,9 @@ export interface ShareCallbacks {
   onRequest(req: IncomingRequest): void;
   onRequestGone(key: number): void;
   onViewers(viewers: Viewer[]): void;
-  onLog?(direction: 'in', peerId: string, peerName: string): Promise<number | null>;
-  onLogEnd?(id: number): void;
+  /** بیننده‌ای وصل شد (برای گزارش اتصال به داشبورد)؛ `key` شمارهٔ همین اتصال است */
+  onLog?(direction: 'in', peerId: string, peerName: string, key: number): Promise<number | null>;
+  onLogEnd?(id: number | null, key: number): void;
   onError?(messageKey: string): void;
 }
 
@@ -279,6 +280,7 @@ class Incoming {
   private keepalive = 0;
   private approvalTimer = 0;
   private logId: number | null = null;
+  private logged = false;
   request: IncomingRequest | null = null;
   done = false;
 
@@ -414,7 +416,8 @@ class Incoming {
     const req = this.request;
     if (req) {
       this.host.addViewer({ key: this.key, peerId: req.peerId, peerName: req.peerName, since: Date.now() });
-      this.logId = (await this.host.log(req.peerId, req.peerName)) ?? null;
+      this.logged = true;
+      this.logId = (await this.host.log(req.peerId, req.peerName, this.key)) ?? null;
     }
   }
 
@@ -437,7 +440,7 @@ class Incoming {
     clearInterval(this.keepalive);
     this.link?.stop();
     this.conn.close();
-    if (this.logId !== null) this.host.logEnd(this.logId);
+    if (this.logged) this.host.logEnd(this.logId, this.key);
     this.host.removeIncoming(this);
   }
 }
@@ -557,12 +560,17 @@ export class ShareHost {
     this.video.srcObject = null;
   }
 
-  async log(peerId: string, peerName: string): Promise<number | null> {
-    return this.cb.onLog ? this.cb.onLog('in', peerId, peerName) : null;
+  /** شمارهٔ اتصال‌های بازی که صفحه را می‌بینند (برای heartbeat) */
+  viewerKeys(): number[] {
+    return this.viewers.map((v) => v.key);
   }
 
-  logEnd(id: number) {
-    this.cb.onLogEnd?.(id);
+  async log(peerId: string, peerName: string, key: number): Promise<number | null> {
+    return this.cb.onLog ? this.cb.onLog('in', peerId, peerName, key) : null;
+  }
+
+  logEnd(id: number | null, key: number) {
+    this.cb.onLogEnd?.(id, key);
   }
 
   reportError(key: string) {

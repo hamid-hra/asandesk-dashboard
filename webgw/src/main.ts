@@ -58,8 +58,11 @@ export function startServer(opts: ServerOptions): Gateway {
 
   const server = http.createServer((req, res) => {
     if (req.url === '/healthz') {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end(`ok ${entries.size}\n`);
+      // برای عیب‌یابی: docker compose exec webgw wget -qO- http://127.0.0.1:8200/healthz
+      const states: Record<string, number> = {};
+      for (const e of entries.values()) states[e.reg.state] = (states[e.reg.state] ?? 0) + 1;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(`${JSON.stringify({ ok: true, hbbs: `${opts.hbbsHost}:${opts.hbbsPort}`, relay: opts.relayServer, codes: entries.size, states })}\n`);
       return;
     }
     res.writeHead(404);

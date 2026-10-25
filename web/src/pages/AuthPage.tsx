@@ -3,7 +3,8 @@ import { ApiError, api, type Me, type WebConfig } from '../api';
 import { Icon } from '../icons';
 import { t, useLang } from '../i18n';
 import { TitleBar } from '../chrome';
-import { PasswordInput, Spinner } from '../ui';
+import { AsanSpinner } from '../loader';
+import { PasswordInput } from '../ui';
 
 type Mode = 'login' | 'register';
 
@@ -163,7 +164,7 @@ export function AuthPage({ cfg, onDone }: { cfg: WebConfig | null; onDone: (me: 
               </label>
               {error && <div className="alert bad">{error}</div>}
               <button className="btn primary block" disabled={busy || !identifier || !password}>
-                {busy ? <Spinner /> : <Icon name="logout" style={{ transform: 'scaleX(-1)' }} />}
+                {busy ? <AsanSpinner /> : <Icon name="logout" style={{ transform: 'scaleX(-1)' }} />}
                 {t('auth_submit_login')}
               </button>
               <div className="auth-foot">{t('auth_forgot')}</div>
@@ -203,7 +204,7 @@ export function AuthPage({ cfg, onDone }: { cfg: WebConfig | null; onDone: (me: 
               </div>
               {error && <div className="alert bad">{error}</div>}
               <button className="btn primary block" disabled={busy}>
-                {busy ? <Spinner /> : <Icon name="check" />}
+                {busy ? <AsanSpinner /> : <Icon name="check" />}
                 {t('auth_submit_register')}
               </button>
               <div className="auth-foot">

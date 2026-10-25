@@ -127,6 +127,11 @@ a { color: var(--accent-bright); }
 .statusbar .dot.warn { background: var(--warn); }
 .statusbar .dot.bad { background: var(--danger); }
 .statusbar .grow { flex: 1; }
+.status-btn { width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); display: grid; place-items: center; }
+.status-btn:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.status-delay { display: inline-flex; align-items: center; gap: 5px; }
+.status-delay svg { color: var(--ok); }
+.status-sep { width: 1px; height: 14px; background: var(--line); }
 
 /* ---------- کارت‌ها و دکمه‌ها ---------- */
 .card { background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
@@ -306,8 +311,6 @@ a { color: var(--accent-bright); }
 @keyframes pop { from { opacity: 0; transform: scale(0.97); } }
 @keyframes pulse { 50% { opacity: 0.4; } }
 @keyframes spin { to { transform: rotate(360deg); } }
-.spinner { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor; animation: spin 0.8s linear infinite; }
-.spinner.big { width: 34px; height: 34px; border-width: 3px; color: var(--accent-bright); }
 
 /* ---------- صفحهٔ ورود ---------- */
 .auth { min-height: 100%; display: flex; flex-direction: column; }
@@ -395,3 +398,51 @@ a { color: var(--accent-bright); }
   .statusbar .hide-sm { display: none; }
   .titlebar .hide-sm { display: none; }
 }
+
+/* ---------- لودینگ آسان دسک (همان طرح «AsanDesk loading» پنل و برنامه) ---------- */
+.al { --al-size: 150px; --al-dur: 2.4s; --al-ease: cubic-bezier(0.65, 0, 0.35, 1); --al-fg: #29a37a; --al-ink: var(--ink); --al-track: var(--line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; padding: 24px; animation: fade 0.3s ease-out; }
+:root[data-theme='dark'] .al, :root[data-theme='dark'] .al-spinner { --al-fg: #2fbf8e; }
+.al-full { position: fixed; inset: 0; z-index: 100; background: var(--page); }
+.al-small { --al-size: 90px; gap: 22px; }
+.al-mark { position: relative; width: var(--al-size); height: var(--al-size); }
+.al-ring { position: absolute; inset: 8%; border-radius: 50%; border: 3px solid var(--al-fg); animation: alPulse var(--al-dur) ease-out infinite; }
+.al-svg { position: relative; width: 100%; height: 100%; overflow: visible; animation: alBreath var(--al-dur) ease-in-out infinite; }
+.al-spin, .al-top, .al-bot { transform-box: view-box; transform-origin: 50% 50%; animation: var(--al-dur) var(--al-ease) infinite; }
+.al-spin { animation-name: alSpin; }
+.al-top { animation-name: alTop; fill: var(--al-fg); }
+.al-bot { animation-name: alBot; fill: var(--al-fg); }
+.al-meta { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.al-label { font-size: 18px; font-weight: 500; color: var(--al-ink); }
+.al-label span { animation: alDot 1.2s infinite; }
+.al-label span:nth-child(2) { animation-delay: 0.2s; }
+.al-label span:nth-child(3) { animation-delay: 0.4s; }
+.al-track { width: 140px; height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.al-track-wide { width: 100%; }
+.al-bar { width: 50%; height: 100%; border-radius: 3px; background: var(--accent-bright); animation: alBar 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+.al-spinner { --al-dur: 1.6s; --al-fg: currentColor; display: inline-block; flex: none; }
+.al-spinner .al-svg { animation: none; }
+.al-spinner .al-spin { animation: alSpinFull 1.1s linear infinite; }
+.al-spinner .al-top, .al-spinner .al-bot { animation: none; fill: currentColor; }
+.session .al { --al-ink: #eef6f3; }
+@keyframes alSpin { 0%, 14% { transform: rotate(0deg); } 74%, 100% { transform: rotate(180deg); } }
+@keyframes alSpinFull { to { transform: rotate(360deg); } }
+@keyframes alTop { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(-70px, -70px); } 78% { transform: translate(10px, 10px); } 86%, 100% { transform: translate(0, 0); } }
+@keyframes alBot { 0%, 10% { transform: translate(0, 0); } 30%, 62% { transform: translate(70px, 70px); } 78% { transform: translate(-10px, -10px); } 86%, 100% { transform: translate(0, 0); } }
+@keyframes alPulse { 0%, 76% { transform: scale(0.6); opacity: 0; } 80% { opacity: 0.55; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes alBreath { 0%, 100% { transform: scale(1); } 78% { transform: scale(0.94); } 86% { transform: scale(1.04); } }
+@keyframes alBar { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+@keyframes alDot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .al-spin, .al-top, .al-bot, .al-ring, .al-svg { animation: none !important; } .al-ring { opacity: 0; } }
+
+/* ---------- ارسال بازخورد ---------- */
+.fb-cats { display: flex; gap: 8px; }
+.fb-cats button { flex: 1; height: 40px; border-radius: 8px; border: 1.5px solid var(--line-strong); background: var(--surface); color: var(--ink-soft); display: flex; align-items: center; justify-content: center; gap: 7px; font-weight: 600; font-size: 13px; }
+.fb-cats button.on { border-color: var(--accent-bright); background: var(--accent-soft); color: var(--accent-bright); }
+.fb-text { height: 120px; padding: 10px 12px; resize: vertical; line-height: 1.7; }
+.fb-images { display: flex; gap: 10px; flex-wrap: wrap; }
+.fb-thumb { position: relative; width: 84px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.fb-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fb-thumb button { position: absolute; top: 3px; inset-inline-end: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, 0.6); color: #fff; display: grid; place-items: center; }
+.fb-add { width: 84px; height: 64px; border-radius: 8px; border: 1.5px dashed var(--line-strong); background: var(--field); color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 11px; }
+.fb-add:hover { border-color: var(--accent-bright); color: var(--accent-bright); }

@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { createPortal } from 'react-dom';
 import qrcode from 'qrcode-generator';
 import { Icon } from './icons';
-import { t } from './i18n';
 
 export function Modal({ children, onClose, width }: { children: ReactNode; onClose?: () => void; width?: number }) {
   useEffect(() => {
@@ -164,8 +163,4 @@ export function QrCode({ text }: { text: string }) {
       </svg>
     </div>
   );
-}
-
-export function Spinner({ big }: { big?: boolean }) {
-  return <span className={`spinner${big ? ' big' : ''}`} aria-label={t('loading')} />;
 }

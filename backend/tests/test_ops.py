@@ -230,3 +230,55 @@ def test_agent_update_is_owner_only_and_survives_a_missing_control(monkeypatch):
     owner, _ = as_user(Role.OWNER, username="boss")
     r = owner.get("/api/settings/system/update/agents").json()
     assert r["control"]["online"] is False and r["agents"] == []
+
+
+# ---------------- کلاینت وب آسان دسک (web + webgw) ----------------
+
+def web_status(**check):
+    base = {
+        "checked_at": "2026-10-25T10:00:00+00:00", "branch": "main", "dirty": False,
+        "commits": [{"sha": "d" * 40, "author": "Hamid", "date": "2026-10-25", "subject": "Web: no eval"}],
+        "disk_version": "1.0.0", "remote_version": "1.5.0.0",
+        "remote_changelog": [
+            {"version": "1.5.0.0", "date": "2026-10-25", "title": "جدید", "items": [{"type": "fix", "text": "eval"}]},
+            {"version": "1.0.0", "date": "2026-10-23", "title": "اول", "items": []},
+        ],
+        "web_files": 2, "panel_files": [],
+    }
+    return {"check": {**base, **check}, "check_error": "", "job": {"state": "none"}}
+
+
+@pytest.mark.django_db
+def test_web_client_update_shows_running_version_news_and_starts_its_own_job(monkeypatch):
+    from ops import views
+
+    seen = []
+
+    def call(method, path, **kw):
+        seen.append((method, path))
+        return web_status()
+
+    monkeypatch.setattr(control, "call", call)
+    monkeypatch.setattr(views, "web_running", lambda: {"version": "1.0.0", "built_at": "2026-10-23T00:00:00Z"})
+    c, _ = as_user(Role.OWNER, username="boss")
+    r = c.get("/api/settings/system/update/web").json()
+    assert r["running"]["version"] == "1.0.0"
+    assert r["check"]["available"] is True and r["check"]["needs_panel"] is False
+    assert [e["version"] for e in r["check"]["new_entries"]] == ["1.5.0.0"]
+    assert c.post("/api/settings/system/update/web/check").status_code == 200
+    assert c.post("/api/settings/system/update/web/start").status_code == 202
+    assert ("POST", "/web/update") in seen and ActivityLog.objects.filter(action="system.web_update").exists()
+
+
+@pytest.mark.django_db
+def test_web_client_waits_for_the_panel_update_when_the_panel_changes_too(monkeypatch):
+    from ops import views
+
+    monkeypatch.setattr(control, "call", lambda *a, **k: web_status(panel_files=["backend/webusers/views.py"]))
+    monkeypatch.setattr(views, "web_running", lambda: {"version": "1.0.0", "built_at": ""})
+    c, _ = as_user(Role.OWNER, username="boss")
+    check = c.get("/api/settings/system/update/web").json()["check"]
+    assert check["needs_panel"] is True and check["panel_files"] == ["backend/webusers/views.py"]
+    # فقط مالک
+    viewer, _ = as_user(Role.ADMIN, username="admin2")
+    assert viewer.get("/api/settings/system/update/web").status_code == 403

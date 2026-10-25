@@ -6,7 +6,12 @@ import { formatId, relativeDay, t, useLang } from '../i18n';
 import { GatewayClient, type GatewayState } from '../net/gateway';
 import { ShareHost, shareSupported, type IncomingRequest, type Viewer } from '../net/share';
 import { webCodecsAvailable } from '../net/video';
-import { DialogTitle, Menu, Modal, PasswordInput, QrCode, Spinner, copyText, toast } from '../ui';
+import { AsanLoader, AsanSpinner } from '../loader';
+import { alog } from '../log';
+import { installPromptNow, onInstallPrompt, promptInstall } from '../pwa';
+import { Telemetry } from '../telemetry';
+import { FeedbackDialog } from './FeedbackDialog';
+import { DialogTitle, Menu, Modal, PasswordInput, QrCode, copyText, toast } from '../ui';
 import { SessionView } from './SessionView';
 
 type Tab = 'all' | 'recent' | 'fav';
@@ -28,7 +33,14 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
   const [requests, setRequests] = useState<IncomingRequest[]>([]);
   const [viewers, setViewers] = useState<Viewer[]>([]);
   const [otp, setOtp] = useState('');
-  const [dialog, setDialog] = useState<null | 'otp' | 'qr' | 'account' | 'install'>(null);
+  const [dialog, setDialog] = useState<null | 'otp' | 'qr' | 'account' | 'install' | 'feedback'>(null);
+  const [deviceBlocked, setDeviceBlocked] = useState(false);
+  const [rtt, setRtt] = useState<number | null>(null);
+  const [reloading, setReloading] = useState(false);
+  const telRef = useRef<Telemetry | null>(null);
+  const [installPrompt, setInstallPrompt] = useState(() => installPromptNow());
+  useEffect(() => onInstallPrompt(setInstallPrompt), []);
+  const installApp = () => void promptInstall();
   const [menu, setMenu] = useState<null | { kind: 'user' | 'recent' | 'more' | 'device'; anchor: HTMLElement; device?: Device }>(null);
   const [renaming, setRenaming] = useState<Device | null>(null);
   const hostRef = useRef<ShareHost | null>(null);
@@ -52,28 +64,59 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
 
   useEffect(loadDevices, [loadDevices]);
 
-  // اشتراک صفحه: کلید هویت حساب و اتصال به درگاه
+  // گزارش به داشبورد مثل کلاینت، و اشتراک صفحه (کلید هویت حساب و اتصال به درگاه)
   useEffect(() => {
-    if (!canShare) return;
     let disposed = false;
     let host: ShareHost | null = null;
     let gw: GatewayClient | null = null;
+    let tel: Telemetry | null = null;
     api.peerKey().then(
       (key) => {
         if (disposed) return;
+        tel = new Telemetry({ id: key.web_id, uuid: key.uuid, name: me.full_name, username: me.username }, (blocked) => {
+          setDeviceBlocked((was) => {
+            if (was !== blocked) alog('device blocked', blocked);
+            return blocked;
+          });
+        });
+        tel.conns = () => hostRef.current?.viewerKeys() ?? [];
+        telRef.current = tel;
+        tel.start();
+        if (!canShare) {
+          setGwState('offline');
+          return;
+        }
         host = new ShareHost(cfg, { webId: key.web_id, seed: key.seed, name: me.full_name }, {
-          onRequest: (req) => setRequests((r) => [...r.filter((x) => x.key !== req.key), req]),
+          onRequest: (req) => {
+            alog('incoming request', req.peerId);
+            setRequests((r) => [...r.filter((x) => x.key !== req.key), req]);
+          },
           onRequestGone: (k) => setRequests((r) => r.filter((x) => x.key !== k)),
           onViewers: (v) => setViewers([...v]),
-          onLog: (dir, peerId, peerName) => api.connectionStart(dir, peerId, peerName).catch(() => null),
-          onLogEnd: (id) => void api.connectionEnd(id).catch(() => undefined),
-          onError: (k) => toast(t(k)),
+          onLog: (dir, peerId, peerName, connKey) => {
+            alog('sharing with', peerId);
+            tel?.connOpened(connKey, peerId, peerName);
+            return api.connectionStart(dir, peerId, peerName).catch(() => null);
+          },
+          onLogEnd: (id, connKey) => {
+            alog('sharing ended', connKey);
+            tel?.connClosed(connKey);
+            if (id !== null) void api.connectionEnd(id).catch(() => undefined);
+          },
+          onError: (k) => {
+            alog('share error', k);
+            toast(t(k));
+          },
         });
         host.onOtp = setOtp;
         setOtp(host.otp);
         hostRef.current = host;
         gw = new GatewayClient(cfg.gw_ws, {
-          onState: setGwState,
+          onState: (s) => {
+            alog('gateway', s);
+            setGwState(s);
+          },
+          onRtt: setRtt,
           onIncoming: (uuid, relay) => void host?.handleIncoming(uuid, relay),
           // ورود باطل شده (مسدودی یا رمز تازه از پنل): به صفحهٔ ورود برمی‌گردیم
           onUnauthorized: () =>
@@ -84,7 +127,10 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
         gwRef.current = gw;
         gw.start();
       },
-      () => setGwState('offline'),
+      (e) => {
+        alog('peer key failed', e instanceof Error ? e.message : String(e));
+        setGwState('offline');
+      },
     );
     const beforeUnload = (e: BeforeUnloadEvent) => {
       if (hostRef.current && viewersRef.current > 0) e.preventDefault();
@@ -95,10 +141,35 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
       window.removeEventListener('beforeunload', beforeUnload);
       gw?.stop();
       host?.dispose();
+      tel?.stop();
       hostRef.current = null;
       gwRef.current = null;
+      telRef.current = null;
     };
-  }, [cfg, me.full_name, canShare]);
+  }, [cfg, me.full_name, me.username, canShare]);
+
+  // دستگاه از پنل مسدود شد: مثل برنامهٔ دسکتاپ دیگر نه اتصالی می‌گیرد نه می‌دهد؛ با رفع مسدودیت برمی‌گردد
+  useEffect(() => {
+    if (deviceBlocked) {
+      hostRef.current?.stopAll();
+      gwRef.current?.stop();
+    } else {
+      gwRef.current?.start();
+    }
+  }, [deviceBlocked]);
+
+  const reload = () => {
+    alog('reload');
+    setReloading(true);
+    setRtt(null);
+    gwRef.current?.takeOver();
+    void telRef.current?.heartbeat();
+    loadDevices();
+    window.setTimeout(() => {
+      setReloading(false);
+      toast(t('asan_reloaded'));
+    }, 1500);
+  };
 
   const logout = async () => {
     gwRef.current?.stop();
@@ -119,6 +190,10 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
     }
     if (!canView) {
       setCodeError(t('no_webcodecs'));
+      return;
+    }
+    if (deviceBlocked) {
+      setCodeError(t('asan_blocked_title'));
       return;
     }
     setCodeError('');
@@ -160,7 +235,15 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
     return list;
   }, [devices, tab, query]);
 
-  const server: ServerState = !canShare ? 'ok' : gwState === 'online' ? 'ok' : gwState === 'offline' ? 'down' : gwState === 'connecting' ? 'connecting' : 'ok';
+  const server: ServerState = !canShare
+    ? 'ok'
+    : gwState === 'online'
+      ? 'ok'
+      : gwState === 'offline' || gwState === 'unreachable'
+        ? 'down'
+        : gwState === 'connecting'
+          ? 'connecting'
+          : 'ok';
   const request = requests[0] ?? null;
 
   return (
@@ -173,7 +256,7 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
 
       <main className="main">
         <Hero
-          state={canShare ? gwState : 'unsupported'}
+          state={deviceBlocked ? 'device_blocked' : canShare ? gwState : 'unsupported'}
           code={me.web_id}
           onCopy={async () => toast((await copyText(me.web_id)) ? t('copied') : me.web_id)}
           onOtp={() => setDialog('otp')}
@@ -297,7 +380,7 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
             <div className="devices">
               {!devicesLoaded ? (
                 <div className="empty">
-                  <Spinner big />
+                  <AsanLoader small label={t('loading')} />
                 </div>
               ) : shown.length === 0 ? (
                 <div className="empty">
@@ -343,7 +426,7 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
         </div>
       </main>
 
-      <StatusBar server={server} host={cfg.rendezvous_host} delay={null} />
+      <StatusBar server={server} host={cfg.rendezvous_host} delay={rtt} onReload={reload} reloading={reloading} />
 
       {menu?.kind === 'user' && (
         <Menu anchor={menu.anchor} onClose={() => setMenu(null)}>
@@ -355,6 +438,16 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
             <Icon name="user" size={16} />
             {t('menu_account')}
           </button>
+          <button onClick={() => setDialog('feedback')}>
+            <Icon name="chat" size={16} />
+            {t('asan_feedback_menu')}
+          </button>
+          {installPrompt && (
+            <button onClick={installApp}>
+              <Icon name="install" size={16} />
+              {t('install_app')}
+            </button>
+          )}
           <a href={cfg.download_url} target="_blank" rel="noopener noreferrer">
             <Icon name="download" size={16} />
             {t('menu_download')}
@@ -471,11 +564,15 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
               () => undefined,
             );
           }}
+          onFailed={(reason, detail) => telRef.current?.connFailure(session.peerId, reason, detail)}
           onExit={() => {
             setSession(null);
             loadDevices();
           }}
         />
+      )}
+      {dialog === 'feedback' && telRef.current && (
+        <FeedbackDialog telemetry={telRef.current} contact={me.phone} onClose={() => setDialog(null)} />
       )}
     </div>
   );
@@ -484,7 +581,7 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
 function Hero({
   state, code, onCopy, onOtp, onQr, onTakeOver,
 }: {
-  state: GatewayState | 'unsupported';
+  state: GatewayState | 'unsupported' | 'device_blocked';
   code: string;
   onCopy: () => void;
   onOtp: () => void;
@@ -494,7 +591,15 @@ function Hero({
   const look =
     state === 'online' ? '' : state === 'connecting' || state === 'busy' || state === 'replaced' ? 'connecting' : 'offline';
   const icon =
-    state === 'online' ? 'shield' : state === 'connecting' || state === 'busy' ? 'refresh' : state === 'blocked' ? 'block' : state === 'replaced' ? 'info' : 'warning';
+    state === 'online'
+      ? 'shield'
+      : state === 'connecting' || state === 'busy'
+        ? 'refresh'
+        : state === 'blocked' || state === 'device_blocked'
+          ? 'block'
+          : state === 'replaced'
+            ? 'info'
+            : 'warning';
   const [title, body, badge] = (() => {
     switch (state) {
       case 'online':
@@ -504,6 +609,11 @@ function Hero({
         return [t('asan_state_connecting_title'), t('asan_state_connecting_body'), t('asan_state_connecting_badge')];
       case 'blocked':
         return [t('hero_blocked_title'), t('hero_blocked_body'), t('hero_blocked_title')];
+      case 'device_blocked':
+        // مثل برنامهٔ دسکتاپ: کارت قرمز و فقط همین جمله
+        return [t('asan_blocked_title'), t('device_blocked_body'), t('asan_blocked_title')];
+      case 'unreachable':
+        return [t('hero_unreachable_title'), t('hero_unreachable_body'), t('asan_state_offline_badge')];
       case 'conflict':
         return [t('hero_conflict_title'), t('hero_conflict_body'), t('asan_state_offline_badge')];
       case 'replaced':
@@ -543,7 +653,7 @@ function Hero({
             <Icon name="qr" size={20} />
             {t('asan_show_qr')}
           </button>
-          <button className="hero-btn" onClick={onOtp} disabled={state === 'unsupported'}>
+          <button className="hero-btn" onClick={onOtp} disabled={state === 'unsupported' || state === 'device_blocked'}>
             <Icon name="key" size={20} />
             {t('otp')}
           </button>
@@ -666,7 +776,7 @@ function AccountDialog({ me, onClose }: { me: Me; onClose: () => void }) {
         <div className="row">
           <button type="button" className="btn" onClick={onClose}>{t('cancel')}</button>
           <button className="btn primary" disabled={busy || !current || !next}>
-            {busy && <Spinner />}
+            {busy && <AsanSpinner />}
             {t('save')}
           </button>
         </div>

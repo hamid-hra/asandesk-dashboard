@@ -75,6 +75,8 @@ ROUTES: dict[tuple[str, str], tuple[str, Label] | None] = {
     ("ops.UpdateCheckView", "POST"): None,
     ("ops.UpdateStartView", "POST"): None,
     ("ops.AgentsCheckView", "POST"): None,
+    ("ops.WebUpdateCheckView", "POST"): None,
+    ("ops.WebUpdateStartView", "POST"): None,  # خود ویو می‌نویسد
     ("ops.AgentsStartView", "POST"): None,
 }
 

@@ -338,6 +338,27 @@ export interface AgentsInfo {
   agents: AgentUpdate[];
   job: UpdateJob | null;
 }
+/** کلاینت وب آسان دسک (سرویس‌های web و webgw) که جدا از پنل به‌روز می‌شود */
+export interface WebClientCheck {
+  checked_at: string;
+  branch: string;
+  dirty: boolean;
+  commits: UpdateCommit[];
+  disk_version: string | null;
+  remote_version: string | null;
+  pending_build: boolean;
+  panel_files: string[];
+  needs_panel: boolean;
+  available: boolean;
+  new_entries: ChangelogEntry[];
+}
+export interface WebClientInfo {
+  control: { online: boolean; error?: string };
+  running: { version: string; built_at: string } | null;
+  job: UpdateJob | null;
+  check: WebClientCheck | null;
+  check_error: string;
+}
 export interface DockerService {
   service: string;
   container: string;

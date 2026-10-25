@@ -1,47 +1,35 @@
-// پیام‌های پروتکل آسان دسک (همان فایل‌های .proto برنامهٔ دسکتاپ؛ proto/README.md)
-import protobuf from 'protobufjs';
-import messageProto from '../../proto/message.proto?raw';
-import rendezvousProto from '../../proto/rendezvous.proto?raw';
+// پیام‌های پروتکل آسان دسک (همان فایل‌های .proto برنامهٔ دسکتاپ؛ شمای آن‌ها هنگام بیلد از proto/schema.mjs می‌آید)
+import schema from 'virtual:asan-proto-schema';
+import { Codec, type Schema } from './pb';
 
-// int64ها (مثل زمان TestDelay) عدد معمولی JS بمانند، نه شیء Long
-(protobuf.util as { Long: unknown }).Long = null;
-protobuf.configure();
-
-const root = new protobuf.Root();
-protobuf.parse(messageProto, root, { keepCase: true });
-protobuf.parse(rendezvousProto, root, { keepCase: true });
-root.resolveAll();
-
-const Message = root.lookupType('hbb.Message');
-const Rendezvous = root.lookupType('hbb.RendezvousMessage');
-const IdPkType = root.lookupType('hbb.IdPk');
+const codec = new Codec(schema as Schema);
 
 // شکل پیام‌ها آزاد است (همان نام فیلدهای .proto)؛ فقط بخش‌هایی که این برنامه می‌خواند نوع دارند
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Msg = Record<string, any>;
 
 export function encodeMessage(obj: Msg): Uint8Array {
-  return Message.encode(Message.fromObject(obj)).finish();
+  return codec.encode('hbb.Message', obj);
 }
 
 export function decodeMessage(bytes: Uint8Array): Msg {
-  return Message.decode(bytes) as unknown as Msg;
+  return codec.decode('hbb.Message', bytes);
 }
 
 export function encodeRendezvous(obj: Msg): Uint8Array {
-  return Rendezvous.encode(Rendezvous.fromObject(obj)).finish();
+  return codec.encode('hbb.RendezvousMessage', obj);
 }
 
 export function decodeRendezvous(bytes: Uint8Array): Msg {
-  return Rendezvous.decode(bytes) as unknown as Msg;
+  return codec.decode('hbb.RendezvousMessage', bytes);
 }
 
 export function encodeIdPk(obj: { id: string; pk: Uint8Array; kx_version?: number }): Uint8Array {
-  return IdPkType.encode(IdPkType.fromObject(obj)).finish();
+  return codec.encode('hbb.IdPk', obj);
 }
 
 export function decodeIdPk(bytes: Uint8Array): { id: string; pk: Uint8Array; kx_version: number } {
-  const m = IdPkType.decode(bytes) as unknown as Msg;
+  const m = codec.decode('hbb.IdPk', bytes);
   return { id: m.id || '', pk: m.pk || new Uint8Array(), kx_version: m.kx_version || 0 };
 }
 

@@ -8,7 +8,10 @@ trusted with, because Docker access is root on the host:
   * check GitHub for a newer panel version,
   * run `git pull` + `docker compose up -d --build` for this project,
   * the same for an Asan-desk-agent installed with docker compose on this server (found by its
-    `asandesk.agent` label), so the agent can be updated from the panel too.
+    `asandesk.agent` label), so the agent can be updated from the panel too,
+  * and the AsanDesk web client (the `web` and `webgw` services of this same project) on its own:
+    when the new commits on GitHub touch only `web/` and `webgw/`, pull them and rebuild just those
+    two services, leaving the panel running.
 
 So they live here. This service is not published on any port; only the backend reaches it over the
 compose network, and it must send the token that this service creates in a shared volume.
@@ -45,6 +48,11 @@ AGENT_JOB_NAME = "asandesk-agent-update-job"
 AGENT_LABEL = "asandesk.agent=true"
 VERSION_FILE = "backend/config/version.py"
 AGENT_VERSION_FILE = "agent.py"
+WEB_JOB_NAME = "asandesk-web-update-job"
+WEB_CHANGELOG_FILE = "web/changelog.json"
+# a web client update may bring only these folders; anything else belongs to the panel update
+WEB_PATHS = ("web/", "webgw/")
+WEB_SERVICES = ("web", "webgw")
 FIRST_CHECK_AFTER = 90  # seconds after start
 CHECK_EVERY = 6 * 3600
 FETCH_TIMEOUT = 45  # nginx cuts a panel request at 60 s
@@ -61,6 +69,7 @@ SERVICE_ORDER = ["backend", "frontend", "nginx", "db", "scheduler", "control"]
 
 TOKEN = ""
 STATE = {"check": None, "check_error": ""}
+WEB_STATE = {"check": None, "check_error": ""}
 AGENT_STATE: dict[str, dict] = {}  # compose project of an agent → its last check
 AGENT_OWNERS: dict[str, str] = {}  # project folder → "uid:gid"
 CHECK_LOCK = threading.Lock()
@@ -251,6 +260,114 @@ def run_check() -> None:
             STATE["check_error"] = e.message
 
 
+# ---------------------------------------------------------------- web client (web + webgw)
+
+def web_check_script() -> str:
+    """The panel check for the web client's changelog, plus which files and commits are new on GitHub."""
+    g = git_prefix()
+    return check_script(WEB_CHANGELOG_FILE) + f"""
+echo @@changed; {g} diff --name-only HEAD "origin/$BR" 2>&1 | head -300
+echo @@webcommits; {g} log -n 30 --format='%H%x1f%an%x1f%aI%x1f%s' "HEAD..origin/$BR" -- web webgw 2>&1
+"""
+
+
+def parse_web_changelog(source: str) -> list[dict]:
+    """web/changelog.json read as data: [{version, date, title, items: [[type, text], ...]}, ...]."""
+    try:
+        raw = json.loads(source or "")
+    except ValueError:
+        return []
+    out = []
+    for e in raw[:MAX_CHANGELOG] if isinstance(raw, list) else []:
+        if isinstance(e, dict) and e.get("version"):
+            items = [{"type": str(x[0]), "text": str(x[1])} for x in e.get("items", []) if isinstance(x, list) and len(x) == 2]
+            out.append({"version": str(e["version"]), "date": str(e.get("date", "")), "title": str(e.get("title", "")), "items": items})
+    return out
+
+
+def build_web_check(sections: dict[str, str]) -> dict:
+    base = build_check(sections, agent=True)  # branch, fetch, counts and dirty are read the same way
+    disk = parse_web_changelog(sections.get("diskver", ""))
+    remote = parse_web_changelog(sections.get("remotever", ""))
+    changed = [f for f in sections.get("changed", "").split("\n") if f.strip()]
+    commits = []
+    for line in sections.get("webcommits", "").split("\n"):
+        parts = line.split("\x1f")
+        if len(parts) == 4:
+            commits.append({"sha": parts[0], "author": parts[1], "date": parts[2], "subject": parts[3]})
+    return {
+        **base,
+        "commits": commits,
+        "disk_version": disk[0]["version"] if disk else "",
+        "remote_version": remote[0]["version"] if remote else "",
+        "remote_changelog": remote,
+        "web_files": sum(1 for f in changed if f.startswith(WEB_PATHS)),
+        # files of the panel among the new commits: then only the panel update may pull
+        "panel_files": [f for f in changed if not f.startswith(WEB_PATHS)][:20],
+    }
+
+
+def run_web_check() -> None:
+    with CHECK_LOCK:
+        try:
+            r = git_script(web_check_script(), timeout=FETCH_TIMEOUT + 25)
+            WEB_STATE["check"] = build_web_check(parse_sections(r.stdout))
+            WEB_STATE["check_error"] = ""
+        except ApiError as e:
+            WEB_STATE["check_error"] = e.message
+
+
+def web_job_script(branch: str, info: dict) -> str:
+    g = git_prefix()
+    owner = shlex.quote(info["owner"])
+    git = f"su-exec {owner} env HOME=/tmp GIT_TERMINAL_PROMPT=0 {g}"
+    b = shlex.quote(branch)
+    paths = "|".join(p.rstrip("/") for p in WEB_PATHS)
+    return "\n".join([
+        "exec 2>&1",
+        f"echo '[1/3] git fetch origin '{b}",
+        f"{git} fetch origin {b} || {{ echo 'FAILED: git fetch'; exit 11; }}",
+        # checked again here, not only in the panel: the branch may have moved since the last check
+        f"OTHER=$({git} diff --name-only HEAD origin/{b} | grep -v -E '^({paths})/' | head -5)",
+        "if [ -n \"$OTHER\" ]; then echo 'FAILED: the new commits also change the panel:'; echo \"$OTHER\"; "
+        "echo 'Use the panel update (it rebuilds the web client too).'; exit 12; fi",
+        f"echo '[2/3] git pull --ff-only origin '{b}",
+        f"{git} pull --ff-only origin {b} || {{ echo 'FAILED: git pull'; exit 13; }}",
+        f"echo '[3/3] docker compose up -d --build --no-deps {' '.join(WEB_SERVICES)}'",
+        "docker buildx version > /dev/null 2>&1 || echo 'WARNING: the buildx plugin is missing in the control image, so the build may fail on RUN --mount.'",
+        f"docker compose -p {shlex.quote(info['project'])} --ansi never up -d --build --no-deps {' '.join(WEB_SERVICES)} || {{ rc=$?; echo \"FAILED: docker compose (exit $rc)\"; exit $rc; }}",
+        "echo DONE",
+    ])
+
+
+def web_status_body() -> dict:
+    return {"check": WEB_STATE["check"], "check_error": WEB_STATE["check_error"], "job": job_state(name=WEB_JOB_NAME)}
+
+
+def start_web_job() -> None:
+    with JOB_LOCK:
+        for name in (WEB_JOB_NAME, JOB_NAME):
+            if job_state(with_log=False, name=name)["state"] == "running":
+                raise ApiError("یک به‌روزرسانی هم‌اکنون در جریان است.", 409)
+        info = self_info()
+        r = git_script(f"{git_prefix()} rev-parse --abbrev-ref HEAD", timeout=30)
+        branch = r.stdout.strip().splitlines()[-1] if r.returncode == 0 and r.stdout.strip() else ""
+        if not branch or branch == "HEAD" or not re.fullmatch(r"[\w./-]+", branch):
+            raise ApiError("شاخهٔ پروژه مشخص نشد (detached HEAD؟).")
+        docker("rm", "-f", WEB_JOB_NAME)
+        host = info["workdir"]
+        r = docker(
+            "run", "-d", "--name", WEB_JOB_NAME, "--network", "host", "--label", "asandesk.control=web-update-job",
+            "-v", "/var/run/docker.sock:/var/run/docker.sock", "-v", f"{host}:{host}", "-w", host,
+            "-e", "BUILDKIT_PROGRESS=plain", "-e", "COMPOSE_ANSI=never",
+            info["image"], "sh", "-c", web_job_script(branch, info),
+        )
+        if r.returncode != 0:
+            raise ApiError("شروع به‌روزرسانی کلاینت وب ممکن نشد: " + clean(r.stderr)[:300])
+        WEB_STATE["check"] = None
+        WEB_STATE["check_error"] = ""
+
+
 # ---------------------------------------------------------------- update job
 
 def job_script(branch: str, info: dict) -> str:
@@ -288,7 +405,7 @@ def job_state(with_log: bool = True, name: str = JOB_NAME) -> dict:
 
 def start_job() -> None:
     with JOB_LOCK:
-        if job_state(with_log=False)["state"] == "running":
+        if job_state(with_log=False)["state"] == "running" or job_state(with_log=False, name=WEB_JOB_NAME)["state"] == "running":
             raise ApiError("یک به‌روزرسانی هم‌اکنون در جریان است.", 409)
         info = self_info()
         r = git_script(f"{git_prefix()} rev-parse --abbrev-ref HEAD", timeout=30)
@@ -494,6 +611,14 @@ class Handler(BaseHTTPRequestHandler):
             if (method, url.path) == ("POST", "/update/start"):
                 start_job()
                 return self.send_json(202, status_body())
+            if (method, url.path) == ("GET", "/web/status"):
+                return self.send_json(200, web_status_body())
+            if (method, url.path) == ("POST", "/web/check"):
+                run_web_check()
+                return self.send_json(200, web_status_body())
+            if (method, url.path) == ("POST", "/web/update"):
+                start_web_job()
+                return self.send_json(202, web_status_body())
             if (method, url.path) == ("GET", "/agents"):
                 return self.send_json(200, agents_body())
             if (method, url.path) == ("POST", "/agents/check"):
@@ -521,7 +646,7 @@ class Handler(BaseHTTPRequestHandler):
 def auto_check() -> None:
     time.sleep(FIRST_CHECK_AFTER)
     while True:
-        for check in (run_check, run_agent_checks):
+        for check in (run_check, run_web_check, run_agent_checks):
             try:
                 check()
             except Exception:  # noqa: BLE001

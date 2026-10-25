@@ -86,3 +86,17 @@ def test_peer_key_and_devices(web):
     post(web, "/api/web/devices", {"peer_id": "123456789"})
     devices = web.get("/api/web/devices").json()["devices"]
     assert [(d["peer_id"], d["name"]) for d in devices] == [("123456789", "office-pc")]
+
+
+def test_web_user_reports_like_a_client_and_shows_as_web(web):
+    from clients.models import Client as Device
+
+    key = web.get("/api/web/me/peer-key", **H).json()
+    body = {"id": key["web_id"], "uuid": key["uuid"]}
+    rsp = Client().post("/api/heartbeat", json.dumps(body), content_type="application/json").json()
+    assert rsp["blocked"] is False and rsp.get("sysinfo") is True
+    Client().post("/api/sysinfo", json.dumps({**body, "hostname": "حمید رضایی", "username": "hamid_r",
+                                               "os": "AsanDesk Web · Chrome 130 · Windows", "version": "1.5.0.0"}),
+                  content_type="application/json")
+    device = Device.objects.get(rd_id=key["web_id"])
+    assert (device.platform, device.version, device.hostname) == ("Web", "1.5.0.0", "حمید رضایی")

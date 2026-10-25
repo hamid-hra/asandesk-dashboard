@@ -1,7 +1,11 @@
 """Settings → panel update and docker logs. Owner only: these reach the host's Docker."""
 
+import json
 import re
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+
+from django.conf import settings
 
 from rest_framework import status
 from rest_framework.response import Response
@@ -157,6 +161,86 @@ class AgentsStartView(OwnerView):
             return Response({"detail": e.message}, status=e.status)
         record("system.agent_update", f"به‌روزرسانی ایجنت ({project}) را شروع کرد", request=request)
         return Response(agent_shape(raw), status=status.HTTP_202_ACCEPTED)
+
+
+def web_running() -> dict | None:
+    """The web client version the `web` container serves now (its /version.json), or None if it is not up."""
+    try:
+        with urllib.request.urlopen(settings.WEB_APP_URL.rstrip("/") + "/version.json", timeout=3) as resp:
+            data = json.loads(resp.read(4096).decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not data.get("version"):
+        return None
+    return {"version": str(data["version"])[:32], "built_at": str(data.get("built_at") or "")[:40]}
+
+
+def web_shape(raw: dict) -> dict:
+    """The AsanDesk web client (`web` + `webgw`): running version, last check and its own update job."""
+    running = web_running()
+    out = {"control": {"online": True}, "running": running, "job": raw.get("job"), "check": None, "check_error": raw.get("check_error") or ""}
+    check = raw.get("check")
+    if check:
+        changelog = check.get("remote_changelog") or []
+        disk = check.get("disk_version") or ""
+        remote = check.get("remote_version") or ""
+        current = (running or {}).get("version") or disk
+        commits = check.get("commits") or []
+        panel_files = check.get("panel_files") or []
+        pending = bool(running and disk and disk != running["version"])  # کد روی سرور جدیدتر از کلاینت در حال اجرا
+        out["check"] = {
+            "checked_at": check.get("checked_at"),
+            "branch": check.get("branch"),
+            "dirty": bool(check.get("dirty")),
+            "commits": commits,
+            "disk_version": disk or None,
+            "remote_version": remote or None,
+            "pending_build": pending,
+            # تغییرات پنل هم در راه است: کلاینت وب جدا به‌روز نمی‌شود، به‌روزرسانی پنل هر دو را می‌سازد
+            "panel_files": panel_files,
+            "needs_panel": bool(panel_files) and bool(commits or (remote and remote != current)),
+            "available": bool(commits) or bool(remote and remote != current) or pending,
+            "new_entries": entries_after(changelog, current),
+        }
+    return out
+
+
+def web_offline(e: ControlError) -> Response:
+    return Response({"control": {"online": False, "error": e.message}, "running": web_running(), "job": None, "check": None, "check_error": ""})
+
+
+class WebUpdateStatusView(OwnerView):
+    def get(self, request):
+        try:
+            return Response(web_shape(control.call("GET", "/web/status")))
+        except ControlError as e:
+            return web_offline(e) if e.offline else Response({"detail": e.message}, status=e.status)
+
+
+class WebUpdateCheckView(OwnerView):
+    """Fetch from GitHub now and see what is new for the web client."""
+
+    def post(self, request):
+        try:
+            return Response(web_shape(control.call("POST", "/web/check", timeout=55)))
+        except ControlError as e:
+            return web_offline(e) if e.offline else Response({"detail": e.message}, status=e.status)
+
+
+class WebUpdateStartView(OwnerView):
+    """git pull + rebuild of only `web` and `webgw` (refused by control when the new commits touch the panel)."""
+
+    def post(self, request):
+        try:
+            before = web_shape(control.call("GET", "/web/status"))
+            control.call("POST", "/web/update")
+            raw = control.call("GET", "/web/status")
+        except ControlError as e:
+            return Response({"detail": e.message}, status=e.status)
+        running = (before.get("running") or {}).get("version") or "?"
+        target = (before["check"] or {}).get("remote_version") or "آخرین نسخه"
+        record("system.web_update", f"به‌روزرسانی کلاینت وب را شروع کرد ({running} ← {target})", request=request)
+        return Response(web_shape(raw), status=status.HTTP_202_ACCEPTED)
 
 
 def remote_server(request):

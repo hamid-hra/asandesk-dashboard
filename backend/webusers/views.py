@@ -99,6 +99,7 @@ def config(request, data, session):
         "id_ws": settings.WEB_ID_WS,
         "relay_ws": settings.WEB_RELAY_WS,
         "relay_ws_map": settings.WEB_RELAY_WS_MAP,
+        "relay_domain": settings.WEB_RELAY_DOMAIN,
         "gw_ws": settings.WEB_GW_WS,
         "rendezvous_host": settings.WEB_RENDEZVOUS_HOST,
         "download_url": settings.WEB_DOWNLOAD_URL,
@@ -196,7 +197,8 @@ def peer_key(request, data, session):
     if request.META.get(CSRF_HEADER) != "1":
         return error("درخواست نامعتبر است.", 403, code="csrf")
     user = session.user
-    response = JsonResponse({"web_id": user.web_id, "seed": user.sign_seed, "pk": user.sign_pk})
+    # uuid همان «شناسهٔ ماشین» این حساب در API کلاینت‌هاست (heartbeat، بازخورد)، مثل برنامهٔ دسکتاپ
+    response = JsonResponse({"web_id": user.web_id, "seed": user.sign_seed, "pk": user.sign_pk, "uuid": user.peer_uuid})
     response["Cache-Control"] = "no-store"
     return response
 

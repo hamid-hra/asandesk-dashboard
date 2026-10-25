@@ -14,12 +14,14 @@ import { RegisterPkResult, decode, encode, frame, type Msg } from './proto.ts';
 
 export const REG_INTERVAL_MS = 12_000;
 const OFFLINE_AFTER_MS = 30_000;
+/** این‌قدر بی‌جواب از hbbs یعنی درگاه به آن نمی‌رسد (نام، درگاه UDP یا فایروال) */
+const UNREACHABLE_AFTER_MS = 20_000;
 const PK_RETRY_MS = 10_000;
 const TOO_FREQUENT_RETRY_MS = 65_000;
 const INCOMING_PER_MINUTE = 8;
 const PROTOCOL_VERSION = '1.5.0';
 
-export type RegState = 'connecting' | 'online' | 'offline' | 'conflict';
+export type RegState = 'connecting' | 'online' | 'offline' | 'conflict' | 'unreachable';
 
 export interface GwConfig {
   hbbsHost: string;
@@ -45,6 +47,7 @@ export class Registration {
   private socket: dgram.Socket | null = null;
   private timer: NodeJS.Timeout | null = null;
   private lastAnswer = 0;
+  private startedAt = 0;
   private lastPkAt = 0;
   private pkBlockedUntil = 0;
   private incomingTimes: number[] = [];
@@ -73,6 +76,7 @@ export class Registration {
     });
     socket.on('error', (err) => this.cfg.log(`udp error for ${this.peer.webId}: ${err.message}`));
     socket.bind(0, () => {
+      this.startedAt = Date.now();
       this.tick();
       this.timer = setInterval(() => this.tick(), REG_INTERVAL_MS);
     });
@@ -92,6 +96,11 @@ export class Registration {
 
   private setState(state: RegState) {
     if (this.state === state) return;
+    if (state === 'unreachable') {
+      this.cfg.log(`no answer from hbbs ${this.cfg.hbbsHost}:${this.cfg.hbbsPort}/udp for code ${this.peer.webId}; check the name, UDP 21116 and the firewall`);
+    } else if (state === 'online') {
+      this.cfg.log(`registered ${this.peer.webId} with hbbs ${this.cfg.hbbsHost}:${this.cfg.hbbsPort}`);
+    }
     this.state = state;
     this.hooks.onState(state);
   }
@@ -106,7 +115,9 @@ export class Registration {
 
   private tick() {
     if (this.state === 'conflict') return;
-    if (this.state === 'online' && Date.now() - this.lastAnswer > OFFLINE_AFTER_MS) this.setState('offline');
+    const now = Date.now();
+    if (this.state === 'online' && now - this.lastAnswer > OFFLINE_AFTER_MS) this.setState('offline');
+    if (this.lastAnswer === 0 && now - this.startedAt >= UNREACHABLE_AFTER_MS) this.setState('unreachable');
     this.send({ register_peer: { id: this.peer.webId, serial: 0 } });
   }
 
@@ -129,7 +140,7 @@ export class Registration {
         this.lastAnswer = Date.now();
         if (m.register_peer_response.request_pk) {
           this.sendPk();
-          if (this.state === 'online') this.setState('connecting');
+          if (this.state !== 'conflict') this.setState('connecting');
         } else {
           this.setState('online');
         }

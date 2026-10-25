@@ -79,6 +79,7 @@ DEFAULT_PAGE_SIZE = 25
 
 # پلتفرم از روی متن سیستم‌عامل؛ همان ترتیب و قاعدهٔ platform_of ولی در SQL تا لازم نباشد همهٔ ردیف‌ها خوانده شوند
 PLATFORM_SQL = Case(
+    When(os__istartswith="asandesk web", then=Value("Web")),
     When(os__icontains="windows", then=Value("Windows")),
     When(os__icontains="android", then=Value("Android")),
     When(Q(os__icontains="mac") | Q(os__icontains="darwin"), then=Value("macOS")),

@@ -2,13 +2,15 @@
 // آن را وارد کند، درگاه uuid رله را این‌جا می‌فرستد. پیام‌ها JSON متنی‌اند.
 import { toWsUrl } from './transport';
 
-export type GatewayState = 'connecting' | 'online' | 'offline' | 'blocked' | 'conflict' | 'replaced' | 'busy';
+export type GatewayState = 'connecting' | 'online' | 'offline' | 'blocked' | 'conflict' | 'replaced' | 'busy' | 'unreachable';
 
 export interface GatewayEvents {
   onState(state: GatewayState): void;
   onIncoming(uuid: string, relayServer: string): void;
   /** درگاه ورود را نپذیرفت (خروج، مسدودی یا رمز تازه از پنل) */
   onUnauthorized?(): void;
+  /** زمان رفت‌وبرگشت تا سرور (میلی‌ثانیه)، برای نمایش در نوار پایین */
+  onRtt?(ms: number): void;
 }
 
 export class GatewayClient {
@@ -17,6 +19,7 @@ export class GatewayClient {
   private timer = 0;
   private pinger = 0;
   private stopped = false;
+  private pingAt = 0;
   state: GatewayState = 'connecting';
 
   private url: string;
@@ -60,7 +63,13 @@ export class GatewayClient {
     ws.onopen = () => {
       this.retry = 0;
       clearInterval(this.pinger);
-      this.pinger = window.setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('{"t":"ping"}'), 20_000);
+      const ping = () => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        this.pingAt = performance.now();
+        ws.send('{"t":"ping"}');
+      };
+      ping();
+      this.pinger = window.setInterval(ping, 15_000);
     };
     ws.onmessage = (ev) => {
       let msg: { t?: string; state?: GatewayState; uuid?: string; relay_server?: string };
@@ -69,7 +78,10 @@ export class GatewayClient {
       } catch {
         return;
       }
-      if (msg.t === 'state' && msg.state) this.set(msg.state);
+      if (msg.t === 'pong' && this.pingAt) {
+        this.ev.onRtt?.(Math.round(performance.now() - this.pingAt));
+        this.pingAt = 0;
+      } else if (msg.t === 'state' && msg.state) this.set(msg.state);
       else if (msg.t === 'incoming' && msg.uuid) this.ev.onIncoming(msg.uuid, msg.relay_server || '');
     };
     ws.onclose = (ev) => {
