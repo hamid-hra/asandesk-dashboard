@@ -8,7 +8,8 @@ import { PasswordInput } from '../ui';
 
 type Mode = 'login' | 'register';
 
-const EMPTY = { first_name: '', last_name: '', username: '', email: '', phone: '', password: '', password2: '' };
+// ثبت‌نام: ایمیل یا موبایل، رمز، و نام نمایشی اختیاری
+const EMPTY = { identifier: '', password: '', display_name: '' };
 
 export function AuthPage({ cfg, onDone }: { cfg: WebConfig | null; onDone: (me: Me) => void }) {
   useLang();
@@ -52,18 +53,11 @@ export function AuthPage({ cfg, onDone }: { cfg: WebConfig | null; onDone: (me: 
 
   const submitRegister = async (e: FormEvent) => {
     e.preventDefault();
-    if (form.password !== form.password2) {
-      setFields({ password2: t('auth_password_mismatch') });
-      setError('');
-      return;
-    }
     setBusy(true);
     setError('');
     setFields({});
     try {
-      const { password2: _ignored, ...data } = form;
-      void _ignored;
-      onDone(await api.register(data));
+      onDone(await api.register({ ...form, identifier: form.identifier.trim() }));
     } catch (err) {
       fail(err);
     } finally {
@@ -79,18 +73,18 @@ export function AuthPage({ cfg, onDone }: { cfg: WebConfig | null; onDone: (me: 
       {fields[k] ? <span className="err">{fields[k]}</span> : hint ? <span className="hint">{hint}</span> : null}
     </div>
   );
-  const text = (k: keyof typeof EMPTY, autoComplete: string, opts: { ltr?: boolean; type?: string; inputMode?: 'tel' | 'email' } = {}) => (
+  const text = (k: keyof typeof EMPTY, autoComplete: string, opts: { ltr?: boolean; optional?: boolean; autoFocus?: boolean } = {}) => (
     <input
       id={`f-${k}`}
       name={k}
       className={`input${opts.ltr ? ' ltr' : ''}${fields[k] ? ' bad' : ''}`}
       dir={opts.ltr ? 'ltr' : undefined}
-      type={opts.type ?? 'text'}
-      inputMode={opts.inputMode}
+      type="text"
       value={form[k]}
       onChange={(e) => set(k)(e.target.value)}
       autoComplete={autoComplete}
-      required
+      autoFocus={opts.autoFocus}
+      required={!opts.optional}
     />
   );
 
@@ -181,29 +175,15 @@ export function AuthPage({ cfg, onDone }: { cfg: WebConfig | null; onDone: (me: 
               </div>
               <h1>{t('auth_register_title')}</h1>
               <p>{t('auth_register_sub')}</p>
-              <div className="grid2">
-                {field('first_name', t('auth_first_name'), text('first_name', 'given-name'))}
-                {field('last_name', t('auth_last_name'), text('last_name', 'family-name'))}
-              </div>
-              {field('username', t('auth_username'), text('username', 'username', { ltr: true }), t('auth_username_hint'))}
-              <div className="grid2">
-                {field('email', t('auth_email'), text('email', 'email', { ltr: true, type: 'email', inputMode: 'email' }))}
-                {field('phone', t('auth_phone'), text('phone', 'tel', { ltr: true, type: 'tel', inputMode: 'tel' }))}
-              </div>
-              <div className="grid2">
-                {field(
-                  'password',
-                  t('auth_password'),
-                  <PasswordInput id="f-password" name="new-password" value={form.password} onChange={set('password')} autoComplete="new-password" bad={!!fields.password} />,
-                )}
-                {field(
-                  'password2',
-                  t('auth_password2'),
-                  <PasswordInput id="f-password2" value={form.password2} onChange={set('password2')} autoComplete="new-password" bad={!!fields.password2} />,
-                )}
-              </div>
+              {field('identifier', t('auth_identifier'), text('identifier', 'username', { ltr: true, autoFocus: true }), t('auth_identifier_hint'))}
+              {field(
+                'password',
+                t('auth_password'),
+                <PasswordInput id="f-password" name="new-password" value={form.password} onChange={set('password')} autoComplete="new-password" bad={!!fields.password} />,
+              )}
+              {field('display_name', t('auth_display_name'), text('display_name', 'nickname', { optional: true }), t('auth_display_name_hint'))}
               {error && <div className="alert bad">{error}</div>}
-              <button className="btn primary block" disabled={busy}>
+              <button className="btn primary block" disabled={busy || !form.identifier || !form.password}>
                 {busy ? <AsanSpinner /> : <Icon name="check" />}
                 {t('auth_submit_register')}
               </button>

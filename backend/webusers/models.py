@@ -47,12 +47,12 @@ def new_peer_keys() -> tuple[str, str]:
 
 
 class WebUser(models.Model):
-    first_name = models.CharField("نام", max_length=64)
-    last_name = models.CharField("نام خانوادگی", max_length=64)
-    # نام کاربری، ایمیل و موبایل هر سه برای ورود پذیرفته می‌شوند؛ همه به شکل یکسان‌شده ذخیره می‌شوند
-    username = models.CharField("نام کاربری", max_length=32, unique=True)
-    email = models.CharField("ایمیل", max_length=254, unique=True)
-    phone = models.CharField("موبایل", max_length=16, unique=True)
+    # اختیاری؛ همان نامی که دستگاه مقابل هنگام اتصال می‌بیند
+    display_name = models.CharField("نام نمایشی", max_length=64, blank=True)
+    # ورود با ایمیل یا موبایل؛ دست‌کم یکی لازم است (constraint پایین). شکل یکسان‌شده ذخیره می‌شود و نبودنش NULL
+    # است تا یکتا بودن، چند حساب بی‌ایمیل یا بی‌موبایل را رد نکند.
+    email = models.CharField("ایمیل", max_length=254, unique=True, null=True, blank=True)
+    phone = models.CharField("موبایل", max_length=16, unique=True, null=True, blank=True)
     # هش رمز با الگوریتم پیش‌فرض Django (PBKDF2)؛ خود رمز هرگز ذخیره نمی‌شود
     password = models.CharField("رمز عبور", max_length=128)
 
@@ -72,13 +72,24 @@ class WebUser(models.Model):
         ordering = ["-created_at"]
         verbose_name = "کاربر وب"
         verbose_name_plural = "کاربران وب"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(email__isnull=False) | models.Q(phone__isnull=False), name="webuser_email_or_phone",
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.full_name} ({self.username})"
+        return f"{self.name} ({self.web_id})"
 
     @property
-    def full_name(self) -> str:
-        return f"{self.first_name} {self.last_name}".strip()
+    def login(self) -> str:
+        """ایمیل یا موبایلی که با آن وارد می‌شود."""
+        return self.email or self.phone or ""
+
+    @property
+    def name(self) -> str:
+        """نامی که در پنل و صفحهٔ خود کاربر دیده می‌شود: نام نمایشی، وگرنه ایمیل یا موبایل."""
+        return self.display_name or self.login
 
     def set_password(self, raw: str):
         self.password = make_password(raw)

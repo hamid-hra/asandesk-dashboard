@@ -52,7 +52,7 @@ export function App() {
   return (
     <>
       {boot.me ? (
-        <HomePage cfg={boot.cfg} me={boot.me} onLogout={() => setBoot({ ...boot, me: null })} />
+        <HomePage cfg={boot.cfg} me={boot.me} onLogout={() => setBoot({ ...boot, me: null })} onMe={(me) => setBoot({ ...boot, me })} />
       ) : (
         <AuthPage cfg={boot.cfg} onDone={(me) => setBoot({ ...boot, me })} />
       )}

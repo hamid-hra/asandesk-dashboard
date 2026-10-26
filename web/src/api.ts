@@ -11,10 +11,11 @@ export interface WebConfig {
 }
 
 export interface Me {
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  username: string;
+  /** اختیاری؛ همان نامی که دستگاه مقابل هنگام اتصال می‌بیند */
+  display_name: string;
+  /** برای نمایش به خود کاربر: نام نمایشی، وگرنه ایمیل یا موبایل */
+  name: string;
+  /** یکی از این دو (یا هر دو) پر است؛ ورود با همان */
   email: string;
   phone: string;
   web_id: string;
@@ -78,6 +79,7 @@ export const api = {
     call<{ user: Me }>('POST', 'auth/login', { identifier, password, remember }).then((r) => r.user),
   register: (data: Record<string, string>) => call<{ user: Me }>('POST', 'auth/register', data).then((r) => r.user),
   logout: () => call<object>('POST', 'auth/logout'),
+  setDisplayName: (display_name: string) => call<{ user: Me }>('PATCH', 'me', { display_name }).then((r) => r.user),
   changePassword: (current: string, next: string) => call<object>('POST', 'me/password', { current, new: next }),
   peerKey: () => call<{ web_id: string; seed: string; pk: string; uuid: string }>('GET', 'me/peer-key'),
   devices: () => call<{ devices: Device[] }>('GET', 'devices').then((r) => r.devices),

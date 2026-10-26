@@ -17,8 +17,8 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.throttles import request_ip, within_limit
 
 from .auth import (
-    CSRF_HEADER, REMEMBER_AGE, SHORT_AGE, clear_session_cookie, find_user, password_errors, registration_errors,
-    session_from_request, set_session_cookie,
+    CSRF_HEADER, REMEMBER_AGE, SHORT_AGE, clean_display_name, clear_session_cookie, find_user, password_errors,
+    registration_errors, session_from_request, set_session_cookie,
 )
 from .models import Direction, WebConnection, WebDevice, WebSession, WebUser, sha256
 
@@ -65,12 +65,10 @@ def web_view(methods: tuple[str, ...], auth: bool = True):
 
 def me_payload(user: WebUser) -> dict:
     return {
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "full_name": user.full_name,
-        "username": user.username,
-        "email": user.email,
-        "phone": user.phone,
+        "display_name": user.display_name,
+        "name": user.name,
+        "email": user.email or "",
+        "phone": user.phone or "",
         "web_id": user.web_id,
         "created_at": user.created_at.isoformat(),
     }
@@ -114,8 +112,8 @@ def register(request, data, session):
     if errors:
         return error("لطفا خطاهای فرم را برطرف کنید.", fields=errors)
     user = WebUser(
-        first_name=clean["first_name"], last_name=clean["last_name"], username=clean["username"],
-        email=clean["email"], phone=clean["phone"], signup_ip=request_ip(request),
+        display_name=clean["display_name"], email=clean.get("email"), phone=clean.get("phone"),
+        signup_ip=request_ip(request),
     )
     user.set_password(clean["password"])
     try:
@@ -124,8 +122,8 @@ def register(request, data, session):
             user.save()
     except IntegrityError:
         # دو ثبت‌نام هم‌زمان با یک مقدار؛ بررسی بالا قبل از ذخیره بود
-        return error("نام کاربری، ایمیل یا شماره قبلا ثبت شده است.")
-    log.info("web user %s registered (%s)", user.username, user.web_id)
+        return error("این ایمیل یا شماره قبلا ثبت شده است.", fields={"identifier": "این ایمیل یا شماره قبلا ثبت شده است."})
+    log.info("web user %s registered", user.web_id)
     return start_session(request, user, remember=True)
 
 
@@ -136,14 +134,14 @@ def login(request, data, session):
     identifier = data.get("identifier")
     password = data.get("password")
     if not isinstance(identifier, str) or not isinstance(password, str) or not identifier or not password:
-        return error("نام کاربری (یا ایمیل یا موبایل) و رمز عبور را وارد کنید.")
+        return error("ایمیل یا شمارهٔ موبایل و رمز عبور را وارد کنید.")
     user = find_user(identifier)
     if user is None:
         # هش کردن بی‌فایده تا زمان پاسخ «چنین کاربری نیست» با «رمز اشتباه» یکی باشد (مثل ModelBackend)
         WebUser().set_password(password)
-        return error("نام کاربری یا رمز عبور اشتباه است.")
+        return error("ایمیل/موبایل یا رمز عبور اشتباه است.")
     if not user.check_password(password):
-        return error("نام کاربری یا رمز عبور اشتباه است.")
+        return error("ایمیل/موبایل یا رمز عبور اشتباه است.")
     if user.is_blocked:
         return error("این حساب مسدود شده است. با پشتیبانی آسان دسک تماس بگیرید.", 403, code="blocked")
     return start_session(request, user, remember=bool(data.get("remember", True)))
@@ -158,9 +156,18 @@ def logout(request, data, session):
     return response
 
 
-@web_view(("GET",))
+@web_view(("GET", "PATCH"))
 def me(request, data, session):
-    return JsonResponse({"user": me_payload(session.user)})
+    user = session.user
+    if request.method == "PATCH":
+        # فقط نام نمایشی را خود کاربر عوض می‌کند (اختیاری است و بعد از ثبت‌نام هم می‌شود گذاشتش)
+        name = clean_display_name(data.get("display_name"))
+        if name is None:
+            problem = "نام نمایشی حداکثر ۶۴ نویسه است و < > نمی‌پذیرد."
+            return error(problem, fields={"display_name": problem})
+        user.display_name = name
+        user.save(update_fields=["display_name"])
+    return JsonResponse({"user": me_payload(user)})
 
 
 @web_view(("POST",))
@@ -187,7 +194,7 @@ def peer(request, data, session):
     """شناسهٔ همتای این حساب برای ثبت در سرور شناسه؛ درگاه وب با کوکی همین کاربر این را می‌پرسد."""
     user = session.user
     return JsonResponse({
-        "web_id": user.web_id, "uuid": user.peer_uuid, "pk": user.sign_pk, "name": user.full_name,
+        "web_id": user.web_id, "uuid": user.peer_uuid, "pk": user.sign_pk, "name": user.display_name,
     })
 
 

@@ -59,7 +59,7 @@ export function SessionView({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const s = new RemoteSession(cfg, peerId, { webId: me.web_id, name: me.full_name }, canvas);
+    const s = new RemoteSession(cfg, peerId, { webId: me.web_id, name: me.display_name }, canvas);
     sessionRef.current = s;
     reported.current = false;
     let lastKey = '';
@@ -103,7 +103,7 @@ export function SessionView({
     };
     // onConnected عمداً در وابستگی‌ها نیست: هر رندر صفحهٔ اصلی تابع تازه می‌سازد و جلسه نباید دوباره شروع شود
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg, peerId, me.web_id, me.full_name, attempt]);
+  }, [cfg, peerId, me.web_id, me.display_name, attempt]);
 
   useEffect(() => {
     const onFs = () => setFullscreen(!!document.fullscreenElement);

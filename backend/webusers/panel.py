@@ -21,10 +21,10 @@ ONLINE_WINDOW = timedelta(minutes=3)
 def row(u: WebUser, now) -> dict:
     return {
         "id": u.pk,
-        "full_name": u.full_name,
-        "username": u.username,
-        "email": u.email,
-        "phone": u.phone,
+        "name": u.name,
+        "display_name": u.display_name,
+        "email": u.email or "",
+        "phone": u.phone or "",
         "web_id": u.web_id,
         "blocked": u.is_blocked,
         "online": bool(u.last_seen_at and now - u.last_seen_at < ONLINE_WINDOW),
@@ -44,8 +44,7 @@ class WebUserListView(APIView):
         q = p.get("q", "").strip()[:100]
         if q:
             qs = qs.filter(
-                Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(username__icontains=q)
-                | Q(email__icontains=q) | Q(phone__icontains=q) | Q(web_id__icontains=q.replace(" ", ""))
+                Q(display_name__icontains=q) | Q(email__icontains=q) | Q(phone__icontains=q) | Q(web_id__icontains=q.replace(" ", ""))
             )
         flt = p.get("filter", "all")
         now = timezone.now()
@@ -95,8 +94,6 @@ class WebUserDetailView(APIView):
         ]
         return Response({
             **row(u, now),
-            "first_name": u.first_name,
-            "last_name": u.last_name,
             "signup_ip": u.signup_ip,
             "sessions": u.sessions.filter(expires_at__gt=now).count(),
             "devices": u.devices.count(),

@@ -503,6 +503,11 @@ export class ShareHost {
     this.onOtp?.(this.otp);
   }
 
+  /** نام نمایشی تازه برای بیننده‌های بعدی (بی‌قطع کردن اتصال‌های فعلی) */
+  setName(name: string) {
+    this.identity = { ...this.identity, name };
+  }
+
   /** درگاه خبر داد کسی می‌خواهد وصل شود: به رله وصل و دست‌دادن را شروع کن */
   async handleIncoming(uuid: string, relayServer: string) {
     let conn: WsTransport;

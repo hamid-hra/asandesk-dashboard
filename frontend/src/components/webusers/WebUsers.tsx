@@ -16,8 +16,9 @@ import w from "./webusers.module.css";
 
 interface WebUserRow {
   id: number;
-  full_name: string;
-  username: string;
+  /** نام نمایشی، وگرنه ایمیل یا موبایل */
+  name: string;
+  display_name: string;
   email: string;
   phone: string;
   web_id: string;
@@ -47,8 +48,6 @@ interface WebConnection {
 }
 
 interface WebUserDetail extends WebUserRow {
-  first_name: string;
-  last_name: string;
   signup_ip: string;
   sessions: number;
   devices: number;
@@ -97,7 +96,7 @@ export function WebUsers() {
                 setQ(v);
                 setPage(1);
               }}
-              placeholder="نام، نام کاربری، ایمیل، موبایل یا کد…"
+              placeholder="نام نمایشی، ایمیل، موبایل یا کد…"
             />
             <Seg
               options={FILTERS}
@@ -120,10 +119,10 @@ export function WebUsers() {
               {data?.rows.map((u) => (
                 <button key={u.id} className={`${w.tr} ${s.row}`} aria-current={selected === u.id} onClick={() => setSelected(selected === u.id ? null : u.id)}>
                   <div className={s.who}>
-                    <Avatar id={u.web_id} name={u.full_name} />
+                    <Avatar id={u.web_id} name={u.name} />
                     <div className={s.whoText}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                        <span className={s.name}>{u.full_name}</span>
+                        <span className={s.name}>{u.name}</span>
                         {u.blocked && (
                           <span className={s.tag} style={{ background: "var(--danger-soft)", color: "var(--danger-strong)" }}>
                             مسدود
@@ -131,7 +130,7 @@ export function WebUsers() {
                         )}
                       </div>
                       <span dir="ltr" className={s.idText}>
-                        {u.username}
+                        {formatId(u.web_id)}
                       </span>
                     </div>
                   </div>
@@ -204,10 +203,9 @@ function WebUserPanel({ id, onClose, onChanged }: { id: number; onClose: () => v
     return <div className={`card ${s.panel}`} style={{ padding: 24 }}>…</div>;
   }
   const info: [string, string, boolean?][] = [
-    ["نام", `${u.first_name} ${u.last_name}`],
-    ["نام کاربری", u.username, true],
-    ["ایمیل", u.email, true],
-    ["موبایل", u.phone, true],
+    ["نام نمایشی", u.display_name || "—"],
+    ["ایمیل", u.email || "—", true],
+    ["موبایل", u.phone || "—", true],
     ["کد اتصال", formatId(u.web_id), true],
     ["ثبت‌نام", `${day(u.created_at)} · IP ${u.signup_ip || "—"}`],
     ["آخرین ورود", u.last_login_at ? agoText(u.last_login_at) : "هرگز"],
@@ -220,11 +218,11 @@ function WebUserPanel({ id, onClose, onChanged }: { id: number; onClose: () => v
   return (
     <div className={`card ${s.panel}`}>
       <div className={s.panelHead}>
-        <Avatar id={u.web_id} name={u.full_name} />
+        <Avatar id={u.web_id} name={u.name} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700 }}>{u.full_name}</div>
+          <div style={{ fontWeight: 700 }}>{u.name}</div>
           <div dir="ltr" style={{ color: "var(--muted)", fontSize: 12.5, textAlign: "right" }}>
-            {u.username}
+            {formatId(u.web_id)}
           </div>
         </div>
         <button className={s.iconBtn} onClick={onClose} aria-label="بستن">

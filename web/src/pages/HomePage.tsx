@@ -21,7 +21,7 @@ function cleanCode(v: string): string {
   return v.replace(/[\s‌]/g, '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).slice(0, 32);
 }
 
-export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogout: () => void }) {
+export function HomePage({ cfg, me, onLogout, onMe }: { cfg: WebConfig; me: Me; onLogout: () => void; onMe: (me: Me) => void }) {
   useLang();
   const [devices, setDevices] = useState<Device[]>([]);
   const [devicesLoaded, setDevicesLoaded] = useState(false);
@@ -77,7 +77,8 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
     api.peerKey().then(
       (key) => {
         if (disposed) return;
-        tel = new Telemetry({ id: key.web_id, uuid: key.uuid, name: me.full_name, username: me.username }, (blocked) => {
+        // در «کلاینت‌ها»ی پنل: نام نمایشی (یا ایمیل/موبایل) و ایمیل یا موبایلی که با آن وارد می‌شود
+        tel = new Telemetry({ id: key.web_id, uuid: key.uuid, name: me.name, username: me.email || me.phone }, (blocked) => {
           setDeviceBlocked((was) => {
             if (was !== blocked) alog('device blocked', blocked);
             return blocked;
@@ -90,7 +91,7 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
           setGwState('offline');
           return;
         }
-        host = new ShareHost(cfg, { webId: key.web_id, seed: key.seed, name: me.full_name }, {
+        host = new ShareHost(cfg, { webId: key.web_id, seed: key.seed, name: me.display_name }, {
           onRequest: (req) => {
             alog('incoming request', req.peerId);
             setRequests((r) => [...r.filter((x) => x.key !== req.key), req]);
@@ -151,7 +152,13 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
       gwRef.current = null;
       telRef.current = null;
     };
-  }, [cfg, me.full_name, me.username, canShare]);
+    // نام نمایشی جدا (پایین) به اشتراک صفحه داده می‌شود تا عوض کردنش درگاه و بیننده‌ها را قطع نکند
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg, me.web_id, canShare]);
+
+  useEffect(() => {
+    hostRef.current?.setName(me.display_name);
+  }, [me.display_name]);
 
   // دستگاه از پنل مسدود شد: مثل برنامهٔ دسکتاپ دیگر نه اتصالی می‌گیرد نه می‌دهد؛ با رفع مسدودیت برمی‌گردد
   useEffect(() => {
@@ -455,8 +462,8 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
       {menu?.kind === 'user' && (
         <Menu anchor={menu.anchor} onClose={() => setMenu(null)}>
           <div className="menu-head">
-            <b>{me.full_name}</b>
-            <span className="ltr">{me.username}</span>
+            <b>{me.name}</b>
+            <span className="ltr">{me.display_name ? me.email || me.phone : formatId(me.web_id)}</span>
           </div>
           <button onClick={() => setDialog('account')}>
             <Icon name="user" size={16} />
@@ -558,7 +565,7 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
           </div>
         </Modal>
       )}
-      {dialog === 'account' && <AccountDialog me={me} onClose={() => setDialog(null)} />}
+      {dialog === 'account' && <AccountDialog me={me} onMe={onMe} onClose={() => setDialog(null)} />}
       {renaming && (
         <RenameDialog
           device={renaming}
@@ -768,7 +775,25 @@ function IncomingDialog({
   );
 }
 
-function AccountDialog({ me, onClose }: { me: Me; onClose: () => void }) {
+function AccountDialog({ me, onMe, onClose }: { me: Me; onMe: (me: Me) => void; onClose: () => void }) {
+  const [displayName, setDisplayName] = useState(me.display_name);
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const saveName = async (e: FormEvent) => {
+    e.preventDefault();
+    setNameBusy(true);
+    setNameMsg(null);
+    try {
+      const updated = await api.setDisplayName(displayName.trim());
+      onMe(updated);
+      setDisplayName(updated.display_name);
+      setNameMsg({ ok: true, text: t('display_name_saved') });
+    } catch (err) {
+      setNameMsg({ ok: false, text: err instanceof ApiError && err.status ? err.message : t('network_error') });
+    } finally {
+      setNameBusy(false);
+    }
+  };
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
@@ -789,15 +814,14 @@ function AccountDialog({ me, onClose }: { me: Me; onClose: () => void }) {
     }
   };
   const rows: [string, string, boolean][] = [
-    [t('auth_username'), me.username, true],
-    [t('auth_email'), me.email, true],
-    [t('auth_phone'), me.phone, true],
+    ...(me.email ? [[t('auth_email'), me.email, true] as [string, string, boolean]] : []),
+    ...(me.phone ? [[t('auth_phone'), me.phone, true] as [string, string, boolean]] : []),
     [t('account_code'), formatId(me.web_id), true],
     [t('account_since'), new Date(me.created_at).toLocaleDateString(document.documentElement.lang === 'fa' ? 'fa-IR' : 'en-GB'), false],
   ];
   return (
     <Modal onClose={onClose} width={460}>
-      <DialogTitle icon="user">{me.full_name}</DialogTitle>
+      <DialogTitle icon="user">{me.name}</DialogTitle>
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: 13 }}>
         {rows.map(([k, v, ltr]) => (
           <div key={k} style={{ display: 'contents' }}>
@@ -806,6 +830,27 @@ function AccountDialog({ me, onClose }: { me: Me; onClose: () => void }) {
           </div>
         ))}
       </div>
+      <form onSubmit={saveName} style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+        <div className="field">
+          <label htmlFor="f-display-name">{t('auth_display_name')}</label>
+          <input
+            id="f-display-name"
+            className="input"
+            value={displayName}
+            maxLength={64}
+            onChange={(e) => setDisplayName(e.target.value)}
+            autoComplete="nickname"
+          />
+          <span className="hint">{t('auth_display_name_hint')}</span>
+        </div>
+        {nameMsg && <div className={`alert ${nameMsg.ok ? 'ok' : 'bad'}`}>{nameMsg.text}</div>}
+        <div className="row">
+          <button className="btn primary" disabled={nameBusy || displayName.trim() === me.display_name}>
+            {nameBusy && <AsanSpinner />}
+            {t('save')}
+          </button>
+        </div>
+      </form>
       <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
         <b style={{ fontSize: 14 }}>{t('menu_password')}</b>
         <div className="field">
