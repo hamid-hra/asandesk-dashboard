@@ -4,7 +4,7 @@ import { StatusBar, TitleBar, type ServerState } from '../chrome';
 import { Icon, osIcon } from '../icons';
 import { formatId, relativeDay, t, useLang } from '../i18n';
 import { GatewayClient, type GatewayState } from '../net/gateway';
-import { ShareHost, shareSupported, type IncomingRequest, type Viewer } from '../net/share';
+import { ShareHost, shareRemembered, shareSupported, type IncomingRequest, type Viewer } from '../net/share';
 import { webCodecsAvailable } from '../net/video';
 import { AsanLoader, AsanSpinner } from '../loader';
 import { alog } from '../log';
@@ -34,6 +34,9 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
   const [requests, setRequests] = useState<IncomingRequest[]>([]);
   const [viewers, setViewers] = useState<Viewer[]>([]);
   const [otp, setOtp] = useState('');
+  const [shareRemember, setShareRemember] = useState(shareRemembered);
+  // صفحه‌ای انتخاب شده و در دست است (برای «به یاد داشته باش» بعد از پایان اتصال هم می‌ماند)
+  const [shareHeld, setShareHeld] = useState(false);
   const [dialog, setDialog] = useState<null | 'otp' | 'qr' | 'account' | 'install' | 'feedback'>(null);
   const [deviceBlocked, setDeviceBlocked] = useState(false);
   const [rtt, setRtt] = useState<number | null>(null);
@@ -110,6 +113,7 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
           },
         });
         host.onOtp = setOtp;
+        host.onStream = setShareHeld;
         setOtp(host.otp);
         hostRef.current = host;
         gw = new GatewayClient(cfg.gw_ws, {
@@ -289,6 +293,16 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
             <button className="btn small danger" onClick={() => hostRef.current?.stopAll()}>
               <Icon name="stop" size={16} />
               {t('share_stop_all')}
+            </button>
+          </div>
+        )}
+        {viewers.length === 0 && shareHeld && (
+          <div className="share-bar held">
+            <span className="live" />
+            <span className="who">{t('share_held')}</span>
+            <button className="btn small" onClick={() => hostRef.current?.forgetStream()}>
+              <Icon name="stop" size={16} />
+              {t('share_forget')}
             </button>
           </div>
         )}
@@ -555,6 +569,12 @@ export function HomePage({ cfg, me, onLogout }: { cfg: WebConfig; me: Me; onLogo
       {request && (
         <IncomingDialog
           req={request}
+          remember={shareRemember}
+          held={shareHeld}
+          onRemember={(on) => {
+            setShareRemember(on);
+            hostRef.current?.setRemember(on);
+          }}
           onAllow={() => void hostRef.current?.approve(request.key)}
           onReject={() => hostRef.current?.reject(request.key)}
         />
@@ -701,7 +721,16 @@ function OtpDialog({ otp, onNew, onClose }: { otp: string; onNew: () => void; on
   );
 }
 
-function IncomingDialog({ req, onAllow, onReject }: { req: IncomingRequest; onAllow: () => void; onReject: () => void }) {
+function IncomingDialog({
+  req, remember, held, onRemember, onAllow, onReject,
+}: {
+  req: IncomingRequest;
+  remember: boolean;
+  held: boolean;
+  onRemember: (on: boolean) => void;
+  onAllow: () => void;
+  onReject: () => void;
+}) {
   const [left, setLeft] = useState(60);
   useEffect(() => {
     const timer = window.setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
@@ -722,12 +751,17 @@ function IncomingDialog({ req, onAllow, onReject }: { req: IncomingRequest; onAl
       <p>
         <b>{req.peerName || formatId(req.peerId)}</b> {t('share_request_text')}
       </p>
+      <label className="check">
+        <input type="checkbox" checked={remember} onChange={(e) => onRemember(e.target.checked)} />
+        {t('share_remember')}
+      </label>
+      <p style={{ fontSize: 12 }}>{t(held ? 'share_remember_held' : 'share_remember_hint')}</p>
       <p style={{ fontSize: 12 }}>{t('share_auto_reject', left)}</p>
       <div className="row">
         <button className="btn" onClick={onReject}>{t('share_reject')}</button>
         <button className="btn primary" onClick={onAllow} autoFocus>
           <Icon name="share" />
-          {t('share_allow')}
+          {t(held ? 'share_allow_same' : 'share_allow')}
         </button>
       </div>
     </Modal>

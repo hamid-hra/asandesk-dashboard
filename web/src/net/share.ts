@@ -35,7 +35,7 @@ export interface Viewer {
 }
 
 export interface ShareCallbacks {
-  /** کسی با رمز درست وصل شده و منتظر تأیید است */
+  /** کسی می‌خواهد صفحه را ببیند (با رمز یک‌بارمصرف یا بی‌رمز) و منتظر تأیید است */
   onRequest(req: IncomingRequest): void;
   onRequestGone(key: number): void;
   onViewers(viewers: Viewer[]): void;
@@ -53,6 +53,32 @@ const APPROVAL_TIMEOUT_MS = 60_000;
 
 function randomString(n: number, chars = OTP_CHARS): string {
   return Array.from(randomBytes(n), (b) => chars[b % chars.length]).join('');
+}
+
+// «تنظیمات من را به یاد داشته باش»: صفحهٔ انتخاب‌شده بعد از پایان اتصال نگه داشته می‌شود و نوعش (کل صفحه،
+// پنجره، زبانه) ذخیره می‌شود تا بعد از بارگذاری دوباره، انتخاب‌گر مرورگر روی همان نوع باز شود. مرورگرها اجازه
+// نمی‌دهند خود پنجره بعد از بستن صفحه به یاد بماند.
+const REMEMBER_KEY = 'asw_share_remember';
+const SURFACE_KEY = 'asw_share_surface';
+
+function readLocal(key: string): string {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeLocal(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* حافظهٔ مرورگر در دسترس نیست */
+  }
+}
+
+export function shareRemembered(): boolean {
+  return readLocal(REMEMBER_KEY) === '1';
 }
 
 export function shareSupported(): boolean {
@@ -346,28 +372,29 @@ class Incoming {
   }
 
   private async onLogin(lr: Msg) {
-    if (this.request) return; // منتظر تأیید است
     if (lr.union) {
       // انتقال فایل، ترمینال، دوربین و تونل از مرورگر شدنی نیست
       this.loginError('Not supported in AsanDesk Web');
       return;
     }
+    // مثل برنامهٔ دسکتاپ (رمز یا تأیید با کلیک): بی‌رمز همان لحظه درخواست به کاربر نشان داده می‌شود و
+    // کنترل‌کننده هم‌زمان می‌تواند رمز یک‌بارمصرف را وارد کند. در هر حال کاربر باید «اجازه» را بزند، چون
+    // مرورگر انتخاب صفحه را فقط با کلیک او باز می‌کند.
     const password: Uint8Array = lr.password || new Uint8Array();
-    if (password.length === 0) {
-      // کنترل‌کننده رمز را از کاربرش می‌پرسد و دوباره می‌فرستد
-      return;
-    }
-    const expected = await loginHash(await passwordH1(this.host.otp, this.hash.salt), this.hash.challenge);
-    if (!constantTimeEqual(expected, password)) {
-      this.failures += 1;
-      if (this.failures >= 3) {
-        this.loginError('Too many wrong attempts');
-        setTimeout(() => this.finish(), 500);
-      } else {
-        this.loginError('Wrong Password');
+    if (password.length > 0) {
+      const expected = await loginHash(await passwordH1(this.host.otp, this.hash.salt), this.hash.challenge);
+      if (!constantTimeEqual(expected, password)) {
+        this.failures += 1;
+        if (this.failures >= 3) {
+          this.loginError('Too many wrong attempts');
+          setTimeout(() => this.finish(), 500);
+        } else {
+          this.loginError('Wrong Password');
+        }
+        return;
       }
-      return;
     }
+    if (this.request) return; // درخواست همین اتصال روی صفحه است
     this.request = {
       key: this.key,
       peerId: String(lr.my_id || '').split('@')[0],
@@ -454,6 +481,8 @@ export class ShareHost {
   private stream: MediaStream | null = null;
   private video: HTMLVideoElement;
   onOtp: ((otp: string) => void) | null = null;
+  /** صفحه‌ای انتخاب شده و هنوز در دست است (در حال نمایش یا نگه‌داشته برای اتصال بعدی) */
+  onStream: ((live: boolean) => void) | null = null;
 
   private cfg: WebConfig;
   private identity: Identity;
@@ -502,15 +531,19 @@ export class ShareHost {
   approve(key: number): Promise<void> {
     const inc = this.incoming.get(key);
     if (!inc) return Promise.resolve();
-    const ready = this.stream && this.stream.getVideoTracks().some((t) => t.readyState === 'live')
-      ? Promise.resolve(this.stream)
+    const ready = this.hasStream()
+      ? Promise.resolve(this.stream as MediaStream)
       : navigator.mediaDevices
-          .getDisplayMedia({ video: { frameRate: { ideal: FPS, max: 30 } }, audio: false })
+          .getDisplayMedia(this.displayOptions())
           .then(async (s) => {
             this.stream = s;
             this.video.srcObject = s;
             await this.video.play().catch(() => undefined);
-            s.getVideoTracks()[0].addEventListener('ended', () => this.stopAll());
+            const track = s.getVideoTracks()[0];
+            track.addEventListener('ended', () => this.stopAll());
+            const surface = (track.getSettings() as MediaTrackSettings & { displaySurface?: string }).displaySurface;
+            if (surface) writeLocal(SURFACE_KEY, surface);
+            this.onStream?.(true);
             return s;
           });
     this.cb.onRequestGone(key);
@@ -522,6 +555,30 @@ export class ShareHost {
         this.cb.onError?.('share_cancelled');
       },
     );
+  }
+
+  private hasStream(): boolean {
+    return !!this.stream && this.stream.getVideoTracks().some((t) => t.readyState === 'live');
+  }
+
+  /** انتخاب‌گر مرورگر؛ با «به یاد داشته باش» روی همان نوعی (کل صفحه، پنجره، زبانه) که دفعهٔ قبل انتخاب شد باز می‌شود */
+  private displayOptions(): DisplayMediaStreamOptions {
+    const video: MediaTrackConstraints & { displaySurface?: string } = { frameRate: { ideal: FPS, max: 30 } };
+    const surface = shareRemembered() ? readLocal(SURFACE_KEY) : '';
+    if (surface === 'monitor' || surface === 'window' || surface === 'browser') video.displaySurface = surface;
+    // زبانهٔ خود آسان دسک وب به کار نمی‌آید (فقط همین صفحه را نشان می‌داد)
+    return { video, audio: false, selfBrowserSurface: 'exclude' } as DisplayMediaStreamOptions;
+  }
+
+  /** «تنظیمات من را به یاد داشته باش»؛ خاموش شدنش صفحهٔ نگه‌داشته را رها می‌کند */
+  setRemember(on: boolean) {
+    writeLocal(REMEMBER_KEY, on ? '1' : '0');
+    if (!on && this.viewers.length === 0) this.releaseStream();
+  }
+
+  /** صفحهٔ نگه‌داشته را رها کن (اتصال بعدی دوباره انتخاب‌گر را باز می‌کند) */
+  forgetStream() {
+    if (this.viewers.length === 0) this.releaseStream();
   }
 
   reject(key: number) {
@@ -550,7 +607,7 @@ export class ShareHost {
     this.viewers = this.viewers.filter((v) => v.key !== inc.key);
     this.cb.onViewers(this.viewers);
     if (had) this.refreshOtp(); // مثل برنامهٔ دسکتاپ: بعد از هر جلسه رمز یک‌بارمصرف تازه می‌شود
-    if (this.viewers.length === 0) this.releaseStream();
+    if (this.viewers.length === 0 && !shareRemembered()) this.releaseStream();
   }
 
   private releaseStream() {
@@ -558,6 +615,7 @@ export class ShareHost {
     for (const t of this.stream.getTracks()) t.stop();
     this.stream = null;
     this.video.srcObject = null;
+    this.onStream?.(false);
   }
 
   /** شمارهٔ اتصال‌های بازی که صفحه را می‌بینند (برای heartbeat) */

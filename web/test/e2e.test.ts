@@ -54,10 +54,20 @@ const fakeVideo = { muted: false, playsInline: false, srcObject: null, readyStat
 g.document = { createElement: (tag: string) => (tag === 'video' ? fakeVideo : { getContext: () => null, width: 0, height: 0 }) };
 const track = { readyState: 'live', getSettings: () => ({ width: 1280, height: 720 }), addEventListener() {}, stop() {}, clone() { return track; } };
 const stream = { getVideoTracks: () => [track], getTracks: () => [track] };
+let pickerOpened = 0;
 Object.defineProperty(globalThis, 'navigator', {
-  value: { mediaDevices: { getDisplayMedia: async () => stream } },
+  value: {
+    mediaDevices: {
+      getDisplayMedia: async () => {
+        pickerOpened += 1;
+        return stream;
+      },
+    },
+  },
   configurable: true,
 });
+const local = new Map<string, string>();
+g.localStorage = { getItem: (k: string) => local.get(k) ?? null, setItem: (k: string, v: string) => local.set(k, v) };
 
 const { encodeIdPk, decodeRendezvous, encodeRendezvous } = await import('../src/net/proto.ts');
 const { b64encode, signKeyPairFromSeed, randomBytes } = await import('../src/net/crypto.ts');
@@ -241,7 +251,7 @@ const cfg = () => ({
   download_url: '',
 });
 
-test('a web user sees another web user\'s screen through the gateway, the relay and the one-time password', async () => {
+test('a web user sees another web user\'s screen through the gateway and the relay after the sharer accepts', async () => {
   const requests: number[] = [];
   let viewerCount = 0;
   const host = new ShareHost(cfg(), { webId: PEER.web_id, seed: b64encode(seed), name: 'Sharer' }, {
@@ -249,7 +259,6 @@ test('a web user sees another web user\'s screen through the gateway, the relay 
       requests.push(req.key);
       assert.equal(req.peerId, '3999999999');
       assert.equal(req.peerName, 'Viewer');
-      void host.approve(req.key);
     },
     onRequestGone: () => undefined,
     onViewers: (v) => {
@@ -274,24 +283,31 @@ test('a web user sees another web user\'s screen through the gateway, the relay 
   await waitFor(() => states.includes('online'));
 
   const canvas = { getContext: () => null, width: 0, height: 0 } as unknown as HTMLCanvasElement;
-  const session = new RemoteSession(cfg(), PEER.web_id, { webId: '3999999999', name: 'Viewer' }, canvas);
-  let state: SessionState = session.state;
-  session.subscribe((s) => {
-    state = s;
-    if (process.env.E2E_DEBUG) console.log('controller', s.phase, s.message, s.detail);
-  });
-  void session.start();
+  const connect = () => {
+    const session = new RemoteSession(cfg(), PEER.web_id, { webId: '3999999999', name: 'Viewer' }, canvas);
+    const ref = { state: session.state as SessionState };
+    session.subscribe((s) => {
+      ref.state = s;
+      if (process.env.E2E_DEBUG) console.log('controller', s.phase, s.message, s.detail);
+    });
+    void session.start();
+    return { session, ref };
+  };
 
-  // بدون رمز، اشتراک‌گذار کاری نمی‌کند و کنترل‌کننده رمز می‌خواهد
-  await waitFor(() => state.phase === 'password');
-  assert.equal(requests.length, 0);
-  await session.submitPassword('wrong-pass', false);
-  await waitFor(() => state.phase === 'password' && state.passwordError);
-  assert.equal(requests.length, 0);
-
-  await session.submitPassword(host.otp, false);
-  await waitFor(() => state.phase === 'connected');
+  // بی‌رمز، درخواست همان لحظه به اشتراک‌گذار نشان داده می‌شود و کنترل‌کننده هم‌زمان رمز را می‌پرسد
+  const first = connect();
+  await waitFor(() => first.ref.state.phase === 'password');
+  await waitFor(() => requests.length === 1);
+  // رمز اشتباه خطا می‌گیرد ولی درخواست سر جایش می‌ماند
+  await first.session.submitPassword('wrong-pass', false);
+  await waitFor(() => first.ref.state.phase === 'password' && first.ref.state.passwordError);
   assert.equal(requests.length, 1);
+
+  pickerOpened = 0;
+  host.setRemember(true);
+  void host.approve(requests[0]);
+  await waitFor(() => first.ref.state.phase === 'connected');
+  const state = first.ref.state;
   assert.equal(state.peer?.hostname, 'AsanDesk Web');
   assert.deepEqual(state.peer?.displays.map((d) => [d.width, d.height]), [[1280, 720]]);
   assert.equal(state.keyboard, false, 'the browser never offers keyboard and mouse');
@@ -300,9 +316,19 @@ test('a web user sees another web user\'s screen through the gateway, the relay 
   const before = relayedFromSharer;
   await waitFor(() => relayedFromSharer > before + 5);
 
-  session.close();
+  first.session.close();
   await waitFor(() => viewerCount === 0);
   assert.notEqual(host.otp, firstOtp, 'the one-time password changes after the session');
+
+  // «تنظیمات من را به یاد داشته باش»: درخواست بعدی هم تأیید می‌خواهد ولی انتخاب‌گر صفحه دوباره باز نمی‌شود
+  const second = connect();
+  await waitFor(() => requests.length === 2);
+  void host.approve(requests[1]);
+  await waitFor(() => second.ref.state.phase === 'connected');
+  assert.equal(pickerOpened, 1, 'the screen picked for the first session is reused');
+  second.session.close();
+  await waitFor(() => viewerCount === 0);
+
   host.dispose();
   gwSocket.close();
 });

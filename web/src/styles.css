@@ -306,6 +306,7 @@ a { color: var(--accent-bright); }
 .share-bar .live { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 25%, transparent); animation: pulse 1.6s infinite; }
 .share-bar .who { flex: 1; font-size: 13.5px; }
 .share-bar .who b { color: var(--accent-bright); }
+.share-bar.held .live { background: var(--accent-bright); box-shadow: 0 0 0 4px var(--accent-soft); animation: none; }
 
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; transform: scale(0.97); } }
