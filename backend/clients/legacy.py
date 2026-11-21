@@ -5,16 +5,22 @@ agent روی سرور hbbs ردیف‌های جدول peer را می‌فرست�
 هرگز از روی این داده تغییر نمی‌کند.
 """
 
+from django.db.models import Q
 from django.utils import timezone
 
-from .models import Client
+from .models import Client, presence_refresh_cutoff
 
 
 def mark_online(ids: list[str]) -> int:
-    """دستگاه‌های قدیمیِ آنلاین (از شنود agent): آخرین تماسشان الان است. کلاینتی که خودش heartbeat می‌دهد دست نمی‌خورد."""
+    """ثبت حضور دستگاه‌های قدیمی و برگرداندن تعداد دستگاه‌های شناخته‌شدهٔ گزارش."""
     if not ids:
         return 0
-    return Client.objects.filter(rd_id__in=ids, legacy=True).update(last_seen=timezone.now())
+    clients = Client.objects.filter(rd_id__in=ids, legacy=True)
+    known = clients.count()
+    if known:
+        now = timezone.now()
+        clients.filter(Q(last_seen__isnull=True) | Q(last_seen__lte=presence_refresh_cutoff(now))).update(last_seen=now)
+    return known
 
 
 def import_peers(peers: list[dict]) -> dict:

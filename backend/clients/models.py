@@ -12,6 +12,13 @@ def sha256(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def presence_refresh_cutoff(now):
+    # Reports usually arrive every 15 seconds. Leave two report intervals before
+    # the offline deadline, and cap the staleness of the stored last contact.
+    seconds = min(25, max(0, settings.CLIENT_OFFLINE_AFTER_SECONDS - 30))
+    return now - timedelta(seconds=seconds)
+
+
 class Plan(models.TextChoices):
     FREE = "free", "رایگان"
     PRO = "pro", "حرفه‌ای"

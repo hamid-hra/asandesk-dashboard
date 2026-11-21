@@ -54,6 +54,31 @@ def test_heartbeat_registers_device_and_requests_sysinfo():
 
 
 @pytest.mark.django_db
+def test_frequent_heartbeat_can_leave_presence_and_sessions_untouched(
+    settings, monkeypatch, django_assert_num_queries
+):
+    settings.CLIENT_OFFLINE_AFTER_SECONDS = 60
+    now = timezone.now()
+    monkeypatch.setattr(timezone, "now", lambda: now)
+    app_post("/api/heartbeat", DEV)
+    client = Client.objects.get(rd_id=DEV["id"])
+    first_seen = client.last_seen
+
+    now += timedelta(seconds=15)
+    with django_assert_num_queries(1):
+        response = app_post("/api/heartbeat", DEV)
+    assert response.status_code == 200
+    client.refresh_from_db()
+    assert client.last_seen == first_seen
+    assert client.online
+
+    now += timedelta(seconds=15)
+    assert app_post("/api/heartbeat", DEV).status_code == 200
+    client.refresh_from_db()
+    assert client.last_seen == now
+
+
+@pytest.mark.django_db
 def test_ip_stored_only_with_location_permission():
     ip = {"HTTP_X_REAL_IP": "5.6.7.8"}
 
@@ -635,6 +660,26 @@ def test_online_report_needs_a_token_and_valid_ids(agent_server):
     assert online_post(["bad id!"]).status_code == 400
     assert online_post([]).status_code == 200  # گزارش خالی هم یعنی «شنود زنده است، کسی آنلاین نیست»
     assert panel().get("/api/clients/stats").json()["legacy_status_known"] is True
+
+
+@pytest.mark.django_db
+def test_repeated_online_report_keeps_count_without_rewriting_fresh_presence(agent_server, settings, monkeypatch):
+    settings.CLIENT_OFFLINE_AFTER_SECONDS = 60
+    now = timezone.now()
+    monkeypatch.setattr(timezone, "now", lambda: now)
+    peers_post([peer("111222333")])
+    assert online_post(["111222333"]).json() == {"online": 1}
+    first_seen = now
+
+    now += timedelta(seconds=15)
+    assert online_post(["111222333"]).json() == {"online": 1}
+    client = Client.objects.get(rd_id="111222333")
+    assert client.last_seen == first_seen and client.online
+
+    now += timedelta(seconds=15)
+    assert online_post(["111222333"]).json() == {"online": 1}
+    client.refresh_from_db()
+    assert client.last_seen == now
 
 
 @pytest.mark.django_db

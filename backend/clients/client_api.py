@@ -20,7 +20,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
-from django.db.models import Sum
+from django.db.models import Exists, OuterRef, Q, Sum
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views import View
@@ -32,7 +32,7 @@ from accounts.throttles import request_ip, within_limit
 
 from .models import (
     CONN_FAILURE_GROUPS, AccessToken, Account, Client, ConnFailure, ConnSession, FeedbackCategory, Priority, Ticket,
-    TicketImage, TicketMessage, sha256,
+    TicketImage, TicketMessage, presence_refresh_cutoff, sha256,
 )
 
 log = logging.getLogger(__name__)
@@ -60,13 +60,26 @@ def client_ip(request) -> str:
     return request_ip(request)
 
 
-def device(data: dict, request, create: bool) -> tuple[Client | None, bool]:
+def sessions_to_reconcile(client_id, now):
+    return ConnSession.objects.filter(
+        client_id=client_id, ended_at__isnull=True, started_at__lt=now - timedelta(seconds=30)
+    )
+
+
+def device(data: dict, request, create: bool, *, heartbeat_at=None) -> tuple[Client | None, bool]:
     """کلاینت متناظر با (id, uuid). خروجی: (کلاینت، تازه ساخته شد؟). uuid نادرست → None."""
     rd_id = s(data, "id", 32)
     uuid = s(data, "uuid", 200)
     if not rd_id or not uuid:
         return None, False
-    client = Client.objects.select_related("account").filter(rd_id=rd_id).first()
+    if heartbeat_at is None:
+        clients = Client.objects.select_related("account")
+    else:
+        clients = Client.objects.only(
+            "rd_id", "uuid_hash", "blocked", "legacy", "last_seen",
+            "share_location", "ip", "sysinfo_at", "revoked_at",
+        ).annotate(has_sessions_to_reconcile=Exists(sessions_to_reconcile(OuterRef("pk"), heartbeat_at)))
+    client = clients.filter(rd_id=rd_id).first()
     if client is None:
         if not create:
             return None, False
@@ -83,7 +96,7 @@ def device(data: dict, request, create: bool) -> tuple[Client | None, bool]:
                 )
             return client, True
         except IntegrityError:  # درخواست همزمان همین دستگاه
-            client = Client.objects.select_related("account").get(rd_id=rd_id)
+            client = clients.get(rd_id=rd_id)
     if not client.uuid_hash:
         # مالک «بازنشانی کلید دستگاه» را زده؛ اولین تماس بعدی uuid جدید را ثبت می‌کند
         client.uuid_hash = sha256(uuid)
@@ -104,20 +117,22 @@ def machine_is_blocked(uuid_hash: str) -> bool:
     return bool(uuid_hash) and Client.objects.filter(uuid_hash=uuid_hash, blocked=True).exists()
 
 
-def touch(client: Client, request, now=None):
-    """به‌روزرسانی آخرین تماس؛ برای کم کردن نوشتن، حداکثر هر ۱۰ ثانیه."""
+def touch(client: Client, request, now=None, *, presence_cutoff=None):
+    """به‌روزرسانی آخرین تماس و IP در صورت نیاز."""
     now = now or timezone.now()
-    fields = []
-    if not client.last_seen or (now - client.last_seen).total_seconds() >= 10:
-        client.last_seen = now
-        fields.append("last_seen")
+    cutoff = now - timedelta(seconds=10)
+    if presence_cutoff is not None:
+        cutoff = min(cutoff, presence_cutoff)
+    if client.last_seen is None or client.last_seen <= cutoff:
+        # Workers can load the same old value concurrently; recheck it in the UPDATE.
+        updated = Client.objects.filter(pk=client.pk).filter(Q(last_seen__isnull=True) | Q(last_seen__lte=cutoff))
+        if updated.update(last_seen=now):
+            client.last_seen = now
     # IP فقط با اجازهٔ کاربر (کلید موقعیت در کلاینت؛ SysinfoView)
     ip = client_ip(request) if client.share_location else ""
     if ip and ip != client.ip:
-        client.ip = ip
-        fields.append("ip")
-    if fields:
-        client.save(update_fields=fields)
+        if Client.objects.filter(pk=client.pk, share_location=True).exclude(ip=ip).update(ip=ip):
+            client.ip = ip
 
 
 def text(body: str, status=200):
@@ -134,16 +149,15 @@ class HeartbeatView(ClientView):
 
     def post(self, request):
         data = read_json(request)
-        client, created = device(data, request, create=True)
+        now = timezone.now()
+        client, created = device(data, request, create=True, heartbeat_at=now)
         if client is None:
             return JsonResponse({"error": "invalid id/uuid"}, status=401)
-        now = timezone.now()
-        touch(client, request, now)
+        touch(client, request, now, presence_cutoff=presence_refresh_cutoff(now))
         conns = [c for c in data.get("conns") or [] if isinstance(c, int)][:256]
         # اتصال‌هایی که دیگر در فهرست نیستند بسته شده‌اند (گزارش close ممکن است گم شده باشد)
-        ConnSession.objects.filter(
-            client=client, ended_at__isnull=True, started_at__lt=now - timedelta(seconds=30)
-        ).exclude(conn_id__in=conns).update(ended_at=now)
+        if not created and client.has_sessions_to_reconcile:
+            sessions_to_reconcile(client.pk, now).exclude(conn_id__in=conns).update(ended_at=now)
 
         modified_at = data.get("modified_at")
         rsp = {"modified_at": modified_at if isinstance(modified_at, int) else 0}
