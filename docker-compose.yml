@@ -137,8 +137,12 @@ services:
       - releases:/data/releases:ro
       - static:/data/static:ro
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_started
+        restart: true
+      frontend:
+        condition: service_started
+        restart: true
 
   # آسان دسک وب: فایل‌های برنامهٔ وب (web.asandesk.ir). nginx اصلی درخواست‌ها را به این‌جا می‌فرستد.
   web:

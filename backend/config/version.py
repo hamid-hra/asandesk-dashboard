@@ -11,6 +11,14 @@ Texts are shown to the owner in the panel, so keep them in Persian.
 
 CHANGELOG = [
     {
+        "version": "1.17.5",
+        "date": "2026-11-21",
+        "title": "کاهش اتصال‌های تکراری به بک‌اند پنل",
+        "items": [
+            ("fix", "Nginx برای درخواست‌های بک‌اند، از جمله گزارش‌های heartbeat، از اتصال‌های باز به‌صورت مجدد استفاده می‌کند"),
+        ],
+    },
+    {
         "version": "1.17.4",
         "date": "2026-11-21",
         "title": "کاهش بار سرور در گزارش‌های وضعیت کلاینت‌ها",
